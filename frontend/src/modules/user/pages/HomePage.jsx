@@ -31,12 +31,12 @@ export default function HomePage() {
       <Header />
 
       <main>
-        {/* 3. HERO SECTION (Dark Green Luxury × Botanical Elegance) */}
-        <section className="relative bg-[#0E2A1B] text-white pt-5 pb-7 sm:pt-10 sm:pb-16 lg:pt-16 lg:pb-24 overflow-hidden border-b border-[#D4AF37]/20">
+        {/* 3. HERO SECTION (Light botanical on mobile, dark luxury on desktop) */}
+        <section className="relative bg-[#FAF7F2] md:bg-[#0E2A1B] text-[#182019] md:text-white pt-5 pb-7 sm:pt-10 sm:pb-16 lg:pt-16 lg:pb-24 overflow-hidden border-b border-[#E8E2D5] md:border-[#D4AF37]/20">
           
           {/* Subtle glowing ambient lights */}
-          <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#D4AF37]/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-10 w-80 h-80 bg-[#1B3B29]/80 rounded-full blur-2xl pointer-events-none" />
+          <div className="hidden md:block absolute top-0 right-1/4 w-96 h-96 bg-[#D4AF37]/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="hidden md:block absolute bottom-0 left-10 w-80 h-80 bg-[#1B3B29]/80 rounded-full blur-2xl pointer-events-none" />
 
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
@@ -45,21 +45,21 @@ export default function HomePage() {
               <div className="lg:col-span-6 space-y-3 sm:space-y-6 text-center lg:text-left">
                 
                 {/* Eyebrow badge */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1B3B29] border border-[#D4AF37]/40 shadow-xs">
-                  <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#D4AF37]" />
-                  <span className="text-[9px] sm:text-[11px] font-bold tracking-[0.2em] uppercase text-[#D4AF37]">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EFE9DF] md:bg-[#1B3B29] border border-[#C89038]/40 md:border-[#D4AF37]/40 shadow-2xs sm:shadow-xs">
+                  <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#8C6214] md:text-[#D4AF37]" />
+                  <span className="text-[9px] sm:text-[11px] font-bold tracking-[0.2em] uppercase text-[#8C6214] md:text-[#D4AF37]">
                     PREMIUM QUALITY
                   </span>
                 </div>
 
                 {/* Main Headline */}
-                <h1 className="font-serif text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.18] sm:leading-[1.1]">
+                <h1 className="font-serif text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.18] sm:leading-[1.1] text-[#0E2A1B] md:text-white">
                   Real Ingredients. <br className="hidden sm:inline" />
-                  <span className="gold-gradient-text">Real Nutrition.</span>
+                  <span className="text-[#8C6214] md:gold-gradient-text">Real Nutrition.</span>
                 </h1>
 
                 {/* Subtitle */}
-                <p className="text-[11.5px] sm:text-base lg:text-lg text-[#D2DFD6] font-normal leading-relaxed max-w-md sm:max-w-xl mx-auto lg:mx-0">
+                <p className="text-[11.5px] sm:text-base lg:text-lg text-[#3D4F44] md:text-[#D2DFD6] font-normal leading-relaxed max-w-md sm:max-w-xl mx-auto lg:mx-0">
                   Premium makhana and healthy snacks crafted for better everyday choices. Roasted to crispy perfection with 100% natural seasonings.
                 </p>
 
@@ -75,21 +75,21 @@ export default function HomePage() {
 
                   <Link
                     to="/shop?category=makhana"
-                    className="w-full sm:w-auto px-4 py-2.5 sm:px-8 sm:py-4 rounded-xl border border-[#D4AF37]/60 text-[#F7F3E9] hover:bg-white/10 hover:border-[#D4AF37] font-semibold text-[11px] sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center min-h-[42px] sm:min-h-[44px]"
+                    className="w-full sm:w-auto px-4 py-2.5 sm:px-8 sm:py-4 rounded-xl border border-[#0E2A1B]/20 md:border-[#D4AF37]/60 text-[#0E2A1B] md:text-[#F7F3E9] bg-white md:bg-transparent hover:bg-stone-50 md:hover:bg-white/10 hover:border-[#0E2A1B]/40 md:hover:border-[#D4AF37] font-semibold text-[11px] sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center min-h-[42px] sm:min-h-[44px]"
                   >
                     COLLECTION
                   </Link>
                 </div>
 
                 {/* Micro trust indicators */}
-                <div className="pt-1.5 sm:pt-4 flex items-center justify-center lg:justify-start gap-3.5 sm:gap-6 text-[10px] sm:text-xs text-[#A2B5A8]">
+                <div className="pt-1.5 sm:pt-4 flex items-center justify-center lg:justify-start gap-3.5 sm:gap-6 text-[10px] sm:text-xs text-[#526659] md:text-[#A2B5A8]">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
                     <span>In Stock</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-[#D4AF37] text-[#D4AF37]" />
-                    <span><strong>4.9/5</strong> (4,500+ Reviews)</span>
+                    <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-[#C89038] md:fill-[#D4AF37] text-[#C89038] md:text-[#D4AF37]" />
+                    <span><strong className="text-[#0E2A1B] md:text-white">4.9/5</strong> (4,500+ Reviews)</span>
                   </div>
                 </div>
               </div>
