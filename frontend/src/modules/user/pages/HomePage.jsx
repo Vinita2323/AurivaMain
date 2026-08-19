@@ -11,15 +11,14 @@ import ProductCard from '../components/ProductCard';
 import TestimonialCard from '../components/TestimonialCard';
 import Footer from '../components/Footer';
 
-import { PRODUCTS } from '../../../data/products';
-import { CATEGORIES } from '../../../data/categories';
 import { FLAVORS } from '../../../data/flavors';
-import { REVIEWS } from '../../../data/reviews';
+import { useAdmin } from '../../../context/AdminContext';
 import heroImage from '../../../assets/user/HeroImage.png';
 import philosophyImg from '../../../assets/user/philosophy.png';
 
 export default function HomePage() {
-  const bestSellers = PRODUCTS.filter(p => p.isBestseller).slice(0, 5);
+  const { products: PRODUCTS, categories: CATEGORIES, reviews: REVIEWS } = useAdmin();
+  const bestSellers = (PRODUCTS || []).filter(p => p.isBestseller || p.badge === 'Bestseller' || p.badge === 'BESTSELLER').slice(0, 10);
 
   return (
     <div className="min-h-screen bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] pb-20 md:pb-0">

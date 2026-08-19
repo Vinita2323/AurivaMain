@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Star, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { PRODUCTS } from '../../../data/products';
+import { useAdmin } from '../../../context/AdminContext';
 
 export default function SearchModal({ isOpen, onClose }) {
+  const { products: PRODUCTS } = useAdmin();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const inputRef = useRef(null);
@@ -29,14 +30,14 @@ export default function SearchModal({ isOpen, onClose }) {
       return;
     }
     const q = query.toLowerCase();
-    const filtered = PRODUCTS.filter(p => 
-      p.name.toLowerCase().includes(q) ||
-      p.flavor.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.tags.some(t => t.toLowerCase().includes(q))
+    const filtered = (PRODUCTS || []).filter(p => 
+      p.name?.toLowerCase().includes(q) ||
+      p.flavor?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q) ||
+      p.tags?.some(t => t.toLowerCase().includes(q))
     );
     setResults(filtered.slice(0, 6));
-  }, [query]);
+  }, [query, PRODUCTS]);
 
   if (!isOpen) return null;
 

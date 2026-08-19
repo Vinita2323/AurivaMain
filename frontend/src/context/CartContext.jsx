@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { INITIAL_COUPONS } from '../data/coupons';
+import { useAdmin } from './AdminContext';
 
 const CartContext = createContext();
 
 export function CartProvider({ children }) {
+  const { coupons, settings } = useAdmin();
+
   const [cartItems, setCartItems] = useState(() => {
     try {
       const saved = localStorage.getItem('auriva_cart');
@@ -11,7 +13,6 @@ export function CartProvider({ children }) {
     } catch (e) {
       console.error(e);
     }
-    // Default initial items as shown in the Cart Reference Screen 04
     return [
       {
         id: "makhana-classic",
@@ -69,7 +70,6 @@ export function CartProvider({ children }) {
   };
 
   const addToCart = (product, weight = '250g', qty = 1, openDrawer = false) => {
-    // Find matching weight price if available
     let itemPrice = product.price;
     let itemOldPrice = product.oldPrice;
     if (product.weightOptions) {
@@ -105,7 +105,6 @@ export function CartProvider({ children }) {
       }
     });
 
-    // Trigger Popup Toast notification
     setCartToast({
       product,
       weight,
@@ -138,29 +137,39 @@ export function CartProvider({ children }) {
     setCartItems([]);
   };
 
+  // Dynamic Coupon Validation against AdminContext
   const applyCoupon = (codeStr) => {
-    const cleanCode = codeStr.trim().toUpperCase();
-    const found = INITIAL_COUPONS.find(c => c.code.toUpperCase() === cleanCode && c.status === 'Active');
+    const cleanCode = (codeStr || '').trim().toUpperCase();
+    const availableCoupons = coupons || [];
+    const found = availableCoupons.find(c => c.code.toUpperCase() === cleanCode && c.status === 'Active');
+
     if (!found) {
-      setCouponError('Invalid or expired coupon code');
+      const msg = 'Invalid or expired coupon code';
+      setCouponError(msg);
       setCouponSuccess('');
-      return false;
-    }
-    if (subtotal < (found.minOrder || 0)) {
-      setCouponError(`Minimum order amount of ₹${found.minOrder} required for ${cleanCode}`);
-      setCouponSuccess('');
-      return false;
+      return { success: false, message: msg };
     }
 
-    setAppliedCoupon({
+    const minOrderVal = Number(found.minOrder || 0);
+    if (subtotal < minOrderVal) {
+      const msg = `Minimum order amount of ₹${minOrderVal} required for ${cleanCode}`;
+      setCouponError(msg);
+      setCouponSuccess('');
+      return { success: false, message: msg };
+    }
+
+    const newApplied = {
       code: found.code,
-      discountPercent: found.type === 'Percentage' ? found.discount : 0,
-      flatDiscount: found.type === 'Flat' ? found.discount : 0,
-      description: found.description
-    });
+      discountPercent: found.type === 'Percentage' ? Number(found.discount || 0) : 0,
+      flatDiscount: found.type === 'Flat' ? Number(found.discount || 0) : 0,
+      description: found.description || `${found.discount}% off applied`
+    };
+
+    setAppliedCoupon(newApplied);
     setCouponError('');
-    setCouponSuccess(`Coupon ${found.code} applied successfully!`);
-    return true;
+    const successMsg = `Coupon ${found.code} applied successfully!`;
+    setCouponSuccess(successMsg);
+    return { success: true, message: successMsg };
   };
 
   const removeCoupon = () => {
@@ -169,7 +178,7 @@ export function CartProvider({ children }) {
     setCouponSuccess('');
   };
 
-  // Calculations
+  // Calculations with dynamic store settings
   const itemCount = cartItems.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cartItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
 
@@ -182,9 +191,13 @@ export function CartProvider({ children }) {
     }
   }
 
-  const deliveryFee = subtotal > 499 || subtotal === 0 ? 0 : 40;
+  const freeShippingMin = settings?.freeDeliveryThreshold ?? 499;
+  const standardFee = settings?.standardDeliveryFee ?? 40;
+  const gstRate = (settings?.gstRate ?? 5) / 100;
+
+  const deliveryFee = subtotal >= freeShippingMin || subtotal === 0 ? 0 : standardFee;
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const tax = Math.round(taxableAmount * 0.05); // 5% GST
+  const tax = Math.round(taxableAmount * gstRate);
   const total = Math.max(0, taxableAmount + deliveryFee + tax);
 
   return (
@@ -208,7 +221,9 @@ export function CartProvider({ children }) {
       updateQty,
       clearCart,
       applyCoupon,
-      removeCoupon
+      removeCoupon,
+      freeShippingMin,
+      standardFee
     }}>
       {children}
     </CartContext.Provider>

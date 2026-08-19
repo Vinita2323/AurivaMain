@@ -4,6 +4,84 @@ import confetti from 'canvas-confetti';
 
 const AuthContext = createContext();
 
+export const INITIAL_CUSTOMERS = [
+  {
+    id: "cust-1",
+    name: "Vini Sharma",
+    email: "vini.sharma@gmail.com",
+    phone: "+91 9876543210",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    rewardsPoints: 2450,
+    tier: "Gold Wellness Member",
+    memberSince: "Jan 2024",
+    totalOrders: 6,
+    totalSpent: 4890,
+    city: "Indore",
+    state: "Madhya Pradesh",
+    status: "Active"
+  },
+  {
+    id: "cust-2",
+    name: "Rahul Verma",
+    email: "rahul.v@outlook.com",
+    phone: "+91 9822334455",
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    rewardsPoints: 1200,
+    tier: "Silver Member",
+    memberSince: "Mar 2024",
+    totalOrders: 3,
+    totalSpent: 2650,
+    city: "Mumbai",
+    state: "Maharashtra",
+    status: "Active"
+  },
+  {
+    id: "cust-3",
+    name: "Neha Patil",
+    email: "neha.patil@yahoo.com",
+    phone: "+91 9733445566",
+    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
+    rewardsPoints: 3100,
+    tier: "Platinum VIP",
+    memberSince: "Nov 2023",
+    totalOrders: 9,
+    totalSpent: 8420,
+    city: "Pune",
+    state: "Maharashtra",
+    status: "Active"
+  },
+  {
+    id: "cust-4",
+    name: "Ankit Joshi",
+    email: "ankit.j@gmail.com",
+    phone: "+91 9844556677",
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
+    rewardsPoints: 850,
+    tier: "Silver Member",
+    memberSince: "Apr 2024",
+    totalOrders: 2,
+    totalSpent: 1890,
+    city: "Hyderabad",
+    state: "Telangana",
+    status: "Active"
+  },
+  {
+    id: "cust-5",
+    name: "Priya Sundaram",
+    email: "priya.sundar@gmail.com",
+    phone: "+91 9955667788",
+    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
+    rewardsPoints: 1950,
+    tier: "Gold Wellness Member",
+    memberSince: "Feb 2024",
+    totalOrders: 4,
+    totalSpent: 3910,
+    city: "Chennai",
+    state: "Tamil Nadu",
+    status: "Active"
+  }
+];
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
@@ -15,7 +93,7 @@ export function AuthProvider({ children }) {
     return {
       name: "Vini Sharma",
       email: "vini.sharma@gmail.com",
-      phone: "9876543210",
+      phone: "+91 9876543210",
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
       rewardsPoints: 2450,
       tier: "Gold Wellness Member",
@@ -31,6 +109,16 @@ export function AuthProvider({ children }) {
       console.error(e);
     }
     return INITIAL_ORDERS;
+  });
+
+  const [customers, setCustomers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('auriva_registered_customers');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_CUSTOMERS;
   });
 
   const [addresses, setAddresses] = useState(() => {
@@ -77,6 +165,14 @@ export function AuthProvider({ children }) {
       console.error(e);
     }
   }, [orders]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('auriva_registered_customers', JSON.stringify(customers));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [customers]);
 
   const addAddress = (addr) => {
     const newAddr = {
@@ -166,6 +262,19 @@ export function AuthProvider({ children }) {
       rewardsPoints: prev.rewardsPoints + pointsEarned
     }));
 
+    // Update Customer CRM record
+    setCustomers(prev => prev.map(c => {
+      if (c.email === user.email) {
+        return {
+          ...c,
+          totalOrders: c.totalOrders + 1,
+          totalSpent: c.totalSpent + orderPayload.total,
+          rewardsPoints: c.rewardsPoints + pointsEarned
+        };
+      }
+      return c;
+    }));
+
     // Trigger celebration confetti
     try {
       confetti({
@@ -178,18 +287,69 @@ export function AuthProvider({ children }) {
       // ignore
     }
 
-
     return newOrderId;
+  };
+
+  // Order Status & Fulfillment Management
+  const updateOrderStatus = (orderId, newStatus, extraData = {}) => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+    setOrders(prev => prev.map(order => {
+      if (order.id !== orderId) return order;
+
+      // Status sequence for timeline
+      const standardStatuses = ["Order Received", "Packed", "Ready for Dispatch", "Out for Delivery", "Delivered"];
+      const statusIdx = standardStatuses.indexOf(newStatus);
+
+      const updatedTimeline = order.timeline ? order.timeline.map(step => {
+        const stepIdx = standardStatuses.indexOf(step.status);
+        if (stepIdx <= statusIdx && stepIdx !== -1) {
+          return {
+            ...step,
+            done: true,
+            current: stepIdx === statusIdx,
+            time: step.done ? step.time : `${timeStr}, ${dateStr}`
+          };
+        } else {
+          return {
+            ...step,
+            done: false,
+            current: false
+          };
+        }
+      }) : [];
+
+      return {
+        ...order,
+        status: newStatus,
+        timeline: updatedTimeline.length > 0 ? updatedTimeline : order.timeline,
+        courierName: extraData.courierName || order.courierName,
+        awbNumber: extraData.awbNumber || order.awbNumber,
+        rider: extraData.rider ? { ...order.rider, ...extraData.rider } : order.rider,
+        deliveryNotes: extraData.deliveryNotes || order.deliveryNotes
+      };
+    }));
+  };
+
+  const cancelOrder = (orderId, reason = "Customer requested cancellation") => {
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "Cancelled", cancelReason: reason } : o));
   };
 
   const updateProfile = (data) => {
     setUser(prev => ({ ...prev, ...data }));
   };
 
+  const updateCustomer = (id, data) => {
+    setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
       orders,
+      customers,
       addresses,
       selectedAddressId,
       setSelectedAddressId,
@@ -198,7 +358,10 @@ export function AuthProvider({ children }) {
       deleteAddress,
       setPrimaryAddress,
       placeOrder,
-      updateProfile
+      updateOrderStatus,
+      cancelOrder,
+      updateProfile,
+      updateCustomer
     }}>
       {children}
     </AuthContext.Provider>

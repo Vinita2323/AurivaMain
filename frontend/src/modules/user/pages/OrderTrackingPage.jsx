@@ -84,35 +84,39 @@ export default function OrderTrackingPage() {
             <div className="relative">
               {/* Timeline Track bar */}
               <div className="hidden md:block absolute top-1/2 left-6 right-6 h-1 bg-stone-200 -translate-y-1/2 z-0" />
-              <div className="hidden md:block absolute top-1/2 left-6 h-1 bg-emerald-600 -translate-y-1/2 z-0 w-3/4" />
 
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-2 relative z-10">
-                {[
-                  { name: 'Order Received', time: '10:30 AM, 12 May', done: true, active: false },
-                  { name: 'Packed', time: '11:15 AM, 12 May', done: true, active: false },
-                  { name: 'Ready for Dispatch', time: '12:05 PM, 12 May', done: true, active: false },
-                  { name: 'Out for Delivery', time: '02:30 PM, 12 May', done: true, active: true },
-                  { name: 'Delivered', time: 'Est. 03:15 PM, 12 May', done: false, active: false },
-                ].map((step, idx) => (
-                  <div key={idx} className="flex md:flex-col items-center gap-3 md:gap-2 text-left md:text-center">
-                    <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-[10px] sm:text-xs shadow-sm sm:shadow-md shrink-0 transition-all ${
-                      step.active 
-                        ? 'bg-[#0E2A1B] text-[#D4AF37] ring-2 sm:ring-4 ring-[#D4AF37]/30 animate-pulse'
-                        : step.done 
-                        ? 'bg-emerald-600 text-white' 
-                        : 'bg-stone-100 text-stone-400 border border-stone-300'
-                    }`}>
-                      {step.done ? <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" /> : idx + 1}
-                    </div>
+                {(order.timeline || [
+                  { status: 'Order Received', time: 'Order Placed', done: true, current: order.status === 'Order Received' },
+                  { status: 'Packed', time: 'Warehouse Hub', done: ['Packed', 'Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Packed' },
+                  { status: 'Ready for Dispatch', time: 'Sealed & Inspected', done: ['Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Ready for Dispatch' },
+                  { status: 'Out for Delivery', time: 'On the Way', done: ['Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Out for Delivery' },
+                  { status: 'Delivered', time: order.status === 'Delivered' ? 'Completed' : 'Estimated', done: order.status === 'Delivered', current: order.status === 'Delivered' },
+                ]).map((step, idx) => {
+                  const isDone = step.done || ['Delivered'].includes(order.status);
+                  const isCurrent = step.current || step.status === order.status;
 
-                    <div>
-                      <h4 className={`text-xs sm:text-sm font-bold ${step.active ? 'text-[#0E2A1B]' : step.done ? 'text-stone-800' : 'text-stone-400'}`}>
-                        {step.name}
-                      </h4>
-                      <p className="text-[9.5px] sm:text-[10px] text-stone-400 mt-0.5">{step.time}</p>
+                  return (
+                    <div key={idx} className="flex md:flex-col items-center gap-3 md:gap-2 text-left md:text-center">
+                      <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-[10px] sm:text-xs shadow-sm sm:shadow-md shrink-0 transition-all ${
+                        isCurrent 
+                          ? 'bg-[#0E2A1B] text-[#D4AF37] ring-2 sm:ring-4 ring-[#D4AF37]/30 animate-pulse'
+                          : isDone 
+                          ? 'bg-emerald-600 text-white' 
+                          : 'bg-stone-100 text-stone-400 border border-stone-300'
+                      }`}>
+                        {isDone ? <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" /> : idx + 1}
+                      </div>
+
+                      <div>
+                        <h4 className={`text-xs sm:text-sm font-bold ${isCurrent ? 'text-[#0E2A1B]' : isDone ? 'text-stone-800' : 'text-stone-400'}`}>
+                          {step.status || step.name}
+                        </h4>
+                        <p className="text-[9.5px] sm:text-[10px] text-stone-400 mt-0.5">{step.time}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

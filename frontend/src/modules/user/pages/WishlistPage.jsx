@@ -11,17 +11,18 @@ import Footer from '../components/Footer';
 
 import { useWishlist } from '../../../context/WishlistContext';
 import { useCart } from '../../../context/CartContext';
-import { PRODUCTS } from '../../../data/products';
+import { useAdmin } from '../../../context/AdminContext';
 
 export default function WishlistPage() {
   const { wishlist, toggleWishlist, clearWishlist, wishlistCount } = useWishlist();
   const { addToCart } = useCart();
+  const { products: PRODUCTS } = useAdmin();
 
   // Find products that are currently in the wishlist
-  const wishlistedProducts = PRODUCTS.filter(p => wishlist.includes(p.id));
+  const wishlistedProducts = (PRODUCTS || []).filter(p => wishlist.includes(p.id));
 
   // Similar snacks to recommend when empty or below
-  const recommendedProducts = PRODUCTS.filter(p => !wishlist.includes(p.id)).slice(0, 6);
+  const recommendedProducts = (PRODUCTS || []).filter(p => !wishlist.includes(p.id)).slice(0, 6);
 
   const handleMoveAllToCart = () => {
     wishlistedProducts.forEach(product => {

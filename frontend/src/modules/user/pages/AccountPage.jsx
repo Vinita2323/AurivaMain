@@ -13,7 +13,7 @@ import Footer from '../components/Footer';
 
 import { useAuth } from '../../../context/AuthContext';
 import { useWishlist } from '../../../context/WishlistContext';
-import { INITIAL_COUPONS } from '../../../data/coupons';
+import { useAdmin } from '../../../context/AdminContext';
 
 export default function AccountPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -21,6 +21,8 @@ export default function AccountPage() {
   const activeTab = rawTab || 'orders';
   const isMobileMenu = !rawTab; // When no ?tab= param on mobile, show the vertical menu
   const navigate = useNavigate();
+
+  const { coupons: INITIAL_COUPONS } = useAdmin();
 
   const { 
     user, 

@@ -11,10 +11,11 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 
 import { useCart } from '../../../context/CartContext';
-import { PRODUCTS } from '../../../data/products';
+import { useAdmin } from '../../../context/AdminContext';
 
 export default function CartPage() {
   const navigate = useNavigate();
+  const { products: PRODUCTS } = useAdmin();
   const { 
     cartItems, 
     itemCount, 
@@ -31,7 +32,8 @@ export default function CartPage() {
     applyCoupon, 
     removeCoupon,
     addToCart,
-    clearCart
+    clearCart,
+    freeShippingMin
   } = useCart();
 
   const [couponCodeInput, setCouponCodeInput] = useState('');
@@ -42,7 +44,7 @@ export default function CartPage() {
     setLocalCouponError('');
     if (!couponCodeInput.trim()) return;
     const res = applyCoupon(couponCodeInput.trim().toUpperCase());
-    if (!res) {
+    if (!res?.success && !res) {
       setLocalCouponError('Invalid or expired coupon code');
     } else {
       setCouponCodeInput('');
@@ -50,11 +52,11 @@ export default function CartPage() {
   };
 
   // Upsell recommendations
-  const upsellProducts = PRODUCTS
+  const upsellProducts = (PRODUCTS || [])
     .filter(p => !cartItems.some(item => item.id === p.id))
     .slice(0, 4);
 
-  const freeDeliveryThreshold = 499;
+  const freeDeliveryThreshold = freeShippingMin || 499;
   const isFreeDelivery = subtotal >= freeDeliveryThreshold;
   const deliveryProgress = Math.min(100, (subtotal / freeDeliveryThreshold) * 100);
 

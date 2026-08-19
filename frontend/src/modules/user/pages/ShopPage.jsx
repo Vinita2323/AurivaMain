@@ -11,11 +11,11 @@ import Header from '../components/Header';
 import ProductCard from '../components/ProductCard';
 import Footer from '../components/Footer';
 
-import { PRODUCTS } from '../../../data/products';
-import { CATEGORIES } from '../../../data/categories';
 import { FLAVORS } from '../../../data/flavors';
+import { useAdmin } from '../../../context/AdminContext';
 
 export default function ShopPage() {
+  const { products: PRODUCTS, categories: CATEGORIES } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const activeCategoryParam = searchParams.get('category') || 'all';
