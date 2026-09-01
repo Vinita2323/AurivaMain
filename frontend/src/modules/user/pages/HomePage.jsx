@@ -1,10 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, Star, Award, Heart, ShieldCheck, Flame, Gift, Leaf, FlaskConical, Droplets, Flower2, Mountain, Quote } from 'lucide-react';
+import { ArrowRight, Sparkles, Star, Award, Heart, ShieldCheck, Flame, Gift, Leaf, FlaskConical, Droplets, Flower2, Mountain, Quote, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
-import TrustBenefits from '../components/TrustBenefits';
+import HeroSection from '../components/HeroSection';
+import OurStorySection from '../components/OurStorySection';
+import WhyAurivaSection from '../components/WhyAurivaSection';
+import RecipesSection from '../components/RecipesSection';
 import CategoryCard from '../components/CategoryCard';
 import FlavorCard from '../components/FlavorCard';
 import ProductCard from '../components/ProductCard';
@@ -13,7 +16,6 @@ import Footer from '../components/Footer';
 
 import { FLAVORS } from '../../../data/flavors';
 import { useAdmin } from '../../../context/AdminContext';
-import heroImage from '../../../assets/user/HeroImage.png';
 import philosophyImg from '../../../assets/user/philosophy.png';
 
 export default function HomePage() {
@@ -30,198 +32,97 @@ export default function HomePage() {
       <Header />
 
       <main>
-        {/* 3. HERO SECTION (Light botanical on mobile, dark luxury on desktop) */}
-        <section className="relative bg-[#FAF7F2] md:bg-[#0E2A1B] text-[#182019] md:text-white pt-5 pb-7 sm:pt-10 sm:pb-16 lg:pt-16 lg:pb-24 overflow-hidden border-b border-[#E8E2D5] md:border-[#D4AF37]/20">
-          
-          {/* Subtle glowing ambient lights */}
-          <div className="hidden md:block absolute top-0 right-1/4 w-96 h-96 bg-[#D4AF37]/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="hidden md:block absolute bottom-0 left-10 w-80 h-80 bg-[#1B3B29]/80 rounded-full blur-2xl pointer-events-none" />
+        {/* 3. NEW LUXURY BOTANICAL HERO SECTION */}
+        <HeroSection />
 
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
-              
-              {/* Left Hero Content */}
-              <div className="lg:col-span-6 space-y-3 sm:space-y-6 text-center lg:text-left">
-                
-                {/* Eyebrow badge */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EFE9DF] md:bg-[#1B3B29] border border-[#C89038]/40 md:border-[#D4AF37]/40 shadow-2xs sm:shadow-xs">
-                  <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#8C6214] md:text-[#D4AF37]" />
-                  <span className="text-[9px] sm:text-[11px] font-bold tracking-[0.2em] uppercase text-[#8C6214] md:text-[#D4AF37]">
-                    PREMIUM QUALITY
-                  </span>
-                </div>
+        {/* 4. OUR STORY SECTION */}
+        <OurStorySection />
 
-                {/* Main Headline */}
-                <h1 className="font-serif text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.18] sm:leading-[1.1] text-[#0E2A1B] md:text-white">
-                  Real Ingredients. <br className="hidden sm:inline" />
-                  <span className="text-[#8C6214] md:gold-gradient-text">Real Nutrition.</span>
-                </h1>
 
-                {/* Subtitle */}
-                <p className="text-[11.5px] sm:text-base lg:text-lg text-[#3D4F44] md:text-[#D2DFD6] font-normal leading-relaxed max-w-md sm:max-w-xl mx-auto lg:mx-0">
-                  Premium makhana and healthy snacks crafted for better everyday choices. Roasted to crispy perfection with 100% natural seasonings.
-                </p>
-
-                {/* CTA Buttons (Compact Grid on Mobile, Row on Desktop) */}
-                <div className="grid grid-cols-2 sm:flex sm:flex-row items-center justify-center lg:justify-start gap-2.5 sm:gap-4 pt-1 sm:pt-2">
-                  <Link
-                    to="/shop"
-                    className="w-full sm:w-auto px-4 py-2.5 sm:px-8 sm:py-4 rounded-xl gold-gradient-btn font-bold text-[11px] sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 transition-all hover:scale-105 min-h-[42px] sm:min-h-[44px]"
-                  >
-                    <span>SHOP NOW</span>
-                    <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  </Link>
-
-                  <Link
-                    to="/shop?category=makhana"
-                    className="w-full sm:w-auto px-4 py-2.5 sm:px-8 sm:py-4 rounded-xl border border-[#0E2A1B]/20 md:border-[#D4AF37]/60 text-[#0E2A1B] md:text-[#F7F3E9] bg-white md:bg-transparent hover:bg-stone-50 md:hover:bg-white/10 hover:border-[#0E2A1B]/40 md:hover:border-[#D4AF37] font-semibold text-[11px] sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center min-h-[42px] sm:min-h-[44px]"
-                  >
-                    COLLECTION
-                  </Link>
-                </div>
-
-                {/* Micro trust indicators */}
-                <div className="pt-1.5 sm:pt-4 flex items-center justify-center lg:justify-start gap-3.5 sm:gap-6 text-[10px] sm:text-xs text-[#526659] md:text-[#A2B5A8]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                    <span>In Stock</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-[#C89038] md:fill-[#D4AF37] text-[#C89038] md:text-[#D4AF37]" />
-                    <span><strong className="text-[#0E2A1B] md:text-white">4.9/5</strong> (4,500+ Reviews)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Hero Product Composition (Hidden on mobile < lg, visible on desktop >= lg) */}
-              <div className="hidden lg:flex lg:col-span-6 relative items-center justify-center">
-                <div className="relative w-full max-w-lg aspect-square flex items-center justify-center">
-                  
-                  {/* Decorative circular backdrop rings */}
-                  <div className="absolute inset-4 rounded-full border border-[#D4AF37]/20 animate-spin" style={{ animationDuration: '60s' }} />
-                  <div className="absolute inset-12 rounded-full border border-dashed border-[#D4AF37]/30" />
-                  
-                  {/* Main Product Jar / Packaging Showcase - Circular Framing */}
-                  <div className="relative z-10 w-56 h-56 sm:w-80 sm:h-80 md:w-96 md:h-96 rounded-full overflow-hidden border-2 border-[#D4AF37]/60 shadow-[0_25px_50px_rgba(0,0,0,0.65)] ring-4 ring-[#D4AF37]/20 transition-transform duration-700 hover:scale-105">
-                    <img
-                      src={heroImage}
-                      alt="AURIVÁ Roasted Makhana"
-                      className="w-full h-full object-cover object-center"
-                    />
-                  </div>
-
-                  {/* Floating floating botanical & ingredient badges */}
-                  <div className="hidden sm:flex absolute -top-2 left-4 z-20 bg-[#1B3B29]/90 backdrop-blur-md border border-[#D4AF37]/40 text-[#F7F3E9] p-3 rounded-2xl shadow-xl items-center gap-2.5 animate-float-slow">
-                    <div className="w-8 h-8 rounded-full bg-[#D4AF37] text-[#0E2A1B] flex items-center justify-center font-bold text-xs">
-                      100%
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-[#D4AF37] uppercase font-bold tracking-wider">Superfood</p>
-                      <p className="text-xs font-semibold">Lotus Seed Foxnuts</p>
-                    </div>
-                  </div>
-
-                  <div className="hidden sm:flex absolute -bottom-2 right-4 z-20 bg-[#1B3B29]/90 backdrop-blur-md border border-[#D4AF37]/40 text-[#F7F3E9] p-3 rounded-2xl shadow-xl items-center gap-2.5 animate-float-slow" style={{ animationDelay: '2s' }}>
-                    <div className="w-8 h-8 rounded-full bg-emerald-700 text-white flex items-center justify-center">
-                      <Sparkles className="w-4 h-4 text-[#D4AF37]" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-[#D4AF37] uppercase font-bold tracking-wider">Zero Cholesterol</p>
-                      <p className="text-xs font-semibold">Slow Roasted in Olive Mist</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </section>
-
-        {/* 4. TRUST BENEFITS (Immediately below hero) */}
-        <TrustBenefits />
-
-        {/* 5. SHOP BY CATEGORY (Warm Ivory Background with compact horizontal scroll on mobile) */}
+        {/* 5. OUR BESTSELLERS (Flavours) */}
         <section className="py-6 sm:py-16 lg:py-20 bg-[#F7F3E9]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="w-full px-4 sm:px-6 lg:px-8">
             
             {/* Header */}
-            <div className="flex items-end justify-between mb-3.5 sm:mb-10">
-              <div>
-                <span className="text-[9px] sm:text-xs uppercase tracking-widest text-[#28543B] font-bold block">
-                  CURATED NUTRITION
-                </span>
-                <h2 className="font-serif text-lg sm:text-3xl md:text-4xl font-bold text-[#0E2A1B] mt-0.5">
-                  Shop by Category
-                </h2>
-              </div>
-
-              <Link
-                to="/shop"
-                className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#0E2A1B] hover:text-[#D4AF37] transition-colors group pb-0.5"
-              >
-                <span>View All</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </div>
-
-            {/* Category Cards Horizontal Swipe on Mobile & Grid on Desktop */}
-            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-6 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 pb-1">
-              {CATEGORIES.map((cat) => (
-                <div key={cat.id} className="min-w-[105px] sm:min-w-[150px] md:min-w-0 snap-start flex-1 shrink-0">
-                  <CategoryCard category={cat} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* 6. BEST SELLERS (Dark Luxury Theme - Compact on Mobile, Broad on Desktop) */}
-        <section className="py-6 sm:py-16 lg:py-24 bg-[#081B11] text-white relative overflow-hidden border-y border-[#D4AF37]/25">
-          {/* Animated Ambient Golden & Emerald Glows */}
-          <div className="absolute top-10 left-1/4 w-[500px] h-[500px] bg-[#D4AF37]/10 rounded-full blur-[130px] pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
-          <div className="absolute bottom-10 right-1/4 w-[450px] h-[450px] bg-[#143B24]/90 rounded-full blur-[110px] pointer-events-none animate-pulse" style={{ animationDuration: '6s', animationDelay: '3s' }} />
-          
-          {/* Subtle gold grid pattern accent */}
-          <div className="absolute inset-0 bg-[radial-gradient(#D4AF37_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.035] pointer-events-none" />
-
-          <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
-            
-            {/* Section Header */}
-            <div className="relative mb-5 sm:mb-12 text-center">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3.5 sm:py-1 rounded-full bg-[#133E28]/80 border border-[#D4AF37]/40 shadow-xs mb-1.5 sm:mb-2">
-                <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#D4AF37]" />
-                <span className="text-[9px] sm:text-[11px] uppercase tracking-[0.25em] text-[#D4AF37] font-bold">
-                  CUSTOMER FAVORITES
+            <div className="flex flex-col md:flex-row items-center justify-between mb-8 sm:mb-12 gap-4">
+              <div className="flex items-center gap-2">
+                <Leaf className="w-4 h-4 text-[#C89038]" />
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B]">
+                  OUR BESTSELLERS
                 </span>
               </div>
               
-              <h2 className="font-serif text-xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[#F7F3E9] flex items-center justify-center gap-2 sm:gap-6 mt-0.5 sm:mt-1">
-                <span className="h-[1px] w-8 sm:w-20 bg-gradient-to-r from-transparent to-[#D4AF37]/60 hidden sm:inline-block" />
-                <span className="tracking-wide">BEST SELLERS</span>
-                <span className="h-[1px] w-8 sm:w-20 bg-gradient-to-l from-transparent to-[#D4AF37]/60 hidden sm:inline-block" />
-              </h2>
+              <div className="flex items-center gap-4 text-center">
+                <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-r from-transparent to-[#D4AF37]"></div>
+                <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37]" />
+                <h2 className="font-serif text-lg sm:text-2xl md:text-3xl font-bold text-[#C89038] tracking-wide">
+                  DISCOVER OUR MOST LOVED FLAVOURS
+                </h2>
+                <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37] rotate-180" />
+                <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-l from-transparent to-[#D4AF37]"></div>
+              </div>
 
-              <div className="mt-2 sm:mt-4 sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2 flex justify-center">
+              <div className="flex items-center gap-4">
                 <Link
-                  to="/shop?filter=bestsellers"
-                  className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#D4AF37] hover:text-[#F7F3E9] transition-all group py-1 px-2.5 rounded-lg hover:bg-white/5"
+                  to="/shop"
+                  className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B] hover:text-[#D4AF37] transition-colors"
                 >
-                  <span>VIEW ALL PRODUCTS</span>
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1.5 transition-transform" />
+                  VIEW ALL PRODUCTS
                 </Link>
+                <div className="hidden md:flex gap-2">
+                  <button className="w-8 h-8 rounded-full border border-stone-300 flex items-center justify-center hover:bg-white hover:border-[#D4AF37] transition-colors group">
+                    <ChevronLeft className="w-4 h-4 text-[#0E2A1B] group-hover:text-[#D4AF37]" />
+                  </button>
+                  <button className="w-8 h-8 rounded-full border border-stone-300 flex items-center justify-center hover:bg-white hover:border-[#D4AF37] transition-colors group">
+                    <ChevronRight className="w-4 h-4 text-[#0E2A1B] group-hover:text-[#D4AF37]" />
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* 2-Col Mobile & 5-Card Wide Responsive Grid on Desktop */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-5 lg:gap-6 xl:gap-7">
-              {bestSellers.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+            {/* Products Horizontal Scroll/Grid */}
+            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 pb-4">
+              {bestSellers.slice(0, 5).map((product, index) => {
+                const nameStr = (product.name || '').toLowerCase();
+                let displayImage;
+                
+                // Override images to ONLY use the 3 images from assets/user/Types
+                if (nameStr.includes('peri')) {
+                  displayImage = new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
+                } else if (nameStr.includes('cheese') || nameStr.includes('cream')) {
+                  displayImage = new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
+                } else if (nameStr.includes('tomato')) {
+                  displayImage = new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
+                } else {
+                  // For any other product, repeat one of the 3 images based on its index
+                  const typesImages = [
+                    new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href,
+                    new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href,
+                    new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href,
+                  ];
+                  displayImage = typesImages[index % 3];
+                }
+
+                const productToRender = { ...product, image: displayImage };
+
+                return (
+                  <div key={product.id} className="first:ml-4 md:first:ml-0 min-w-[240px] sm:min-w-[280px] md:min-w-0 snap-start shrink-0 flex-1">
+                    <ProductCard product={productToRender} />
+                  </div>
+                );
+              })}
             </div>
+            
           </div>
         </section>
 
-        {/* 7. BRAND STORY SECTION (The Aurivá Philosophy - Compact Warm Ivory Botanical Style) */}
+        {/* 6. WHY AURIVA (Nutrition & Process Block) */}
+        <WhyAurivaSection />
+
+        {/* 7. RECIPES SECTION */}
+        <RecipesSection />
+
+        {/* 8. BRAND STORY SECTION (The Aurivá Philosophy - Compact Warm Ivory Botanical Style) */}
         <section id="story" className="py-5 sm:py-14 bg-[#FAF7F2] text-[#182019] relative overflow-hidden border-b border-[#EBE5DA]">
           
           <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
@@ -534,42 +435,12 @@ export default function HomePage() {
             {/* 4-Card Testimonials Grid with Mobile Horizontal Touch-Swipe */}
             <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 mb-8 sm:mb-12 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 pb-2">
               {REVIEWS.map((review) => (
-                <div key={review.id} className="min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-start shrink-0 flex-1">
+                <div key={review.id} className="first:ml-4 md:first:ml-0 min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-start shrink-0 flex-1">
                   <TestimonialCard review={review} />
                 </div>
               ))}
             </div>
 
-            {/* Animated Exclusive Offers 30% Off Box */}
-            <div className="bg-gradient-to-r from-[#091F13] via-[#103421] to-[#0A2014] rounded-3xl p-6 sm:p-8 md:p-10 border border-[#D4AF37]/45 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl relative overflow-hidden group">
-              
-              {/* Shimmer sheen sweep on hover */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
-              <div className="absolute -top-16 -right-16 w-60 h-60 bg-[#D4AF37]/15 rounded-full blur-2xl pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
-
-              <div className="space-y-1.5 text-center md:text-left relative z-10">
-                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#D4AF37] text-[10.5px] font-extrabold uppercase tracking-widest mb-1 shadow-2xs">
-                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-                  <span>LIMITED TIME BUNDLES</span>
-                </div>
-                
-                <h3 className="font-serif text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">
-                  Exclusive Offers: Up to <span className="text-[#D4AF37] drop-shadow-md">30% OFF</span>
-                </h3>
-                
-                <p className="text-xs sm:text-sm text-[#A2B5A8] max-w-xl">
-                  On curated party packs, mega snack jars, and combo subscription refills with free gift pouches.
-                </p>
-              </div>
-
-              <Link
-                to="/shop?filter=offers"
-                className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#C89038] hover:from-[#E5C158] hover:to-[#D4AF37] text-[#081B11] font-extrabold text-xs sm:text-sm uppercase tracking-wider shadow-lg hover:shadow-[0_8px_25px_rgba(212,175,55,0.4)] hover:scale-105 active:scale-95 transition-all whitespace-nowrap relative z-10 flex items-center gap-2"
-              >
-                <span>SHOP OFFERS</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
 
           </div>
         </section>

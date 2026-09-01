@@ -9,6 +9,7 @@ import WishlistPage from '../pages/WishlistPage';
 import OrderTrackingPage from '../pages/OrderTrackingPage';
 import AccountPage from '../pages/AccountPage';
 import AboutPage from '../pages/AboutPage';
+import ContactPage from '../pages/ContactPage';
 import MobileBottomNav from '../components/MobileBottomNav';
 
 export default function UserRoutes() {
@@ -22,6 +23,7 @@ export default function UserRoutes() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/order-tracking" element={<OrderTrackingPage />} />
         <Route path="/order-tracking/:orderId" element={<OrderTrackingPage />} />
         <Route path="/account" element={<AccountPage />} />

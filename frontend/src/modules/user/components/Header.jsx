@@ -1,19 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Search, User, Heart, ShoppingBag, Menu } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Search, User, ShoppingCart, Menu } from 'lucide-react';
 
 import Logo from './Logo';
 import SearchModal from './SearchModal';
 import MobileDrawer from './MobileDrawer';
 import { useCart } from '../../../context/CartContext';
-import { useWishlist } from '../../../context/WishlistContext';
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { itemCount } = useCart();
-  const { wishlistCount } = useWishlist();
   const location = useLocation();
 
   useEffect(() => {
@@ -29,104 +27,138 @@ export default function Header() {
   }, []);
 
   const navLinks = [
-    { name: 'Home', path: '/' },
-    { name: 'Shop', path: '/shop' },
-    { name: 'About Us', path: '/about' },
+    { name: 'HOME', path: '/' },
+    { name: 'SHOP', path: '/shop' },
+    { name: 'OUR STORY', path: '/about' },
+    { name: 'RECIPES', path: '/shop?category=recipes' },
+    { name: 'CONTACT', path: '/contact' },
   ];
+
+  const isLinkActive = (itemPath) => {
+    if (itemPath === '/') {
+      return location.pathname === '/' && !location.hash;
+    }
+    if (itemPath.startsWith('/#')) {
+      const hash = itemPath.replace('/', '');
+      return location.pathname === '/' && location.hash === hash;
+    }
+    if (itemPath.startsWith('/shop')) {
+      if (itemPath.includes('category=recipes')) {
+        return location.pathname === '/shop' && location.search.includes('category=recipes');
+      }
+      return (location.pathname === '/shop' || location.pathname.startsWith('/product')) && !location.search.includes('category=recipes');
+    }
+    if (itemPath === '/about') {
+      return location.pathname === '/about';
+    }
+    return location.pathname === itemPath;
+  };
+
+  const handleNavClick = (e, item) => {
+    if (item.path.startsWith('/#')) {
+      const hash = item.path.replace('/#', '');
+      if (location.pathname === '/') {
+        e.preventDefault();
+        const element = document.getElementById(hash);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+          window.history.pushState(null, '', `/#${hash}`);
+        }
+      }
+    }
+  };
 
   return (
     <>
       <header
         className={`sticky top-0 z-40 w-full transition-all duration-300 ${
           isScrolled 
-            ? 'bg-[#0E2A1B]/95 backdrop-blur-md py-2.5 sm:py-3 shadow-xl border-b border-[#D4AF37]/25' 
-            : 'bg-[#0E2A1B] py-3 sm:py-4 border-b border-[#D4AF37]/15'
+            ? 'bg-[#FAF7F2]/95 backdrop-blur-md py-3 sm:py-3.5 shadow-sm' 
+            : 'bg-[#FAF7F2] py-3.5 sm:py-4'
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           
-          {/* Left: Brand Logo */}
+          {/* Left: Auriva Brand Logo */}
           <div className="flex items-center">
-            <Logo variant="light" size={isScrolled ? 'default' : 'large'} />
+            <Logo variant="dark" size={isScrolled ? 'default' : 'large'} />
           </div>
 
-          <nav className="hidden lg:flex items-center space-x-1 xl:space-x-2">
+          {/* Middle: Desktop Navigation Links */}
+          <nav className="hidden lg:flex items-center space-x-6 xl:space-x-8">
             {navLinks.map((item) => {
-              const isCurrent = location.pathname + location.search === item.path;
+              const active = isLinkActive(item.path);
               return (
-                <NavLink
-                  key={item.name}
-                  to={item.path}
-                  className={({ isActive }) =>
-                    `px-3 py-1.5 rounded-full text-xs xl:text-sm font-medium tracking-wide transition-all ${
-                      (isActive && item.path === location.pathname) || isCurrent
-                        ? 'text-[#D4AF37] font-semibold bg-white/5 border border-[#D4AF37]/30'
-                        : 'text-[#E8DFC8] hover:text-white hover:bg-white/5'
-                    }`
-                  }
-                >
-                  {item.name}
-                </NavLink>
+                <div key={item.name} className="relative py-1 flex flex-col items-center">
+                  <Link
+                    to={item.path}
+                    onClick={(e) => handleNavClick(e, item)}
+                    className={`text-[12px] xl:text-[13px] font-bold tracking-[0.08em] uppercase transition-colors duration-200 ${
+                      active
+                        ? 'text-[#C58A2B]'
+                        : 'text-[#182019] hover:text-[#C58A2B]'
+                    }`}
+                  >
+                    {item.name}
+                  </Link>
+
+                  {/* Active Indicator Underline */}
+                  {active && (
+                    <span className="absolute -bottom-1 left-0 right-0 h-[2.5px] bg-[#C58A2B] rounded-full mx-auto" />
+                  )}
+                </div>
               );
             })}
           </nav>
 
-          {/* Right: Actions */}
+          {/* Right: Action Icons */}
           <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3">
-            {/* Search Icon (All screens) */}
+            {/* Search Icon */}
             <button
               onClick={() => setIsSearchOpen(true)}
-              className="p-2 sm:p-2.5 rounded-xl text-[#E8DFC8] hover:text-[#D4AF37] hover:bg-white/5 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-2 sm:p-2.5 rounded-full text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
               aria-label="Search healthy snacks"
               title="Search"
             >
-              <Search className="w-5 h-5" />
+              <Search className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8]" />
             </button>
 
-            {/* Account Icon (Desktop & Tablet only) */}
+            {/* Profile / Account Icon */}
             <Link
               to="/account"
-              className="hidden md:flex p-2 sm:p-2.5 rounded-xl text-[#E8DFC8] hover:text-[#D4AF37] hover:bg-white/5 transition-all relative min-w-[44px] min-h-[44px] items-center justify-center"
+              className="p-2 sm:p-2.5 rounded-full text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
               aria-label="Customer Account"
               title="My Account"
             >
-              <User className="w-5 h-5" />
+              <User className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8]" />
             </Link>
 
-            {/* Wishlist Icon (Visible on all screens) */}
-            <Link
-              to="/wishlist"
-              className="p-2 sm:p-2.5 rounded-xl text-[#E8DFC8] hover:text-[#D4AF37] hover:bg-white/5 transition-all relative min-w-[44px] min-h-[44px] flex items-center justify-center"
-              aria-label="Wishlist"
-              title="Wishlist"
-            >
-              <Heart className="w-5 h-5" />
-              {wishlistCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-[#D4AF37] text-[#0E2A1B] text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs">
-                  {wishlistCount}
-                </span>
-              )}
-            </Link>
-
-            {/* Cart Link with badge (Desktop & Tablet only >= md) */}
+            {/* Shopping Cart Icon with Badge */}
             <Link
               to="/cart"
-              className="hidden md:flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 rounded-xl bg-[#1B3B29] hover:bg-[#28543B] text-[#D4AF37] border border-[#D4AF37]/40 shadow-sm transition-all group min-h-[44px]"
+              className="p-2 sm:p-2.5 rounded-full text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors relative min-w-[40px] min-h-[40px] flex items-center justify-center"
               aria-label="Shopping Cart"
               title="Shopping Cart"
             >
               <div className="relative">
-                <ShoppingBag className="w-5 h-5 group-hover:scale-105 transition-transform" />
+                <ShoppingCart className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8]" />
                 {itemCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2 w-4 h-4 bg-[#D4AF37] text-[#0E2A1B] text-[10px] font-extrabold rounded-full flex items-center justify-center animate-pulse-gold">
+                  <span className="absolute -top-1.5 -right-2 min-w-[17px] h-[17px] px-1 bg-[#C58A2B] text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs leading-none">
                     {itemCount}
                   </span>
                 )}
               </div>
-              <span className="text-xs font-semibold text-white group-hover:text-[#D4AF37]">
-                Cart
-              </span>
             </Link>
+
+            {/* Mobile Menu Button (Hamburger) */}
+            <button
+              onClick={() => setIsMobileNavOpen(true)}
+              className="lg:hidden p-2 rounded-xl text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
+              aria-label="Open Navigation"
+              title="Menu"
+            >
+              <Menu className="w-6 h-6 stroke-[1.8]" />
+            </button>
           </div>
 
         </div>
@@ -138,3 +170,4 @@ export default function Header() {
     </>
   );
 }
+

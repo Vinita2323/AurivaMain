@@ -30,7 +30,7 @@ export default function AboutPage() {
         {/* ===================================================
             1. HERO SECTION (Split-Screen)
            =================================================== */}
-        <section className="relative overflow-hidden pt-8 pb-12 sm:pt-14 sm:pb-20 bg-[#FAF7F2]">
+        <section className="relative overflow-hidden pt-8 pb-12 sm:pt-14 sm:pb-20 bg-[#0E2A1B]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
@@ -40,13 +40,13 @@ export default function AboutPage() {
                 
                 {/* Eyebrow */}
                 <div className="inline-flex items-center gap-2">
-                  <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.2em] text-[#C89038]">
+                  <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.2em] text-[#D4AF37]">
                     OUR STORY
                   </span>
                 </div>
 
                 {/* Main Heading */}
-                <h1 className="font-serif text-3.5xl sm:text-5xl lg:text-5.5xl font-extrabold text-[#0E2A1B] leading-[1.15] tracking-tight">
+                <h1 className="font-serif text-3.5xl sm:text-5xl lg:text-5.5xl font-extrabold text-[#F7F3E9] leading-[1.15] tracking-tight">
                   Good Food. <br />
                   Better Everyday{' '}
                   <span className="text-[#D4AF37] italic font-serif">Living.</span>
@@ -55,16 +55,16 @@ export default function AboutPage() {
                 {/* Gold Decorative Flourish Line */}
                 <div className="flex items-center gap-2 pt-1 pb-1">
                   <div className="w-16 h-[1.5px] bg-[#D4AF37]/60" />
-                  <div className="w-2 h-2 rounded-full border border-[#D4AF37] bg-[#FAF7F2]" />
+                  <div className="w-2 h-2 rounded-full border border-[#D4AF37] bg-[#0E2A1B]" />
                   <div className="w-8 h-[1px] bg-[#D4AF37]/40" />
                 </div>
 
                 {/* Supporting Copy */}
-                <div className="space-y-3.5 text-xs sm:text-sm md:text-base text-[#182019]/85 leading-relaxed max-w-xl font-normal">
+                <div className="space-y-3.5 text-xs sm:text-sm md:text-base text-[#F7F3E9]/85 leading-relaxed max-w-xl font-normal">
                   <p>
                     At AURIVÁ, we believe healthy snacking should be simple, natural and joyful.
                   </p>
-                  <p className="text-stone-600">
+                  <p className="text-[#A2B5A8]">
                     We bring you wholesome makhana, dry fruits and superfood seeds — sourced from nature’s best, crafted with care, and made to brighten your everyday.
                   </p>
                 </div>
@@ -73,10 +73,10 @@ export default function AboutPage() {
                 <div className="pt-2 sm:pt-4">
                   <a
                     href="#purpose"
-                    className="inline-flex items-center gap-3 px-7 py-3.5 sm:px-8 sm:py-4 rounded-2xl bg-[#0E2A1B] text-[#D4AF37] hover:bg-[#1B3B29] font-extrabold text-xs uppercase tracking-widest transition-all duration-300 shadow-md hover:shadow-xl hover:scale-102 group"
+                    className="inline-flex items-center gap-3 px-7 py-3.5 sm:px-8 sm:py-4 rounded-2xl bg-[#D4AF37] text-[#0E2A1B] hover:bg-[#C89038] font-extrabold text-xs uppercase tracking-widest transition-all duration-300 shadow-md hover:shadow-xl hover:scale-102 group"
                   >
                     <span>DISCOVER OUR STORY</span>
-                    <ArrowRight className="w-4 h-4 text-[#D4AF37] group-hover:translate-x-1.5 transition-transform" />
+                    <ArrowRight className="w-4 h-4 text-[#0E2A1B] group-hover:translate-x-1.5 transition-transform" />
                   </a>
                 </div>
 
@@ -85,9 +85,9 @@ export default function AboutPage() {
               {/* Right Column: Hero Product Visual */}
               <div className="lg:col-span-6 relative flex justify-center items-center">
                 {/* Soft ambient background glow */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-[#D4AF37]/10 via-[#FAF7F2] to-transparent rounded-full blur-3xl -z-10 transform scale-90 pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-[#D4AF37]/20 via-[#143B24] to-transparent rounded-full blur-3xl -z-10 transform scale-90 pointer-events-none" />
 
-                <div className="relative w-full max-w-[460px] aspect-square rounded-full overflow-hidden group shadow-xl">
+                <div className="relative w-full max-w-[460px] aspect-square rounded-full overflow-hidden group shadow-xl border border-[#D4AF37]/20">
                   <img
                     src={HeroImg}
                     alt="AURIVÁ Roasted Makhana Jar and Bowl with Dry Fruits"
@@ -158,18 +158,18 @@ export default function AboutPage() {
         {/* ===================================================
             3. OUR PURPOSE SECTION
            =================================================== */}
-        <section id="purpose" className="py-16 sm:py-24 bg-white border-y border-[#E8E2D5]/70 scroll-mt-20">
+        <section id="purpose" className="py-16 sm:py-24 bg-[#FAF7F2] scroll-mt-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-center">
               
               {/* Left Column: Natural Bowl of Makhana Image */}
               <div className="lg:col-span-6 relative flex justify-center items-center">
-                <div className="relative w-full max-w-[460px] aspect-square rounded-full overflow-hidden group shadow-xl mx-auto">
+                <div className="relative w-full max-w-[460px] aspect-square rounded-3xl overflow-hidden group shadow-xl mx-auto">
                   <img
                     src={PhilosophyImg}
                     alt="Wooden bowl filled with roasted makhana surrounded by fresh green leaves"
-                    className="w-full h-full object-cover rounded-full group-hover:scale-[1.03] transition-transform duration-700 ease-out"
+                    className="w-full h-full object-cover rounded-3xl group-hover:scale-[1.03] transition-transform duration-700 ease-out"
                   />
                 </div>
               </div>
@@ -226,15 +226,15 @@ export default function AboutPage() {
         {/* ===================================================
             4. OUR PROCESS SECTION (Compact Horizontal 5-Step Process)
            =================================================== */}
-        <section className="py-10 sm:py-14 bg-[#FAF7F2]">
+        <section className="py-12 sm:py-16 bg-[#0E2A1B] border-t border-[#143B24]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             
             {/* Header */}
-            <div className="text-center max-w-xl mx-auto mb-8 sm:mb-10 space-y-1">
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-[#C89038]">
+            <div className="text-center max-w-xl mx-auto mb-10 sm:mb-14 space-y-2">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-[#D4AF37]">
                 FROM NATURE TO YOU
               </span>
-              <h2 className="font-serif text-2xl sm:text-3.5xl font-extrabold text-[#0E2A1B]">
+              <h2 className="font-serif text-2xl sm:text-3.5xl font-extrabold text-[#F7F3E9]">
                 Our Process
               </h2>
             </div>
@@ -252,17 +252,17 @@ export default function AboutPage() {
                 return (
                   <React.Fragment key={item.step}>
                     {/* Step Card */}
-                    <div className="flex-1 flex flex-col items-center text-center p-3 sm:p-4 rounded-2xl bg-white border border-[#E8E2D5] shadow-xs hover:border-[#D4AF37] hover:shadow-md transition-all duration-300 group max-w-[200px] relative z-10">
-                      <div className="relative mb-2">
-                        <div className="w-13 h-13 rounded-full bg-[#FAF7F2] border-2 border-[#D4AF37]/60 shadow-inner flex items-center justify-center text-[#0E2A1B] group-hover:border-[#0E2A1B] group-hover:scale-105 transition-all duration-300">
-                          <Icon className="w-6 h-6 text-[#0E2A1B]" />
+                    <div className="flex-1 flex flex-col items-center text-center p-4 sm:p-5 rounded-2xl bg-[#143B24] border border-[#D4AF37]/30 shadow-md hover:border-[#D4AF37] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group max-w-[200px] relative z-10">
+                      <div className="relative mb-3">
+                        <div className="w-14 h-14 rounded-full bg-[#0E2A1B] border border-[#D4AF37]/50 flex items-center justify-center text-[#D4AF37] group-hover:bg-[#D4AF37] group-hover:text-[#0E2A1B] transition-all duration-300">
+                          <Icon className="w-6 h-6" />
                         </div>
-                        <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#0E2A1B] text-[#D4AF37] text-[10px] font-extrabold flex items-center justify-center shadow-xs">
+                        <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#D4AF37] text-[#0E2A1B] text-[10px] font-extrabold flex items-center justify-center shadow-xs">
                           {item.step}
                         </span>
                       </div>
-                      <h4 className="font-serif font-bold text-xs sm:text-sm text-[#0E2A1B]">{item.title}</h4>
-                      <p className="text-[11px] text-stone-600 leading-snug mt-1">
+                      <h4 className="font-serif font-bold text-sm text-[#F7F3E9]">{item.title}</h4>
+                      <p className="text-[11px] text-[#A2B5A8] leading-relaxed mt-1.5">
                         {item.text}
                       </p>
                     </div>
@@ -308,18 +308,18 @@ export default function AboutPage() {
               ].map((item) => {
                 const Icon = item.icon;
                 return (
-                  <div key={item.step} className="flex gap-3 items-center p-3.5 rounded-2xl bg-white border border-[#E8E2D5] shadow-xs">
-                    <div className="w-10 h-10 rounded-xl bg-[#FAF7F2] border border-[#D4AF37]/50 flex items-center justify-center text-[#0E2A1B] shrink-0">
-                      <Icon className="w-5 h-5 text-[#0E2A1B]" />
+                  <div key={item.step} className="flex gap-3 items-center p-4 rounded-2xl bg-[#143B24] border border-[#D4AF37]/30 shadow-md">
+                    <div className="w-12 h-12 rounded-xl bg-[#0E2A1B] border border-[#D4AF37]/50 flex items-center justify-center text-[#D4AF37] shrink-0">
+                      <Icon className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-[#D4AF37] bg-[#0E2A1B] px-1.5 py-0.2 rounded">
+                        <span className="text-[9px] font-bold text-[#0E2A1B] bg-[#D4AF37] px-1.5 py-0.5 rounded">
                           {item.step}
                         </span>
-                        <h4 className="font-serif font-bold text-xs text-[#0E2A1B] truncate">{item.title}</h4>
+                        <h4 className="font-serif font-bold text-xs text-[#F7F3E9] truncate">{item.title}</h4>
                       </div>
-                      <p className="text-[10px] text-stone-500 mt-0.5 line-clamp-2">{item.text}</p>
+                      <p className="text-[10px] text-[#A2B5A8] mt-1 line-clamp-2">{item.text}</p>
                     </div>
                   </div>
                 );
@@ -331,9 +331,9 @@ export default function AboutPage() {
 
 
         {/* ===================================================
-            5. BRAND STATISTICS SECTION (White BG, Dark Green Cards)
+            5. BRAND STATISTICS SECTION
            =================================================== */}
-        <section className="py-8 sm:py-10 bg-white border-t border-[#E8E2D5]">
+        <section className="py-8 sm:py-10 bg-[#FAF7F2]">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
