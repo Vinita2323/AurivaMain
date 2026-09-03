@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 
 import heroMakhanaImg from '../../../assets/user/hero_makhana.jpg';
+import BrandStoryModal from './BrandStoryModal';
 
 export default function HeroSection() {
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -71,7 +72,7 @@ export default function HeroSection() {
 
 
         {/* Right Side Cream Panel with Compact Organic Convex Curve (Desktop only >= lg) */}
-        <div className="hidden lg:block absolute right-0 top-0 bottom-0 w-[270px] xl:w-[310px] z-10 pointer-events-auto select-none border-none outline-none overflow-hidden">
+        <div className="hidden lg:block absolute right-0 top-0 bottom-0 w-[270px] xl:w-[310px] z-20 pointer-events-auto select-none border-none outline-none overflow-hidden">
           {/* SVG Organic Curve Background (Bleeds outside top/right/bottom to eliminate any edge artifacts) */}
           <svg 
             className="absolute -top-4 -bottom-4 -right-4 w-[calc(100%+16px)] h-[calc(100%+32px)] drop-shadow-[-12px_0_24px_rgba(0,0,0,0.32)] border-none outline-none" 
@@ -141,11 +142,15 @@ export default function HeroSection() {
             <div className="flex items-center justify-center pt-2">
               <button
                 onClick={() => setIsVideoModalOpen(true)}
-                className="group relative w-22 h-22 xl:w-24 xl:h-24 flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-105"
+                className="group relative w-22 h-22 xl:w-24 xl:h-24 flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-110 active:scale-95"
                 aria-label="Watch Our Story Video"
+                title="Click to watch our brand story video"
               >
+                {/* Outer Ambient Pulse Ring */}
+                <span className="absolute inset-0 rounded-full bg-[#D4AF37]/15 animate-ping duration-1000 pointer-events-none" />
+
                 {/* SVG Curved Text & Golden Track */}
-                <svg className="w-full h-full" viewBox="0 0 120 120">
+                <svg className="w-full h-full relative z-10" viewBox="0 0 120 120">
                   <defs>
                     <path id="curveTop" d="M 16,60 A 44,44 0 0,1 104,60" fill="none" />
                     <path id="curveBottom" d="M 16,60 A 44,44 0 0,0 104,60" fill="none" />
@@ -160,8 +165,8 @@ export default function HeroSection() {
                     stroke="#D4AF37" 
                     strokeWidth="1" 
                     strokeDasharray="3 3" 
-                    opacity="0.6" 
-                    className="group-hover:rotate-45 transition-transform duration-700 origin-center"
+                    opacity="0.7" 
+                    className="group-hover:rotate-90 transition-transform duration-1000 origin-center"
                   />
                   <circle cx="60" cy="60" r="44" fill="none" stroke="#D4AF37" strokeWidth="1.2" opacity="0.8" />
                   
@@ -181,9 +186,9 @@ export default function HeroSection() {
                 </svg>
 
                 {/* Center Dark Green Play Button */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-10 h-10 xl:w-11 xl:h-11 rounded-full bg-[#0E2A1B] text-white border-2 border-[#D4AF37] flex items-center justify-center shadow-lg group-hover:bg-[#1B3B29] group-hover:border-[#F6E5A6] transition-all">
-                    <Play className="w-4 h-4 fill-white ml-0.5" />
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                  <div className="w-10 h-10 xl:w-11 xl:h-11 rounded-full bg-[#0E2A1B] text-white border-2 border-[#D4AF37] flex items-center justify-center shadow-lg group-hover:bg-[#1B3B29] group-hover:border-[#F6E5A6] group-hover:shadow-[0_0_20px_rgba(212,175,55,0.6)] transition-all">
+                    <Play className="w-4 h-4 fill-white ml-0.5 group-hover:scale-110 transition-transform" />
                   </div>
                 </div>
               </button>
@@ -308,10 +313,12 @@ export default function HeroSection() {
               <div className="lg:hidden pt-3 flex justify-center">
                 <button
                   onClick={() => setIsVideoModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#FAF7F2] text-[#0E2A1B] text-xs font-bold uppercase tracking-wider shadow-md hover:bg-white transition-all"
+                  className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-[#D4AF37] text-[#0E2A1B] text-xs font-extrabold uppercase tracking-wider shadow-lg hover:bg-[#E5C358] active:scale-95 transition-all cursor-pointer"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current text-[#0E2A1B]" />
-                  <span>Watch Our Story</span>
+                  <span className="w-5 h-5 rounded-full bg-[#0E2A1B] text-white flex items-center justify-center shadow-inner">
+                    <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
+                  </span>
+                  <span>Watch Our Story (1 Min Video)</span>
                 </button>
               </div>
 
@@ -361,65 +368,12 @@ export default function HeroSection() {
       </div>
 
       {/* ========================================================
-          3. WATCH OUR STORY VIDEO MODAL
+          3. WATCH OUR STORY VIDEO MODAL (Interactive Chapters & Player)
          ======================================================== */}
-      {isVideoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="relative w-full max-w-3xl bg-[#0E2A1B] rounded-3xl border border-[#D4AF37]/50 p-6 sm:p-8 shadow-2xl text-white">
-            
-            {/* Close Button */}
-            <button
-              onClick={() => setIsVideoModalOpen(false)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-stone-300 hover:text-white transition-colors"
-              aria-label="Close Video"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 text-[#D4AF37] text-xs font-bold uppercase tracking-widest">
-                <Leaf className="w-4 h-4 text-[#D4AF37]" />
-                <span>The Aurivá Journey</span>
-              </div>
-              <h3 className="font-serif text-2xl sm:text-3xl font-bold text-white">
-                From Wetland Harvest to Crunchy Perfection
-              </h3>
-              
-              {/* Video Player / Showcase Frame */}
-              <div className="relative aspect-video rounded-2xl overflow-hidden bg-black/60 border border-[#D4AF37]/30 shadow-inner flex items-center justify-center">
-                <img 
-                  src={heroMakhanaImg} 
-                  alt="Auriva Story Background" 
-                  className="w-full h-full object-cover opacity-60"
-                />
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/40">
-                  <div className="w-16 h-16 rounded-full bg-[#D4AF37] text-[#0E2A1B] flex items-center justify-center shadow-2xl mb-3 animate-pulse">
-                    <Play className="w-7 h-7 fill-current ml-1" />
-                  </div>
-                  <h4 className="font-serif text-lg sm:text-xl font-bold text-white">
-                    Discover Our Mithila Heritage
-                  </h4>
-                  <p className="text-xs text-[#D2DFD6] max-w-md mt-1">
-                    Watch how our local artisan farmers harvest and roast lotus seeds in the heart of Bihar wetlands.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <Link
-                  to="/about"
-                  onClick={() => setIsVideoModalOpen(false)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#D4AF37] text-[#0E2A1B] font-bold text-xs uppercase tracking-wider hover:bg-[#E5C358] transition-all"
-                >
-                  <span>Read Full Brand Story</span>
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
+      <BrandStoryModal 
+        isOpen={isVideoModalOpen} 
+        onClose={() => setIsVideoModalOpen(false)} 
+      />
 
     </div>
   );

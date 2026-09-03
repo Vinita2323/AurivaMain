@@ -1,10 +1,23 @@
-import React from 'react';
-import { Leaf, Heart, Scale, ShieldCheck, Activity, Droplets, Flower2, Search, Settings, BadgeCheck, ArrowRight, Play } from 'lucide-react';
-import bowlImg from '../../../assets/user/Flavored Makhana.jpg'; // Using as placeholder for top right bowl
-import lotusImg from '../../../assets/user/philosophy.png'; // Using as placeholder for bottom left lotus field
-import factoryImg from '../../../assets/user/Premium Makhana.jpg'; // Using as placeholder for factory
+import React, { useState, useRef } from 'react';
+import { Leaf, Heart, Scale, ShieldCheck, Activity, Droplets, Flower2, Search, Settings, BadgeCheck, ArrowRight, Play, Pause } from 'lucide-react';
+import homeMakhanaImg from '../../../assets/user/HomeMakhana.png'; 
+import lotusImg from '../../../assets/user/philosophy.png';
 
 export default function WhyAurivaSection() {
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isHovered, setIsHovered] = useState(false);
+  const videoRef = useRef(null);
+
+  const togglePlay = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
   return (
     <section className="hidden md:block bg-[#F7F3E9] overflow-hidden">
       <div className="w-full flex flex-col">
@@ -20,7 +33,7 @@ export default function WhyAurivaSection() {
             <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#D4AF37] leading-tight mb-5">
               NUTRITION THAT<br />LOVES YOU BACK.
             </h2>
-            <button className="bg-[#D4AF37] hover:bg-[#C89038] text-[#0E2A1B] font-bold uppercase tracking-wider text-[10px] sm:text-xs px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl inline-flex items-center gap-2 self-start transition-colors">
+            <button className="bg-[#D4AF37] hover:bg-[#C89038] text-[#0E2A1B] font-bold uppercase tracking-wider text-[10px] sm:text-xs px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl inline-flex items-center gap-2 self-start transition-colors cursor-pointer">
               EXPLORE BENEFITS
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
@@ -62,9 +75,13 @@ export default function WhyAurivaSection() {
             </div>
           </div>
 
-          {/* Right: Bowl Image */}
-          <div className="lg:w-[20%] bg-white/50 relative min-h-[180px] lg:min-h-0">
-            <img src={bowlImg} alt="Makhana Bowl" className="absolute inset-0 w-full h-full object-cover mix-blend-multiply" />
+          {/* Right: Home Makhana Image */}
+          <div className="lg:w-[20%] relative min-h-[180px] lg:min-h-0 bg-white/40 overflow-hidden">
+            <img 
+              src={homeMakhanaImg} 
+              alt="Auriva Home Makhana" 
+              className="absolute inset-0 w-full h-full object-cover object-center hover:scale-105 transition-transform duration-500" 
+            />
           </div>
         </div>
 
@@ -139,16 +156,43 @@ export default function WhyAurivaSection() {
             </div>
           </div>
 
-          {/* Right: Factory Image & Check */}
+          {/* Right: Quality Check Video Showcase */}
           <div className="lg:w-[20%] p-4 sm:p-5 flex flex-col justify-center">
-            <div className="relative rounded-xl overflow-hidden mb-3 border border-[#143B24]">
-              <img src={factoryImg} alt="Quality Checking" className="w-full h-24 sm:h-28 object-cover opacity-80 mix-blend-luminosity" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/80 bg-black/40 flex items-center justify-center hover:bg-[#D4AF37]/90 hover:border-[#D4AF37] transition-all">
-                  <Play className="w-3 h-3 sm:w-4 sm:h-4 text-white fill-current ml-0.5 sm:ml-1" />
-                </button>
+            <div 
+              className="relative rounded-xl overflow-hidden mb-3 border border-[#D4AF37]/40 shadow-lg group cursor-pointer aspect-[16/10] sm:aspect-video bg-black"
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
+              onClick={togglePlay}
+            >
+              <video 
+                ref={videoRef}
+                src="/working.mp4" 
+                playsInline
+                autoPlay
+                loop
+                muted
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              
+              {/* Subtle Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+
+              {/* Play/Pause Overlay Indicator on Hover / Paused */}
+              <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                !isPlaying ? 'opacity-100' : isHovered ? 'opacity-90' : 'opacity-0'
+              }`}>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-white/80 bg-black/50 backdrop-blur-xs flex items-center justify-center shadow-lg transition-all hover:scale-110 hover:border-[#D4AF37]">
+                  {isPlaying ? (
+                    <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-current" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-current ml-0.5" />
+                  )}
+                </div>
               </div>
             </div>
+
             <div className="flex items-start gap-2">
               <Leaf className="w-4 h-4 sm:w-5 sm:h-5 text-[#D4AF37] shrink-0 mt-0.5" />
               <div>

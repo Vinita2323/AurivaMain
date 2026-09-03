@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Sparkles, Star, Award, Heart, ShieldCheck, Flame, Gift, Leaf, FlaskConical, Droplets, Flower2, Mountain, Quote, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -15,12 +15,47 @@ import TestimonialCard from '../components/TestimonialCard';
 import Footer from '../components/Footer';
 
 import { FLAVORS } from '../../../data/flavors';
+import { PRODUCTS as DEFAULT_PRODUCTS } from '../../../data/products';
 import { useAdmin } from '../../../context/AdminContext';
 import philosophyImg from '../../../assets/user/philosophy.png';
 
 export default function HomePage() {
-  const { products: PRODUCTS, categories: CATEGORIES, reviews: REVIEWS } = useAdmin();
-  const bestSellers = (PRODUCTS || []).filter(p => p.isBestseller || p.badge === 'Bestseller' || p.badge === 'BESTSELLER').slice(0, 10);
+  const { products: adminProducts, categories: CATEGORIES, reviews: REVIEWS } = useAdmin();
+  const allProducts = (adminProducts && adminProducts.length > 0) ? adminProducts : DEFAULT_PRODUCTS;
+  
+  // Place products using signature pouch packaging (assets/user/Types/) at the front
+  const isPouch = (p) => {
+    const name = (p.name || '').toLowerCase();
+    const img = typeof p.image === 'string' ? p.image : '';
+    return name.includes('peri') || 
+           name.includes('cream') || 
+           name.includes('onion') || 
+           name.includes('tomato') || 
+           name.includes('salted') || 
+           name.includes('masala') || 
+           name.includes('pudina') || 
+           img.includes('PeriPeri') || 
+           img.includes('CreamOnion') || 
+           img.includes('Tomato') || 
+           img.includes('Types');
+  };
+
+  const pouchProducts = allProducts.filter(isPouch);
+  const otherProducts = allProducts.filter(p => !isPouch(p));
+  const displayProducts = [...pouchProducts, ...otherProducts];
+  
+  const bestsellersScrollRef = useRef(null);
+
+  const scrollBestsellers = (direction) => {
+    if (bestsellersScrollRef.current) {
+      const container = bestsellersScrollRef.current;
+      const scrollAmount = container.clientWidth * 0.75 || 320;
+      container.scrollBy({
+        left: direction === 'next' ? scrollAmount : -scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] pb-20 md:pb-0">
@@ -69,44 +104,59 @@ export default function HomePage() {
                 >
                   VIEW ALL PRODUCTS
                 </Link>
-                <div className="hidden md:flex gap-2">
-                  <button className="w-8 h-8 rounded-full border border-stone-300 flex items-center justify-center hover:bg-white hover:border-[#D4AF37] transition-colors group">
-                    <ChevronLeft className="w-4 h-4 text-[#0E2A1B] group-hover:text-[#D4AF37]" />
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => scrollBestsellers('prev')}
+                    className="w-8 h-8 rounded-full border border-stone-300 hover:border-[#D4AF37] hover:bg-white text-[#0E2A1B] hover:text-[#D4AF37] flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs active:scale-90"
+                    aria-label="Previous products"
+                    title="Previous products"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-current" />
                   </button>
-                  <button className="w-8 h-8 rounded-full border border-stone-300 flex items-center justify-center hover:bg-white hover:border-[#D4AF37] transition-colors group">
-                    <ChevronRight className="w-4 h-4 text-[#0E2A1B] group-hover:text-[#D4AF37]" />
+                  <button 
+                    onClick={() => scrollBestsellers('next')}
+                    className="w-8 h-8 rounded-full border border-stone-300 hover:border-[#D4AF37] hover:bg-white text-[#0E2A1B] hover:text-[#D4AF37] flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs active:scale-90"
+                    aria-label="Next products"
+                    title="Next products"
+                  >
+                    <ChevronRight className="w-4 h-4 text-current" />
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Products Horizontal Scroll/Grid */}
-            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 pb-4">
-              {bestSellers.slice(0, 5).map((product, index) => {
+            {/* Products Horizontal Scroll Container */}
+            <div 
+              ref={bestsellersScrollRef}
+              className="flex gap-4 sm:gap-6 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory px-4 md:px-1 pb-4"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {displayProducts.map((product, index) => {
                 const nameStr = (product.name || '').toLowerCase();
-                let displayImage;
+                let displayImage = product.image;
                 
-                // Override images to ONLY use the 3 images from assets/user/Types
+                // Assign matching signature pouch packaging images from assets/user/Types/
                 if (nameStr.includes('peri')) {
                   displayImage = new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-                } else if (nameStr.includes('cheese') || nameStr.includes('cream')) {
+                } else if (nameStr.includes('cheese') || nameStr.includes('cream') || nameStr.includes('onion')) {
                   displayImage = new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
                 } else if (nameStr.includes('tomato')) {
                   displayImage = new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
-                } else {
-                  // For any other product, repeat one of the 3 images based on its index
-                  const typesImages = [
-                    new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href,
-                    new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href,
-                    new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href,
-                  ];
-                  displayImage = typesImages[index % 3];
+                } else if (nameStr.includes('salted') || nameStr.includes('w240')) {
+                  displayImage = new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
+                } else if (nameStr.includes('masala')) {
+                  displayImage = new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
+                } else if (nameStr.includes('pudina')) {
+                  displayImage = new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
                 }
 
                 const productToRender = { ...product, image: displayImage };
 
                 return (
-                  <div key={product.id} className="first:ml-4 md:first:ml-0 min-w-[240px] sm:min-w-[280px] md:min-w-0 snap-start shrink-0 flex-1">
+                  <div 
+                    key={product.id || index} 
+                    className="w-[260px] sm:w-[280px] lg:w-[290px] xl:w-[300px] min-w-[250px] sm:min-w-[270px] snap-start shrink-0"
+                  >
                     <ProductCard product={productToRender} />
                   </div>
                 );

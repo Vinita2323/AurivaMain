@@ -116,7 +116,19 @@ export function AdminProvider({ children }) {
   const [products, setProducts] = useState(() => {
     try {
       const saved = localStorage.getItem('auriva_admin_products');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const isPouch = (p) => {
+            const name = (p.name || '').toLowerCase();
+            const img = typeof p.image === 'string' ? p.image : '';
+            return name.includes('peri') || name.includes('cream') || name.includes('tomato') || 
+                   name.includes('salted') || name.includes('masala') || name.includes('pudina') ||
+                   img.includes('PeriPeri') || img.includes('CreamOnion') || img.includes('Tomato') || img.includes('Types');
+          };
+          return [...parsed.filter(isPouch), ...parsed.filter(p => !isPouch(p))];
+        }
+      }
     } catch (e) {
       console.error(e);
     }

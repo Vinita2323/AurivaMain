@@ -1,14 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Leaf, Sparkles, Heart, ShieldCheck, ArrowRight, Sun, 
   Package, Truck, Award, Globe, CheckCircle2, ChevronRight,
-  Droplets, Check, Users
+  Droplets, Check, Users, Play
 } from 'lucide-react';
 
 import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import BrandStoryModal from '../components/BrandStoryModal';
 
 // Assets
 import HeroImg from '../../../assets/user/HeroImage.png';
@@ -16,6 +17,7 @@ import PhilosophyImg from '../../../assets/user/philosophy.png';
 import ComboImg from '../../../assets/user/combo Makhana.jpg';
 
 export default function AboutPage() {
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
@@ -69,15 +71,23 @@ export default function AboutPage() {
                   </p>
                 </div>
 
-                {/* CTA Button */}
-                <div className="pt-2 sm:pt-4">
+                {/* CTA Buttons */}
+                <div className="flex flex-wrap items-center gap-3 pt-2 sm:pt-4">
                   <a
                     href="#purpose"
-                    className="inline-flex items-center gap-3 px-7 py-3.5 sm:px-8 sm:py-4 rounded-2xl bg-[#D4AF37] text-[#0E2A1B] hover:bg-[#C89038] font-extrabold text-xs uppercase tracking-widest transition-all duration-300 shadow-md hover:shadow-xl hover:scale-102 group"
+                    className="inline-flex items-center gap-3 px-6 py-3.5 sm:px-8 sm:py-4 rounded-2xl bg-[#D4AF37] text-[#0E2A1B] hover:bg-[#C89038] font-extrabold text-xs uppercase tracking-widest transition-all duration-300 shadow-md hover:shadow-xl hover:scale-102 group"
                   >
                     <span>DISCOVER OUR STORY</span>
                     <ArrowRight className="w-4 h-4 text-[#0E2A1B] group-hover:translate-x-1.5 transition-transform" />
                   </a>
+                  
+                  <button
+                    onClick={() => setIsVideoModalOpen(true)}
+                    className="inline-flex items-center gap-2.5 px-5 py-3.5 sm:py-4 rounded-2xl bg-white/10 hover:bg-white/20 border border-[#D4AF37]/40 text-white font-extrabold text-xs uppercase tracking-widest transition-all duration-300 cursor-pointer group shadow-md"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current text-[#D4AF37] group-hover:scale-110 transition-transform" />
+                    <span>Watch Story Video</span>
+                  </button>
                 </div>
 
               </div>
@@ -399,6 +409,12 @@ export default function AboutPage() {
       </main>
 
       <Footer />
+
+      {/* Brand Story Video Modal */}
+      <BrandStoryModal 
+        isOpen={isVideoModalOpen} 
+        onClose={() => setIsVideoModalOpen(false)} 
+      />
     </div>
   );
 }
