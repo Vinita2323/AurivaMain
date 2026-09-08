@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Sparkles, Star, Award, Heart, ShieldCheck, Flame, Gift, Leaf, FlaskConical, Droplets, Flower2, Mountain, Quote, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -17,33 +17,116 @@ import Footer from '../components/Footer';
 import { FLAVORS } from '../../../data/flavors';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../../../data/products';
 import { useAdmin } from '../../../context/AdminContext';
+import { bestsellerApi } from '../../../utils/api';
 import philosophyImg from '../../../assets/user/philosophy.png';
 
 export default function HomePage() {
   const { products: adminProducts, categories: CATEGORIES, reviews: REVIEWS } = useAdmin();
   const allProducts = (adminProducts && adminProducts.length > 0) ? adminProducts : DEFAULT_PRODUCTS;
-  
-  // Place products using signature pouch packaging (assets/user/Types/) at the front
+
+  // Place products using signature pouch packaging (assets/user/Types/) at the front as fallback
   const isPouch = (p) => {
     const name = (p.name || '').toLowerCase();
     const img = typeof p.image === 'string' ? p.image : '';
-    return name.includes('peri') || 
-           name.includes('cream') || 
-           name.includes('onion') || 
-           name.includes('tomato') || 
-           name.includes('salted') || 
-           name.includes('masala') || 
-           name.includes('pudina') || 
-           img.includes('PeriPeri') || 
-           img.includes('CreamOnion') || 
-           img.includes('Tomato') || 
-           img.includes('Types');
+    return name.includes('peri') ||
+      name.includes('cream') ||
+      name.includes('onion') ||
+      name.includes('tomato') ||
+      name.includes('salted') ||
+      name.includes('masala') ||
+      name.includes('pudina') ||
+      img.includes('PeriPeri') ||
+      img.includes('CreamOnion') ||
+      img.includes('Tomato') ||
+      img.includes('Types');
   };
 
   const pouchProducts = allProducts.filter(isPouch);
   const otherProducts = allProducts.filter(p => !isPouch(p));
-  const displayProducts = [...pouchProducts, ...otherProducts];
-  
+  const fallbackProducts = [...pouchProducts, ...otherProducts];
+
+  // Dynamic Bestsellers State
+  const [bestsellerData, setBestsellerData] = useState({
+    config: {
+      sectionLabel: 'OUR BESTSELLERS',
+      sectionHeading: 'DISCOVER OUR MOST LOVED FLAVOURS',
+      viewAllText: 'VIEW ALL PRODUCTS',
+      viewAllLink: '/shop',
+      isEnabled: true
+    },
+    bestsellers: []
+  });
+  const [loadingBestsellers, setLoadingBestsellers] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchBestsellers = async () => {
+      try {
+        setLoadingBestsellers(true);
+        const res = await bestsellerApi.getPublicBestsellers();
+        if (isMounted && res && res.success && res.data) {
+          const raw = res.data;
+          const config = raw.config || {
+            sectionLabel: raw.sectionLabel || 'OUR BESTSELLERS',
+            sectionHeading: raw.sectionHeading || 'DISCOVER OUR MOST LOVED FLAVOURS',
+            viewAllText: raw.viewAllText || 'VIEW ALL PRODUCTS',
+            viewAllLink: raw.viewAllLink || '/shop',
+            isEnabled: raw.isEnabled !== undefined ? raw.isEnabled : true
+          };
+          const bestsellers = raw.products || raw.bestsellers || [];
+          setBestsellerData({ config, bestsellers });
+        }
+      } catch (err) {
+        console.warn('Failed to load dynamic bestsellers, fallback in place:', err);
+      } finally {
+        if (isMounted) setLoadingBestsellers(false);
+      }
+    };
+
+    fetchBestsellers();
+
+    const handleFocus = () => {
+      fetchBestsellers();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
+  const resolveProductImage = (product) => {
+    const img = typeof product?.image === 'string' ? product.image : '';
+    if (img && (img.includes('cloudinary') || img.startsWith('data:') || img.includes('assets') || img.includes('/uploads/'))) {
+      return img;
+    }
+    if (img && img.startsWith('http') && !img.includes('1599488615731') && !img.includes('unsplash')) {
+      return img;
+    }
+    const nameStr = (product?.name || '').toLowerCase();
+    if (nameStr.includes('peri')) {
+      return new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
+    } else if (nameStr.includes('cheese') || nameStr.includes('cream') || nameStr.includes('onion')) {
+      return new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
+    } else if (nameStr.includes('tomato')) {
+      return new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
+    } else if (nameStr.includes('salted') || nameStr.includes('w240') || nameStr.includes('classic')) {
+      return new URL('../../../assets/user/Classic Makhana.jpg', import.meta.url).href;
+    } else if (nameStr.includes('masala')) {
+      return new URL('../../../assets/user/Flavored Makhana.jpg', import.meta.url).href;
+    } else if (nameStr.includes('pudina') || nameStr.includes('mint')) {
+      return new URL('../../../assets/user/Healthy Makhana2.jpg', import.meta.url).href;
+    }
+    return img || new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
+  };
+
+  const activeProducts = bestsellerData.bestsellers && bestsellerData.bestsellers.length > 0
+    ? bestsellerData.bestsellers
+    : fallbackProducts;
+
+  const isSectionEnabled = bestsellerData.config?.isEnabled !== false;
+
   const bestsellersScrollRef = useRef(null);
 
   const scrollBestsellers = (direction) => {
@@ -59,7 +142,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] pb-20 md:pb-0">
-      
+
       {/* 1. TOP ANNOUNCEMENT BAR */}
       <AnnouncementBar />
 
@@ -74,97 +157,103 @@ export default function HomePage() {
         <OurStorySection />
 
 
-        {/* 5. OUR BESTSELLERS (Flavours) */}
-        <section className="py-6 sm:py-16 lg:py-20 bg-[#F7F3E9]">
-          <div className="w-full px-4 sm:px-6 lg:px-8">
-            
-            {/* Header */}
-            <div className="flex flex-col md:flex-row items-center justify-between mb-8 sm:mb-12 gap-4">
-              <div className="flex items-center gap-2">
-                <Leaf className="w-4 h-4 text-[#C89038]" />
-                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B]">
-                  OUR BESTSELLERS
-                </span>
-              </div>
-              
-              <div className="flex items-center gap-4 text-center">
-                <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-r from-transparent to-[#D4AF37]"></div>
-                <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37]" />
-                <h2 className="font-serif text-lg sm:text-2xl md:text-3xl font-bold text-[#C89038] tracking-wide">
-                  DISCOVER OUR MOST LOVED FLAVOURS
-                </h2>
-                <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37] rotate-180" />
-                <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-l from-transparent to-[#D4AF37]"></div>
-              </div>
+        {/* 5. OUR BESTSELLERS (Flavours) - DYNAMIC & ADMIN CONTROLLED */}
+        {isSectionEnabled && (
+          <section className="py-6 sm:py-16 lg:py-20 bg-[#F7F3E9]">
+            <div className="w-full px-4 sm:px-6 lg:px-8">
 
-              <div className="flex items-center gap-4">
-                <Link
-                  to="/shop"
-                  className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B] hover:text-[#D4AF37] transition-colors"
-                >
-                  VIEW ALL PRODUCTS
-                </Link>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => scrollBestsellers('prev')}
-                    className="w-8 h-8 rounded-full border border-stone-300 hover:border-[#D4AF37] hover:bg-white text-[#0E2A1B] hover:text-[#D4AF37] flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs active:scale-90"
-                    aria-label="Previous products"
-                    title="Previous products"
+              {/* Header */}
+              <div className="flex flex-col md:flex-row items-center justify-between mb-8 sm:mb-12 gap-4">
+                <div className="flex items-center gap-2">
+                  <Leaf className="w-4 h-4 text-[#C89038]" />
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B]">
+                    {bestsellerData.config?.sectionLabel || 'OUR BESTSELLERS'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-4 text-center">
+                  <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-r from-transparent to-[#D4AF37]"></div>
+                  <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37]" />
+                  <h2 className="font-serif text-lg sm:text-2xl md:text-3xl font-bold text-[#C89038] tracking-wide">
+                    {bestsellerData.config?.sectionHeading || 'DISCOVER OUR MOST LOVED FLAVOURS'}
+                  </h2>
+                  <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37] rotate-180" />
+                  <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-l from-transparent to-[#D4AF37]"></div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Link
+                    to={bestsellerData.config?.viewAllLink || '/shop'}
+                    className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B] hover:text-[#D4AF37] transition-colors"
                   >
-                    <ChevronLeft className="w-4 h-4 text-current" />
-                  </button>
-                  <button 
-                    onClick={() => scrollBestsellers('next')}
-                    className="w-8 h-8 rounded-full border border-stone-300 hover:border-[#D4AF37] hover:bg-white text-[#0E2A1B] hover:text-[#D4AF37] flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs active:scale-90"
-                    aria-label="Next products"
-                    title="Next products"
-                  >
-                    <ChevronRight className="w-4 h-4 text-current" />
-                  </button>
+                    {bestsellerData.config?.viewAllText || 'VIEW ALL PRODUCTS'}
+                  </Link>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => scrollBestsellers('prev')}
+                      className="w-8 h-8 rounded-full border border-stone-300 hover:border-[#D4AF37] hover:bg-white text-[#0E2A1B] hover:text-[#D4AF37] flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs active:scale-90"
+                      aria-label="Previous products"
+                      title="Previous products"
+                    >
+                      <ChevronLeft className="w-4 h-4 text-current" />
+                    </button>
+                    <button
+                      onClick={() => scrollBestsellers('next')}
+                      className="w-8 h-8 rounded-full border border-stone-300 hover:border-[#D4AF37] hover:bg-white text-[#0E2A1B] hover:text-[#D4AF37] flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs active:scale-90"
+                      aria-label="Next products"
+                      title="Next products"
+                    >
+                      <ChevronRight className="w-4 h-4 text-current" />
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* Products Horizontal Scroll Container */}
+              {loadingBestsellers ? (
+                <div className="flex gap-4 sm:gap-6 overflow-x-hidden px-4 md:px-1 pb-4">
+                  {[1, 2, 3, 4].map((idx) => (
+                    <div
+                      key={idx}
+                      className="w-[260px] sm:w-[280px] lg:w-[290px] xl:w-[300px] min-w-[250px] sm:min-w-[270px] shrink-0 bg-white rounded-xl border border-stone-200/80 p-3 animate-pulse space-y-3"
+                    >
+                      <div className="w-full aspect-[1.1] sm:aspect-square bg-stone-200/80 rounded-lg" />
+                      <div className="h-4 bg-stone-200 rounded w-3/4" />
+                      <div className="h-3 bg-stone-200 rounded w-1/2" />
+                      <div className="h-5 bg-stone-200 rounded w-1/3 mt-2" />
+                      <div className="h-9 bg-stone-200 rounded w-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  ref={bestsellersScrollRef}
+                  className="flex gap-4 sm:gap-6 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory px-4 md:px-1 pb-4"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  {activeProducts.map((product, index) => {
+                    const displayImage = resolveProductImage(product);
+                    const productToRender = {
+                      ...product,
+                      id: product.id || product._id,
+                      image: displayImage
+                    };
+
+                    return (
+                      <div
+                        key={product._id || product.id || index}
+                        className="w-[260px] sm:w-[280px] lg:w-[290px] xl:w-[300px] min-w-[250px] sm:min-w-[270px] snap-start shrink-0"
+                      >
+                        <ProductCard product={productToRender} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
             </div>
-
-            {/* Products Horizontal Scroll Container */}
-            <div 
-              ref={bestsellersScrollRef}
-              className="flex gap-4 sm:gap-6 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory px-4 md:px-1 pb-4"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              {displayProducts.map((product, index) => {
-                const nameStr = (product.name || '').toLowerCase();
-                let displayImage = product.image;
-                
-                // Assign matching signature pouch packaging images from assets/user/Types/
-                if (nameStr.includes('peri')) {
-                  displayImage = new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-                } else if (nameStr.includes('cheese') || nameStr.includes('cream') || nameStr.includes('onion')) {
-                  displayImage = new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
-                } else if (nameStr.includes('tomato')) {
-                  displayImage = new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
-                } else if (nameStr.includes('salted') || nameStr.includes('w240')) {
-                  displayImage = new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-                } else if (nameStr.includes('masala')) {
-                  displayImage = new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
-                } else if (nameStr.includes('pudina')) {
-                  displayImage = new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
-                }
-
-                const productToRender = { ...product, image: displayImage };
-
-                return (
-                  <div 
-                    key={product.id || index} 
-                    className="w-[260px] sm:w-[280px] lg:w-[290px] xl:w-[300px] min-w-[250px] sm:min-w-[270px] snap-start shrink-0"
-                  >
-                    <ProductCard product={productToRender} />
-                  </div>
-                );
-              })}
-            </div>
-            
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* 6. WHY AURIVA (Nutrition & Process Block) */}
         <WhyAurivaSection />
@@ -174,13 +263,13 @@ export default function HomePage() {
 
         {/* 8. BRAND STORY SECTION (The Aurivá Philosophy - Compact Warm Ivory Botanical Style) */}
         <section id="story" className="py-5 sm:py-14 bg-[#FAF7F2] text-[#182019] relative overflow-hidden border-b border-[#EBE5DA]">
-          
+
           <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-10 items-center">
-              
+
               {/* Left Column: Philosophy Details */}
               <div className="lg:col-span-6 space-y-2.5 sm:space-y-4">
-                
+
                 {/* Eyebrow with gold leaf */}
                 <div className="inline-flex items-center gap-1.5 text-[9.5px] sm:text-[11px] uppercase tracking-[0.2em] text-[#C89038] font-bold">
                   <span>THE AURIVÁ PHILOSOPHY</span>
@@ -208,7 +297,7 @@ export default function HomePage() {
                 {/* 5-Feature Trust Strip */}
                 <div className="bg-white rounded-xl border border-[#EBE5DA] p-2 sm:p-3 shadow-2xs">
                   <div className="grid grid-cols-5 gap-1 text-center items-center">
-                    
+
                     <div className="flex flex-col items-center">
                       <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full border border-stone-200 flex items-center justify-center text-[#0E2A1B] mb-0.5 sm:mb-1 bg-stone-50">
                         <Leaf className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#0E2A1B]" />
@@ -249,7 +338,7 @@ export default function HomePage() {
 
                 {/* 2-Stat Metric Cards */}
                 <div className="bg-white rounded-xl border border-[#EBE5DA] p-2.5 sm:p-3.5 shadow-2xs grid grid-cols-2 gap-2 sm:gap-3 divide-x divide-stone-200">
-                  
+
                   <div className="flex items-center gap-2 sm:gap-3 pr-2 sm:pr-3">
                     <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-full border border-dashed border-[#D4AF37] flex items-center justify-center text-[#C89038] shrink-0 bg-[#FAF7F2]">
                       <ShieldCheck className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
@@ -311,7 +400,7 @@ export default function HomePage() {
           <div className="absolute bottom-0 left-10 w-80 h-80 bg-[#163E27]/80 rounded-full blur-[100px] pointer-events-none" />
 
           <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
-            
+
             {/* Header */}
             <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
               <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-[#133E28]/80 border border-[#D4AF37]/35 shadow-xs mb-2">
@@ -320,7 +409,7 @@ export default function HomePage() {
                   HOLISTIC WELLNESS
                 </span>
               </div>
-              
+
               <h2 className="font-serif text-2xl sm:text-3xl lg:text-[34px] font-bold text-[#F7F3E9] mt-0.5">
                 Why Choose AURIVÁ?
               </h2>
@@ -331,11 +420,11 @@ export default function HomePage() {
 
             {/* 4 Compact Luxury Glass Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-6 sm:mb-8">
-              
+
               {/* Card 1 */}
               <div className="group bg-gradient-to-b from-[#133523]/80 to-[#0A1F14]/90 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-[#D4AF37]/25 hover:border-[#D4AF37] shadow-lg hover:shadow-[0_15px_30px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.25)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col justify-between relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
-                
+
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-[#091B11] border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] group-hover:scale-110 group-hover:bg-[#D4AF37] group-hover:text-[#081B11] transition-all duration-300 shadow-inner mb-3">
                     <Award className="w-5 h-5" />
@@ -357,7 +446,7 @@ export default function HomePage() {
               {/* Card 2 */}
               <div className="group bg-gradient-to-b from-[#133523]/80 to-[#0A1F14]/90 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-[#D4AF37]/25 hover:border-[#D4AF37] shadow-lg hover:shadow-[0_15px_30px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.25)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col justify-between relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
-                
+
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-[#091B11] border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] group-hover:scale-110 group-hover:bg-[#D4AF37] group-hover:text-[#081B11] transition-all duration-300 shadow-inner mb-3">
                     <Heart className="w-5 h-5" />
@@ -379,7 +468,7 @@ export default function HomePage() {
               {/* Card 3 */}
               <div className="group bg-gradient-to-b from-[#133523]/80 to-[#0A1F14]/90 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-[#D4AF37]/25 hover:border-[#D4AF37] shadow-lg hover:shadow-[0_15px_30px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.25)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col justify-between relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
-                
+
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-[#091B11] border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] group-hover:scale-110 group-hover:bg-[#D4AF37] group-hover:text-[#081B11] transition-all duration-300 shadow-inner mb-3">
                     <Flame className="w-5 h-5" />
@@ -401,7 +490,7 @@ export default function HomePage() {
               {/* Card 4 */}
               <div className="group bg-gradient-to-b from-[#133523]/80 to-[#0A1F14]/90 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-[#D4AF37]/25 hover:border-[#D4AF37] shadow-lg hover:shadow-[0_15px_30px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.25)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col justify-between relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
-                
+
                 <div>
                   <div className="w-10 h-10 rounded-xl bg-[#091B11] border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] group-hover:scale-110 group-hover:bg-[#D4AF37] group-hover:text-[#081B11] transition-all duration-300 shadow-inner mb-3">
                     <ShieldCheck className="w-5 h-5" />
@@ -463,7 +552,7 @@ export default function HomePage() {
           <div className="absolute bottom-10 right-10 w-96 h-96 bg-[#163E27]/5 rounded-full blur-3xl pointer-events-none" />
 
           <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 relative z-10">
-            
+
             {/* Section Header */}
             <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
               <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#133E28]/10 border border-[#28543B]/20 mb-2.5 shadow-2xs">
@@ -472,7 +561,7 @@ export default function HomePage() {
                   REAL CUSTOMER VOICES
                 </span>
               </div>
-              
+
               <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl lg:text-[40px] font-bold text-[#0E2A1B] mt-1">
                 What Our Customers Say
               </h2>

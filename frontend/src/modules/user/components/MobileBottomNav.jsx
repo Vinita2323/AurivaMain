@@ -1,10 +1,12 @@
 import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, ShoppingBag, LayoutGrid, User, ShoppingCart } from 'lucide-react';
+import { Home, ShoppingBag, LayoutGrid, ShoppingCart, User } from 'lucide-react';
 import { useCart } from '../../../context/CartContext';
+import { useAuth } from '../../../context/AuthContext';
 
 export default function MobileBottomNav() {
   const { itemCount } = useCart();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -12,8 +14,8 @@ export default function MobileBottomNav() {
   const isHome = location.pathname === '/';
   const isShop = location.pathname === '/shop' && !location.search.includes('categories');
   const isCategories = location.pathname === '/shop' && location.search.includes('categories');
-  const isAccount = location.pathname.startsWith('/account');
   const isCart = location.pathname.startsWith('/cart');
+  const isAccount = location.pathname.startsWith('/account');
   const isAccountSubpage = location.pathname === '/account' && location.search.includes('tab=');
 
   if (isAccountSubpage) {
@@ -80,23 +82,7 @@ export default function MobileBottomNav() {
           )}
         </button>
 
-        {/* 4. ACCOUNT */}
-        <NavLink
-          to="/account"
-          className={`flex flex-col items-center justify-center h-full min-h-[44px] transition-colors relative ${
-            isAccount ? 'text-[#0E2A1B]' : 'text-[#6B716B] hover:text-[#0E2A1B]'
-          }`}
-        >
-          <User className={`w-5 h-5 transition-transform ${isAccount ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'}`} />
-          <span className={`text-[10px] tracking-tight mt-0.5 ${isAccount ? 'font-extrabold text-[#0E2A1B]' : 'font-medium'}`}>
-            Account
-          </span>
-          {isAccount && (
-            <span className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-[#D4AF37]" />
-          )}
-        </NavLink>
-
-        {/* 5. CART */}
+        {/* 4. CART */}
         <NavLink
           to="/cart"
           className={`flex flex-col items-center justify-center h-full min-h-[44px] transition-colors relative ${
@@ -115,6 +101,32 @@ export default function MobileBottomNav() {
             Cart
           </span>
           {isCart && (
+            <span className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-[#D4AF37]" />
+          )}
+        </NavLink>
+
+        {/* 5. ACCOUNT */}
+        <NavLink
+          to="/account"
+          className={`flex flex-col items-center justify-center h-full min-h-[44px] transition-colors relative ${
+            isAccount ? 'text-[#0E2A1B]' : 'text-[#6B716B] hover:text-[#0E2A1B]'
+          }`}
+        >
+          <div className="relative flex items-center justify-center">
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                alt={user.name || "User"}
+                className={`w-5 h-5 rounded-full object-cover border border-[#D4AF37] transition-transform ${isAccount ? 'scale-110' : ''}`}
+              />
+            ) : (
+              <User className={`w-5 h-5 transition-transform ${isAccount ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'}`} />
+            )}
+          </div>
+          <span className={`text-[10px] tracking-tight mt-0.5 ${isAccount ? 'font-extrabold text-[#0E2A1B]' : 'font-medium'}`}>
+            Account
+          </span>
+          {isAccount && (
             <span className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-[#D4AF37]" />
           )}
         </NavLink>

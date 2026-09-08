@@ -4,7 +4,7 @@ import {
   Package, MapPin, Gift, Tag, CreditCard, Heart, User,
   LogOut, ChevronRight, ArrowRight, Copy, Check, Plus, 
   Edit3, Trash2, CheckCircle2, ShieldCheck, X, Sparkles, Lock,
-  ArrowLeft, ChevronLeft
+  ArrowLeft, ChevronLeft, Phone
 } from 'lucide-react';
 
 import AnnouncementBar from '../components/AnnouncementBar';
@@ -26,8 +26,9 @@ export default function AccountPage() {
 
   const { 
     user, 
-    orders, 
-    addresses, 
+    logout,
+    orders = [], 
+    addresses = [], 
     selectedAddressId, 
     setSelectedAddressId, 
     addAddress, 
@@ -75,6 +76,129 @@ export default function AccountPage() {
       navigate('/wishlist');
     }
   }, [rawTab, navigate]);
+
+  const handleLogout = () => {
+    logout();
+    setSearchParams({});
+  };
+
+  // If user is logged out, render the compact, themed "Please Log In First" screen
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col justify-between bg-[#FAF7F2] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] font-sans">
+        <div>
+          <AnnouncementBar />
+          <Header />
+        </div>
+
+        <main className="flex-1 py-4 sm:py-8 md:py-12 max-w-lg mx-auto px-4 sm:px-6 w-full flex items-center justify-center pb-20 md:pb-8">
+          <div className="bg-white rounded-3xl border border-[#E8E2D5] shadow-xl overflow-hidden w-full animate-fadeIn">
+            
+            {/* Top Compact Brand Header */}
+            <div className="bg-[#0E2A1B] p-5 sm:p-7 text-center text-white border-b border-[#D4AF37]/30 relative overflow-hidden">
+              <div className="absolute -right-8 -top-8 w-28 h-28 bg-[#D4AF37]/15 rounded-full blur-2xl pointer-events-none" />
+              <div className="absolute -left-8 -bottom-8 w-28 h-28 bg-[#D4AF37]/15 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#143322] border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] shadow-md mb-2.5">
+                  <Lock className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+
+                <span className="text-[9.5px] sm:text-[10px] font-extrabold uppercase tracking-widest text-[#D4AF37] bg-[#143322] px-3 py-0.5 rounded-full border border-[#D4AF37]/30 mb-1.5">
+                  Account Sign In
+                </span>
+
+                <h1 className="font-serif text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  Please Log In First
+                </h1>
+
+                <p className="text-[11.5px] sm:text-xs text-[#A2B5A8] mt-1 font-normal max-w-xs leading-relaxed">
+                  Sign in to track live orders, earn & redeem loyalty points, and manage saved delivery addresses.
+                </p>
+              </div>
+            </div>
+
+            {/* Compact Benefits & Sign In Action */}
+            <div className="p-5 sm:p-6 space-y-4">
+              
+              {/* 4 Compact Benefits Grid */}
+              <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                <div className="p-2.5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                    <Package className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-[#0E2A1B] truncate">Live Tracking</p>
+                    <p className="text-[9.5px] text-stone-500 truncate">Real-time status</p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                    <Gift className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-[#0E2A1B] truncate">Loyalty Points</p>
+                    <p className="text-[9.5px] text-stone-500 truncate">Earn 10% back</p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                    <Tag className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-[#0E2A1B] truncate">VIP Coupons</p>
+                    <p className="text-[9.5px] text-stone-500 truncate">Member discounts</p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                    <MapPin className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-[#0E2A1B] truncate">Saved Addresses</p>
+                    <p className="text-[9.5px] text-stone-500 truncate">1-Click checkout</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-1">
+                <Link
+                  to="/login?redirect=/account"
+                  className="w-full py-3 sm:py-3.5 px-4 rounded-2xl bg-[#D4AF37] hover:bg-[#E5C358] text-[#0E2A1B] font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all min-h-[46px]"
+                >
+                  <Phone className="w-4 h-4" />
+                  <span>Log In to Account</span>
+                  <ArrowRight className="w-4 h-4 ml-0.5" />
+                </Link>
+
+                <Link
+                  to="/shop"
+                  className="w-full py-2.5 px-4 rounded-xl border border-stone-300 hover:border-[#0E2A1B] bg-white text-stone-700 hover:text-[#0E2A1B] font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all min-h-[40px]"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Browse Healthy Snacks</span>
+                </Link>
+              </div>
+
+              {/* Security Badge */}
+              <div className="flex items-center justify-center gap-1.5 text-[10.5px] text-stone-500 pt-2 border-t border-stone-100">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>256-bit Encrypted • 100% Secure</span>
+              </div>
+
+            </div>
+
+          </div>
+        </main>
+
+        <Footer />
+      </div>
+    );
+  }
 
   const setTab = (tabName) => {
     if (tabName === 'wishlist') {
@@ -212,13 +336,15 @@ export default function AccountPage() {
   const currentTabObj = accountTabs.find(t => t.id === activeTab) || accountTabs[0];
 
   return (
-    <div className={`min-h-screen bg-[#FAF7F2] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] font-sans ${
-      !isMobileMenu ? 'pb-8 md:pb-12' : 'pb-24 md:pb-12'
-    }`}>
-      <AnnouncementBar />
-      <Header />
+    <div className="min-h-screen flex flex-col justify-between bg-[#FAF7F2] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] font-sans">
+      <div>
+        <AnnouncementBar />
+        <Header />
+      </div>
 
-      <main className="py-4 sm:py-8 md:py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className={`flex-1 py-4 sm:py-8 md:py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full ${
+        !isMobileMenu ? 'pb-8 md:pb-12' : 'pb-24 md:pb-12'
+      }`}>
         
         {/* Top Welcome Banner: Hidden on mobile when inside a subpage */}
         <div className={`bg-[#0E2A1B] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 text-white border border-[#D4AF37]/30 shadow-xl mb-4 sm:mb-6 flex-col sm:flex-row items-center justify-between gap-3 sm:gap-6 relative overflow-hidden ${
@@ -295,11 +421,8 @@ export default function AccountPage() {
             {/* Mobile Logout Button */}
             <div className="pt-2">
               <button
-                onClick={() => {
-                  alert("Logged out of customer session.");
-                  navigate('/');
-                }}
-                className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-white border border-rose-200 text-rose-600 font-bold text-xs shadow-xs active:bg-rose-50 min-h-[48px]"
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-white border border-rose-200 text-rose-600 font-bold text-xs shadow-xs active:bg-rose-50 min-h-[48px] hover:bg-rose-50/50 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Log Out</span>
@@ -361,10 +484,7 @@ export default function AccountPage() {
 
             <div className="pt-3 border-t border-[#D4AF37]/20 mt-3">
               <button
-                onClick={() => {
-                  alert("Logged out of customer session.");
-                  navigate('/');
-                }}
+                onClick={handleLogout}
                 className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-white/5 hover:text-rose-300 transition-colors"
               >
                 <LogOut className="w-4 h-4" />

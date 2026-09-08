@@ -63,23 +63,39 @@ export default function MobileDrawer({ isOpen, onClose }) {
 
           {/* User Profile Snippet */}
           <div className="p-4 bg-[#143322] border-b border-[#D4AF37]/20">
-            <Link 
-              to="/account" 
-              onClick={onClose}
-              className="flex items-center gap-3 group"
-            >
-              <img
-                src={user?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
-                alt={user?.name}
-                className="w-10 h-10 rounded-full border border-[#D4AF37] object-cover"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-wider">Welcome back</p>
-                <h4 className="text-sm font-semibold truncate group-hover:text-[#D4AF37] transition-colors">{user?.name || 'Vini Sharma'}</h4>
-                <p className="text-[10px] text-stone-300">{user?.rewardsPoints || 2450} Reward Pts</p>
+            {user ? (
+              <Link 
+                to="/account" 
+                onClick={onClose}
+                className="flex items-center gap-3 group"
+              >
+                <img
+                  src={user.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
+                  alt={user.name}
+                  className="w-10 h-10 rounded-full border border-[#D4AF37] object-cover"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-wider">Welcome back</p>
+                  <h4 className="text-sm font-semibold truncate group-hover:text-[#D4AF37] transition-colors">{user.name}</h4>
+                  <p className="text-[10px] text-stone-300">{user.rewardsPoints || 0} Reward Pts</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-all" />
+              </Link>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-wider">Welcome to Aurivá</p>
+                  <p className="text-xs text-stone-300 truncate">Sign in for orders & rewards</p>
+                </div>
+                <Link
+                  to="/login?redirect=/account"
+                  onClick={onClose}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-[#0E2A1B] font-bold text-xs uppercase tracking-wider hover:bg-[#E5C358] transition-colors shrink-0 shadow-xs"
+                >
+                  Sign In
+                </Link>
               </div>
-              <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-all" />
-            </Link>
+            )}
           </div>
 
           {/* Navigation Links */}

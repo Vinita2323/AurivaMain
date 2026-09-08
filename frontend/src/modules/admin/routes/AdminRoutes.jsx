@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../../../context/AdminContext';
 import AdminDashboard from '../pages/AdminDashboard';
 import AdminProducts from '../pages/AdminProducts';
+import AdminBestsellers from '../pages/AdminBestsellers';
 import AdminCategories from '../pages/AdminCategories';
 import AdminInventory from '../pages/AdminInventory';
 import AdminOrders from '../pages/AdminOrders';
@@ -35,6 +36,7 @@ export default function AdminRoutes() {
       {/* Protected Admin Subpages */}
       <Route path="/" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />
       <Route path="/products" element={<ProtectedAdminRoute><AdminProducts /></ProtectedAdminRoute>} />
+      <Route path="/bestsellers" element={<ProtectedAdminRoute><AdminBestsellers /></ProtectedAdminRoute>} />
       <Route path="/categories" element={<ProtectedAdminRoute><AdminCategories /></ProtectedAdminRoute>} />
       <Route path="/inventory" element={<ProtectedAdminRoute><AdminInventory /></ProtectedAdminRoute>} />
       <Route path="/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />

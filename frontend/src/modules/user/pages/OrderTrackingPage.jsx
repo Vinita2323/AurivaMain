@@ -39,11 +39,13 @@ export default function OrderTrackingPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] pb-28 md:pb-12 font-sans">
-      <AnnouncementBar />
-      <Header />
+    <div className="min-h-screen flex flex-col justify-between bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] font-sans">
+      <div>
+        <AnnouncementBar />
+        <Header />
+      </div>
 
-      <main className="py-3 sm:py-6 md:py-10 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+      <main className="flex-1 py-3 sm:py-6 md:py-10 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full pb-28 md:pb-12">
         
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-[10.5px] sm:text-xs text-stone-500 mb-3 sm:mb-6">

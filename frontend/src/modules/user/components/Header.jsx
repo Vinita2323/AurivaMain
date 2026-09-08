@@ -6,12 +6,14 @@ import Logo from './Logo';
 import SearchModal from './SearchModal';
 import MobileDrawer from './MobileDrawer';
 import { useCart } from '../../../context/CartContext';
+import { useAuth } from '../../../context/AuthContext';
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { itemCount } = useCart();
+  const { user } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
@@ -123,16 +125,6 @@ export default function Header() {
               <Search className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8]" />
             </button>
 
-            {/* Profile / Account Icon */}
-            <Link
-              to="/account"
-              className="p-2 sm:p-2.5 rounded-full text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
-              aria-label="Customer Account"
-              title="My Account"
-            >
-              <User className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8]" />
-            </Link>
-
             {/* Shopping Cart Icon with Badge */}
             <Link
               to="/cart"
@@ -146,6 +138,29 @@ export default function Header() {
                   <span className="absolute -top-1.5 -right-2 min-w-[17px] h-[17px] px-1 bg-[#C58A2B] text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs leading-none">
                     {itemCount}
                   </span>
+                )}
+              </div>
+            </Link>
+
+            {/* Profile / Account Icon */}
+            <Link
+              to="/account"
+              className="p-2 sm:p-2.5 rounded-full text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors relative min-w-[40px] min-h-[40px] flex items-center justify-center"
+              aria-label={user ? `Account (${user.name})` : "Customer Account"}
+              title={user ? `Account: ${user.name}` : "My Account"}
+            >
+              <div className="relative flex items-center justify-center">
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-full object-cover border border-[#D4AF37]"
+                  />
+                ) : (
+                  <User className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8]" />
+                )}
+                {user && (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white" />
                 )}
               </div>
             </Link>

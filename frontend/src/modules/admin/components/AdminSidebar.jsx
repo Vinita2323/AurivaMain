@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { 
-  LayoutDashboard, ShoppingCart, Package, FolderTree, 
+  LayoutDashboard, ShoppingCart, Package, Flame, FolderTree, 
   Boxes, Users, Tag, Star, Megaphone, Bell, 
   BarChart3, Settings, ExternalLink, X 
 } from 'lucide-react';

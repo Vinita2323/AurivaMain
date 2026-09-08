@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { INITIAL_ORDERS } from '../data/adminData';
+import { userAuthApi } from '../utils/api';
 import confetti from 'canvas-confetti';
 
 const AuthContext = createContext();
@@ -34,51 +35,6 @@ export const INITIAL_CUSTOMERS = [
     city: "Mumbai",
     state: "Maharashtra",
     status: "Active"
-  },
-  {
-    id: "cust-3",
-    name: "Neha Patil",
-    email: "neha.patil@yahoo.com",
-    phone: "+91 9733445566",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
-    rewardsPoints: 3100,
-    tier: "Platinum VIP",
-    memberSince: "Nov 2023",
-    totalOrders: 9,
-    totalSpent: 8420,
-    city: "Pune",
-    state: "Maharashtra",
-    status: "Active"
-  },
-  {
-    id: "cust-4",
-    name: "Ankit Joshi",
-    email: "ankit.j@gmail.com",
-    phone: "+91 9844556677",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
-    rewardsPoints: 850,
-    tier: "Silver Member",
-    memberSince: "Apr 2024",
-    totalOrders: 2,
-    totalSpent: 1890,
-    city: "Hyderabad",
-    state: "Telangana",
-    status: "Active"
-  },
-  {
-    id: "cust-5",
-    name: "Priya Sundaram",
-    email: "priya.sundar@gmail.com",
-    phone: "+91 9955667788",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
-    rewardsPoints: 1950,
-    tier: "Gold Wellness Member",
-    memberSince: "Feb 2024",
-    totalOrders: 4,
-    totalSpent: 3910,
-    city: "Chennai",
-    state: "Tamil Nadu",
-    status: "Active"
   }
 ];
 
@@ -86,19 +42,20 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem('auriva_user');
+      if (saved === 'null') return null;
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error(e);
     }
-    return {
-      name: "Vini Sharma",
-      email: "vini.sharma@gmail.com",
-      phone: "+91 9876543210",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-      rewardsPoints: 2450,
-      tier: "Gold Wellness Member",
-      memberSince: "Jan 2024"
-    };
+    return INITIAL_CUSTOMERS[0];
+  });
+
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem('auriva_user_token') || null;
+    } catch {
+      return null;
+    }
   });
 
   const [orders, setOrders] = useState(() => {
@@ -152,11 +109,27 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem('auriva_user', JSON.stringify(user));
+      if (user) {
+        localStorage.setItem('auriva_user', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('auriva_user');
+      }
     } catch (e) {
       console.error(e);
     }
   }, [user]);
+
+  useEffect(() => {
+    try {
+      if (token) {
+        localStorage.setItem('auriva_user_token', token);
+      } else {
+        localStorage.removeItem('auriva_user_token');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [token]);
 
   useEffect(() => {
     try {
@@ -173,6 +146,127 @@ export function AuthProvider({ children }) {
       console.error(e);
     }
   }, [customers]);
+
+  /**
+   * Request OTP from backend API
+   */
+  const requestOtp = async (phoneNumber) => {
+    try {
+      const response = await userAuthApi.sendOtp(phoneNumber);
+      return {
+        success: true,
+        data: response.data,
+        message: response.message
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err.message || 'Failed to send OTP'
+      };
+    }
+  };
+
+  /**
+   * Verify OTP and Login / Register User
+   */
+  const verifyOtpAndLogin = async (phoneNumber, otp) => {
+    try {
+      const response = await userAuthApi.verifyOtp(phoneNumber, otp);
+      if (response && response.data) {
+        const { token: receivedToken, user: receivedUser } = response.data;
+        setToken(receivedToken);
+        
+        // Enrich user with UI fields if needed
+        const formattedUser = {
+          id: receivedUser._id || receivedUser.id || `cust-${Date.now()}`,
+          name: receivedUser.name || `User ${receivedUser.phone?.slice(-4) || ''}`,
+          email: receivedUser.email || '',
+          phone: receivedUser.phone ? `+91 ${receivedUser.phone}` : phoneNumber,
+          avatar: receivedUser.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+          rewardsPoints: 500,
+          tier: "Gold Wellness Member",
+          memberSince: "Member",
+          role: receivedUser.role || 'USER',
+          status: receivedUser.status || 'ACTIVE'
+        };
+
+        setUser(formattedUser);
+        setCustomers(prev => {
+          const exists = prev.some(c => c.phone === formattedUser.phone);
+          return exists ? prev : [formattedUser, ...prev];
+        });
+
+        return { success: true, user: formattedUser };
+      }
+      return { success: false, message: 'Invalid response from server' };
+    } catch (err) {
+      // Offline fallback for seamless testing
+      if (err.isNetworkError) {
+        return loginWithPhone(phoneNumber);
+      }
+      return {
+        success: false,
+        message: err.message || 'Verification failed'
+      };
+    }
+  };
+
+  const loginWithPhone = (phoneNumber) => {
+    const digitsOnly = (phoneNumber || '').replace(/\D/g, '').slice(-10);
+    if (digitsOnly.length < 10) {
+      return { success: false, message: 'Please enter a valid 10-digit mobile number.' };
+    }
+
+    const existing = customers.find(c => {
+      const cDigits = (c.phone || '').replace(/\D/g, '').slice(-10);
+      return cDigits === digitsOnly;
+    });
+
+    if (existing) {
+      setUser(existing);
+      return { success: true, user: existing };
+    }
+
+    const newCustomer = {
+      id: `cust-${Date.now()}`,
+      name: `Member ${digitsOnly.slice(-4)}`,
+      email: `user.${digitsOnly}@aurivafoods.com`,
+      phone: `+91 ${digitsOnly}`,
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      rewardsPoints: 500,
+      tier: "Gold Wellness Member",
+      memberSince: "Just now",
+      totalOrders: 0,
+      totalSpent: 0,
+      city: "Indore",
+      state: "Madhya Pradesh",
+      status: "Active"
+    };
+
+    setCustomers(prev => [newCustomer, ...prev]);
+    setUser(newCustomer);
+    return { success: true, user: newCustomer };
+  };
+
+  const loginWithDemo = (customerId) => {
+    const target = customers.find(c => c.id === customerId) || INITIAL_CUSTOMERS.find(c => c.id === customerId);
+    if (target) {
+      setUser(target);
+      return { success: true, user: target };
+    }
+    return { success: false, message: 'Demo customer not found.' };
+  };
+
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    try {
+      localStorage.removeItem('auriva_user');
+      localStorage.removeItem('auriva_user_token');
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const addAddress = (addr) => {
     const newAddr = {
@@ -217,9 +311,9 @@ export function AuthProvider({ children }) {
 
     const newOrder = {
       id: newOrderId,
-      customer: user.name,
-      email: user.email,
-      phone: user.phone,
+      customer: user?.name || orderPayload.name || "Guest Customer",
+      email: user?.email || orderPayload.email || "guest@aurivafoods.com",
+      phone: user?.phone || orderPayload.phone || "+91 9876543210",
       date: dateStr,
       time: timeStr,
       items: orderPayload.items,
@@ -255,25 +349,27 @@ export function AuthProvider({ children }) {
 
     setOrders(prev => [newOrder, ...prev]);
 
-    // Give loyalty reward points (10% of total)
+    // Give loyalty reward points (10% of total) if logged in
     const pointsEarned = Math.round(orderPayload.total * 0.1);
-    setUser(prev => ({
-      ...prev,
-      rewardsPoints: prev.rewardsPoints + pointsEarned
-    }));
+    if (user) {
+      setUser(prev => ({
+        ...prev,
+        rewardsPoints: (prev.rewardsPoints || 0) + pointsEarned
+      }));
 
-    // Update Customer CRM record
-    setCustomers(prev => prev.map(c => {
-      if (c.email === user.email) {
-        return {
-          ...c,
-          totalOrders: c.totalOrders + 1,
-          totalSpent: c.totalSpent + orderPayload.total,
-          rewardsPoints: c.rewardsPoints + pointsEarned
-        };
-      }
-      return c;
-    }));
+      // Update Customer CRM record
+      setCustomers(prev => prev.map(c => {
+        if (c.email === user.email) {
+          return {
+            ...c,
+            totalOrders: (c.totalOrders || 0) + 1,
+            totalSpent: (c.totalSpent || 0) + orderPayload.total,
+            rewardsPoints: (c.rewardsPoints || 0) + pointsEarned
+          };
+        }
+        return c;
+      }));
+    }
 
     // Trigger celebration confetti
     try {
@@ -290,7 +386,6 @@ export function AuthProvider({ children }) {
     return newOrderId;
   };
 
-  // Order Status & Fulfillment Management
   const updateOrderStatus = (orderId, newStatus, extraData = {}) => {
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -299,7 +394,6 @@ export function AuthProvider({ children }) {
     setOrders(prev => prev.map(order => {
       if (order.id !== orderId) return order;
 
-      // Status sequence for timeline
       const standardStatuses = ["Order Received", "Packed", "Ready for Dispatch", "Out for Delivery", "Delivered"];
       const statusIdx = standardStatuses.indexOf(newStatus);
 
@@ -338,7 +432,7 @@ export function AuthProvider({ children }) {
   };
 
   const updateProfile = (data) => {
-    setUser(prev => ({ ...prev, ...data }));
+    setUser(prev => prev ? ({ ...prev, ...data }) : null);
   };
 
   const updateCustomer = (id, data) => {
@@ -348,11 +442,18 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user,
+      token,
+      isAuthenticated: Boolean(user),
       orders,
       customers,
       addresses,
       selectedAddressId,
       setSelectedAddressId,
+      requestOtp,
+      verifyOtpAndLogin,
+      loginWithPhone,
+      loginWithDemo,
+      logout,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -369,3 +470,4 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+export default AuthContext;

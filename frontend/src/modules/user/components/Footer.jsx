@@ -162,6 +162,20 @@ export default function Footer() {
         </div>
       </div>
 
+      {/* Bottom Copyright Strip */}
+      <div className="border-t border-[#143B24] bg-[#0A2014] py-4 relative z-10">
+        <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-[#8A9C90]">
+          <p>© {new Date().getFullYear()} Aurivá Wellness Foods Pvt. Ltd. All rights reserved.</p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <Link to="/contact" className="hover:text-[#D4AF37] transition-colors">Privacy Policy</Link>
+            <span>•</span>
+            <Link to="/contact" className="hover:text-[#D4AF37] transition-colors">Terms of Service</Link>
+            <span>•</span>
+            <Link to="/contact" className="hover:text-[#D4AF37] transition-colors">Shipping & Returns</Link>
+          </div>
+        </div>
+      </div>
+
       {/* Decorative Leaf Graphic */}
       <Leaf className="w-64 h-64 text-[#143B24] absolute bottom-0 right-0 opacity-40 translate-x-1/4 translate-y-1/4 pointer-events-none" />
 

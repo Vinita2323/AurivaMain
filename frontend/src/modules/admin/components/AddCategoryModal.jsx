@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
+import { uploadApi } from '../../../utils/api';
 
 export default function AddCategoryModal({ isOpen, onClose, onSave, initialData = null }) {
   const [formData, setFormData] = useState({
@@ -160,23 +161,49 @@ export default function AddCategoryModal({ isOpen, onClose, onSave, initialData 
           </div>
 
           <div>
-            <label className="block text-xs sm:text-[13px] font-bold text-stone-700 mb-1">Cover Image URL</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="url"
-                value={formData.image}
-                onChange={e => setFormData({ ...formData, image: e.target.value })}
-                placeholder="https://images.unsplash.com/..."
-                className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B]"
-              />
-              {formData.image && (
-                <img
-                  src={formData.image}
-                  alt="Preview"
-                  className="w-10 h-10 rounded-lg object-cover border border-stone-300 shrink-0 bg-stone-100"
-                  onError={(e) => { e.target.style.display = 'none'; }}
+            <label className="block text-xs sm:text-[13px] font-bold text-stone-700 mb-1">Cover Image</label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="url"
+                  value={formData.image}
+                  onChange={e => setFormData({ ...formData, image: e.target.value })}
+                  placeholder="Paste URL or upload file below..."
+                  className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B]"
                 />
-              )}
+                {formData.image && (
+                  <img
+                    src={formData.image}
+                    alt="Preview"
+                    className="w-10 h-10 rounded-lg object-cover border border-stone-300 shrink-0 bg-stone-100"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 bg-stone-50 hover:bg-stone-100 text-stone-700 text-xs font-semibold cursor-pointer shadow-2xs transition-colors">
+                  <span>☁️ Upload to Cloudinary</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const res = await uploadApi.uploadImage(file, 'auriva_categories');
+                        if (res && res.data && res.data.url) {
+                          setFormData(prev => ({ ...prev, image: res.data.url }));
+                        }
+                      } catch (err) {
+                        console.warn('Category image upload note:', err.message);
+                      }
+                    }}
+                  />
+                </label>
+                <span className="text-[11px] text-stone-400">Direct CDN sync</span>
+              </div>
             </div>
           </div>
 

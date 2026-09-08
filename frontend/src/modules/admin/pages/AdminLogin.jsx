@@ -23,13 +23,13 @@ export default function AdminLogin() {
     }
   }, [isAdminAuthenticated, navigate, location]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    setTimeout(() => {
-      const res = loginAdmin(email, password);
+    try {
+      const res = await loginAdmin(email, password);
       setLoading(false);
       if (res.success) {
         const from = location.state?.from?.pathname || '/admin';
@@ -37,7 +37,10 @@ export default function AdminLogin() {
       } else {
         setError(res.message || 'Invalid admin credentials');
       }
-    }, 300);
+    } catch {
+      setLoading(false);
+      setError('Login failed. Please try again.');
+    }
   };
 
   return (

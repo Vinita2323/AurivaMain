@@ -31,11 +31,13 @@ export default function WishlistPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] pb-16">
-      <AnnouncementBar />
-      <Header />
+    <div className="min-h-screen flex flex-col justify-between bg-[#FAF7F2] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B]">
+      <div>
+        <AnnouncementBar />
+        <Header />
+      </div>
 
-      <main className="py-8 sm:py-12 max-w-[1450px] mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="flex-1 py-8 sm:py-12 max-w-[1450px] mx-auto px-4 sm:px-6 lg:px-8 w-full pb-16">
         
         {/* Breadcrumb Navigation & Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#E8E2D5]">

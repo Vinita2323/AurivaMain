@@ -8,6 +8,7 @@ import CheckoutPage from '../pages/CheckoutPage';
 import WishlistPage from '../pages/WishlistPage';
 import OrderTrackingPage from '../pages/OrderTrackingPage';
 import AccountPage from '../pages/AccountPage';
+import LoginPage from '../pages/LoginPage';
 import AboutPage from '../pages/AboutPage';
 import ContactPage from '../pages/ContactPage';
 import MobileBottomNav from '../components/MobileBottomNav';
@@ -27,6 +28,8 @@ export default function UserRoutes() {
         <Route path="/order-tracking" element={<OrderTrackingPage />} />
         <Route path="/order-tracking/:orderId" element={<OrderTrackingPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<Navigate to="/login" replace />} />
         {/* Catch-all to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

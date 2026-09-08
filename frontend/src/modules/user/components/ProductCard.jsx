@@ -55,6 +55,38 @@ export default function ProductCard({ product }) {
     return 'bg-[#C89038] text-white';
   };
 
+  // Image resolver: Prioritize Cloudinary/uploaded images, fallback intelligently for seeded flavors
+  const resolveProductImage = (prod) => {
+    const img = typeof prod?.image === 'string' ? prod.image : '';
+    if (img && (img.includes('cloudinary') || img.startsWith('data:') || img.includes('assets') || img.includes('/uploads/'))) {
+      return img;
+    }
+    if (img && img.startsWith('http') && !img.includes('1599488615731') && !img.includes('unsplash')) {
+      return img;
+    }
+    const nameStr = (prod?.name || '').toLowerCase();
+    if (nameStr.includes('peri')) {
+      return new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
+    } else if (nameStr.includes('cheese') || nameStr.includes('cream') || nameStr.includes('onion')) {
+      return new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
+    } else if (nameStr.includes('tomato')) {
+      return new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
+    } else if (nameStr.includes('salted') || nameStr.includes('w240') || nameStr.includes('classic')) {
+      return new URL('../../../assets/user/Classic Makhana.jpg', import.meta.url).href;
+    } else if (nameStr.includes('masala')) {
+      return new URL('../../../assets/user/Flavored Makhana.jpg', import.meta.url).href;
+    } else if (nameStr.includes('pudina') || nameStr.includes('mint')) {
+      return new URL('../../../assets/user/Healthy Makhana2.jpg', import.meta.url).href;
+    } else if (nameStr.includes('combo')) {
+      return new URL('../../../assets/user/combo Makhana.jpg', import.meta.url).href;
+    } else if (nameStr.includes('premium')) {
+      return new URL('../../../assets/user/Premium Makhana.jpg', import.meta.url).href;
+    }
+    return img || new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
+  };
+
+  const displayImage = resolveProductImage(product);
+
   return (
     <div className="group bg-white rounded-lg sm:rounded-xl border border-[#E8E2D5] hover:border-[#D4AF37] shadow-sm sm:shadow-lg hover:shadow-[0_20px_40px_rgba(0,0,0,0.35),0_0_25px_rgba(212,175,55,0.2)] hover:-translate-y-1.5 sm:hover:-translate-y-2 transition-all duration-500 flex flex-col justify-between relative overflow-hidden text-left">
       
@@ -87,7 +119,7 @@ export default function ProductCard({ product }) {
         {/* Product Image */}
         <Link to={`/product/${product.slug}`} className="block w-full h-full">
           <img
-            src={product.image}
+            src={displayImage}
             alt={product.name}
             loading="lazy"
             className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out"

@@ -61,6 +61,8 @@ export const INITIAL_PROMOTIONS = [
   }
 ];
 
+import { adminAuthApi, productApi } from '../utils/api';
+
 export const DEFAULT_ADMIN_CREDENTIALS = {
   email: "admin@aurivafoods.com",
   password: "admin"
@@ -76,37 +78,82 @@ export function AdminProvider({ children }) {
     }
   });
 
-  const [adminUser, setAdminUser] = useState({
-    name: "Admin Manager",
-    email: "admin@aurivafoods.com",
-    role: "Super Administrator"
+  const [adminToken, setAdminToken] = useState(() => {
+    try {
+      return localStorage.getItem('auriva_admin_token') || null;
+    } catch {
+      return null;
+    }
   });
 
-  const loginAdmin = (inputEmail, inputPassword) => {
+  const [adminUser, setAdminUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('auriva_admin_user');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      name: "Super Admin",
+      email: "admin@aurivafoods.com",
+      role: "ADMIN"
+    };
+  });
+
+  const loginAdmin = async (inputEmail, inputPassword) => {
     const trimmedEmail = (inputEmail || '').trim().toLowerCase();
     const trimmedPassword = (inputPassword || '').trim();
 
-    // Check credentials (supports admin@aurivafoods.com, admin, or auriva@2026/admin)
-    if (
-      (trimmedEmail === 'admin@aurivafoods.com' || trimmedEmail === 'admin') &&
-      (trimmedPassword === 'admin' || trimmedPassword === 'auriva@2026' || trimmedPassword === 'admin123')
-    ) {
-      setIsAdminAuthenticated(true);
-      try {
-        localStorage.setItem('auriva_admin_auth', 'true');
-      } catch (e) {
-        console.error(e);
+    try {
+      // 1. Try real backend admin login
+      const response = await adminAuthApi.login(trimmedEmail, trimmedPassword);
+      if (response && response.data) {
+        const { token, admin } = response.data;
+        setIsAdminAuthenticated(true);
+        setAdminToken(token);
+        setAdminUser(admin);
+        try {
+          localStorage.setItem('auriva_admin_auth', 'true');
+          localStorage.setItem('auriva_admin_token', token);
+          localStorage.setItem('auriva_admin_user', JSON.stringify(admin));
+        } catch (e) {
+          console.error(e);
+        }
+        return { success: true, admin };
       }
-      return { success: true };
+    } catch (err) {
+      // If backend returns explicit rejection (invalid credentials), report it directly
+      if (err.status && (err.status === 401 || err.status === 400 || err.status === 429)) {
+        return { success: false, message: err.message || 'Invalid email or password.' };
+      }
+
+      // If backend is offline, check fallback dev credentials
+      if (
+        (trimmedEmail === 'admin@aurivafoods.com' || trimmedEmail === 'admin') &&
+        (trimmedPassword === 'admin' || trimmedPassword === 'Admin@123456' || trimmedPassword === 'auriva@2026')
+      ) {
+        setIsAdminAuthenticated(true);
+        try {
+          localStorage.setItem('auriva_admin_auth', 'true');
+        } catch (e) {
+          console.error(e);
+        }
+        return { success: true };
+      }
+
+      return { success: false, message: err.message || "Invalid email or password." };
     }
 
-    return { success: false, message: "Invalid email or password. Please use default credentials." };
+    return { success: false, message: "Invalid email or password." };
   };
 
   const logoutAdmin = () => {
     setIsAdminAuthenticated(false);
+    setAdminToken(null);
     try {
       localStorage.removeItem('auriva_admin_auth');
+      localStorage.removeItem('auriva_admin_token');
+      localStorage.removeItem('auriva_admin_user');
     } catch (e) {
       console.error(e);
     }
@@ -241,77 +288,170 @@ export function AdminProvider({ children }) {
     try { localStorage.setItem('auriva_admin_promotions', JSON.stringify(promotions)); } catch (e) { console.error(e); }
   }, [promotions]);
 
+  // Sync products from backend on mount
+  const refreshProducts = async () => {
+    try {
+      const res = await productApi.getAllProducts();
+      if (res && res.data && res.data.products && Array.isArray(res.data.products)) {
+        const fetched = res.data.products.map(p => ({
+          ...p,
+          id: (p._id || p.id)?.toString()
+        }));
+        if (fetched.length > 0) {
+          setProducts(fetched);
+        }
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Could not fetch products from backend API, using cached state:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    refreshProducts();
+  }, []);
+
   // Product Actions
-  const addProduct = (productData) => {
+  const addProduct = async (productData) => {
     const slug = (productData.slug || productData.name || `product-${Date.now()}`)
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    const newProduct = {
+    const priceNum = Number(productData.price || 249);
+    const oldPriceNum = Number(productData.oldPrice || Math.round(priceNum * 1.2));
+    const stockCount = Number(productData.stockCount ?? 150);
+    const isBestseller = productData.isBestseller !== undefined ? Boolean(productData.isBestseller) : true;
+
+    const payload = {
       ...productData,
-      id: productData.id || `prod-${Date.now()}`,
-      slug: slug,
-      rating: productData.rating || 4.8,
-      reviewsCount: productData.reviewsCount || 1,
+      slug,
+      price: priceNum,
+      oldPrice: oldPriceNum,
+      stockCount: stockCount,
+      isBestseller: isBestseller,
+      badge: productData.badge || (isBestseller ? "BESTSELLER" : "New"),
+      image: productData.image || "/src/assets/user/Types/PeriPeri.jpeg",
+      weight: productData.weight || '150g',
       inStock: productData.inStock !== false,
-      stockCount: Number(productData.stockCount ?? 150),
-      price: Number(productData.price || 249),
-      oldPrice: Number(productData.oldPrice || 299),
-      badge: productData.badge || "New",
-      image: productData.image || "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=700&auto=format&fit=crop&q=80",
-      weight: productData.weight || '250g',
+      rating: Number(productData.rating || 4.8),
+      reviewsCount: Number(productData.reviewsCount || 100),
       weightOptions: productData.weightOptions || [
-        { weight: "250g", price: Number(productData.price || 249), oldPrice: Number(productData.oldPrice || 299) },
-        { weight: "500g", price: Math.round(Number(productData.price || 249) * 1.88), oldPrice: Math.round(Number(productData.oldPrice || 299) * 1.88) }
+        { weight: "150g", price: priceNum, oldPrice: oldPriceNum, isDefault: true },
+        { weight: "300g", price: Math.round(priceNum * 1.8), oldPrice: Math.round(oldPriceNum * 1.8) }
       ]
     };
+
+    const tempId = productData.id || `prod-${Date.now()}`;
+    const newProduct = { ...payload, id: tempId };
+
+    // Optimistic UI update
     setProducts(prev => [newProduct, ...prev]);
+
+    // Persist to MongoDB backend
+    try {
+      const res = await productApi.createProduct(payload);
+      if (res && res.data && res.data.product) {
+        const saved = {
+          ...res.data.product,
+          id: (res.data.product._id || res.data.product.id).toString()
+        };
+        setProducts(prev => [saved, ...prev.filter(p => (p.id || p._id) !== tempId && (p.id || p._id) !== saved.id)]);
+        await refreshProducts();
+        return saved;
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend product create failed:', err.message);
+      throw err;
+    }
     return newProduct;
   };
 
-  const updateProduct = (id, updatedData) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updatedData } : p));
+  const updateProduct = async (id, updatedData) => {
+    // Optimistic UI update
+    setProducts(prev => prev.map(p => (p.id === id || p._id === id) ? { ...p, ...updatedData } : p));
+
+    try {
+      const res = await productApi.updateProduct(id, updatedData);
+      if (res && res.data && res.data.product) {
+        const saved = {
+          ...res.data.product,
+          id: (res.data.product._id || res.data.product.id).toString()
+        };
+        setProducts(prev => prev.map(p => (p.id === id || p._id === id) ? saved : p));
+        await refreshProducts();
+        return saved;
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend product update failed:', err.message);
+      throw err;
+    }
   };
 
-  const deleteProduct = (id) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
+  const deleteProduct = async (id) => {
+    // Optimistic UI update
+    setProducts(prev => prev.filter(p => p.id !== id && p._id !== id));
+
+    try {
+      await productApi.deleteProduct(id);
+      await refreshProducts();
+    } catch (err) {
+      console.warn('[AdminContext] Backend product deletion failed:', err.message);
+      throw err;
+    }
   };
 
-  const toggleProductStatus = (id) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, inStock: !p.inStock } : p));
+  const toggleProductStatus = async (id) => {
+    setProducts(prev => prev.map(p => {
+      if (p.id === id || p._id === id) {
+        const nextInStock = !p.inStock;
+        return { ...p, inStock: nextInStock, status: nextInStock ? 'ACTIVE' : 'INACTIVE' };
+      }
+      return p;
+    }));
+
+    try {
+      const res = await productApi.toggleStatus(id);
+      if (res && res.data && res.data.product) {
+        const saved = { ...res.data.product, id: (res.data.product._id || res.data.product.id).toString() };
+        setProducts(prev => prev.map(p => (p.id === id || p._id === id) ? saved : p));
+        await refreshProducts();
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend product status toggle failed:', err.message);
+      throw err;
+    }
   };
 
   // Inventory Stock Adjusters
-  const updateProductStock = (id, newStock) => {
+  const updateProductStock = async (id, newStock) => {
+    const count = Math.max(0, Number(newStock));
     setProducts(prev => prev.map(p => {
-      if (p.id === id) {
-        const count = Math.max(0, Number(newStock));
+      if (p.id === id || p._id === id) {
         return { ...p, stockCount: count, inStock: count > 0 };
       }
       return p;
     }));
+
+    try {
+      await productApi.updateStock(id, count);
+    } catch (err) {
+      console.warn('[AdminContext] Backend stock update failed:', err.message);
+    }
   };
 
-  const adjustProductStock = (id, delta) => {
-    setProducts(prev => prev.map(p => {
-      if (p.id === id) {
-        const count = Math.max(0, (p.stockCount || 0) + delta);
-        return { ...p, stockCount: count, inStock: count > 0 };
-      }
-      return p;
-    }));
+  const adjustProductStock = async (id, delta) => {
+    const prod = products.find(p => p.id === id || p._id === id);
+    const newStock = Math.max(0, (prod?.stockCount || 0) + delta);
+    await updateProductStock(id, newStock);
   };
 
   const bulkRestock = (ids, amount = 100) => {
-    setProducts(prev => prev.map(p => {
-      if (ids.includes(p.id)) {
-        const count = (p.stockCount || 0) + amount;
-        return { ...p, stockCount: count, inStock: true };
-      }
-      return p;
-    }));
+    ids.forEach(id => {
+      const prod = products.find(p => p.id === id || p._id === id);
+      const newStock = (prod?.stockCount || 0) + amount;
+      updateProductStock(id, newStock);
+    });
   };
 
   // Category Actions
@@ -496,6 +636,7 @@ export function AdminProvider({ children }) {
       settings,
       promotions,
       // Product Actions
+      refreshProducts,
       addProduct,
       updateProduct,
       deleteProduct,
