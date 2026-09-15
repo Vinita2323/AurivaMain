@@ -34,7 +34,8 @@ export default function AccountPage() {
     addAddress, 
     updateAddress, 
     deleteAddress, 
-    setPrimaryAddress 
+    setPrimaryAddress,
+    cancelOrder 
   } = useAuth();
 
   const { wishlistCount } = useWishlist();
@@ -532,6 +533,23 @@ export default function AccountPage() {
                           >
                             Live Track
                           </Link>
+                          {['Order Received', 'Packed', 'Confirmed'].includes(ord.status) && (
+                            <button
+                              onClick={async () => {
+                                const reason = window.prompt("Please enter reason for cancelling your order:", "Changed my mind");
+                                if (reason === null) return;
+                                try {
+                                  await cancelOrder(ord.id, reason);
+                                  alert("Your order has been cancelled successfully.");
+                                } catch (err) {
+                                  alert(`Could not cancel order: ${err.message || 'Error'}`);
+                                }
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -574,7 +592,7 @@ export default function AccountPage() {
                   </div>
                   <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8E2D5] space-y-1.5">
                     <span className="text-[10px] font-bold uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">Redeem Voucher</span>
-                    <h4 className="text-sm sm:text-base font-bold text-[#0E2A1B]">₹200 Off Coupon</h4>
+                    <h4 className="font-sans text-sm sm:text-base font-bold text-[#0E2A1B]">₹200 Off Coupon</h4>
                     <p className="text-xs text-stone-600">Redeem 2,000 points for an instant ₹200 wallet voucher.</p>
                     <button className="mt-2 px-3.5 py-1.5 bg-[#0E2A1B] text-[#D4AF37] text-xs font-bold rounded-lg uppercase shadow-xs">
                       Redeem Now

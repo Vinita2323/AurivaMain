@@ -9,15 +9,31 @@ import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth, formatOrder } from '../../../context/AuthContext';
+import { orderApi } from '../../../utils/api';
 import { INITIAL_ORDERS } from '../../../data/adminData';
 
 export default function OrderTrackingPage() {
   const { orderId } = useParams();
-  const { orders } = useAuth();
+  const { orders, cancelOrder } = useAuth();
+  const [liveOrder, setLiveOrder] = useState(null);
 
-  // Find target order or default to AV10294 as in reference screen 06
-  const order = orders.find(o => o.id === orderId) || INITIAL_ORDERS.find(o => o.id === 'AV10294') || orders[0] || {
+  useEffect(() => {
+    if (orderId) {
+      orderApi.getOrderById(orderId)
+        .then(res => {
+          if (res?.data?.order) {
+            setLiveOrder(formatOrder(res.data.order));
+          }
+        })
+        .catch(err => {
+          console.warn('[OrderTrackingPage] Backend order fetch note:', err.message);
+        });
+    }
+  }, [orderId]);
+
+  // Find target order: live from API, from context, or fallback
+  const order = liveOrder || orders.find(o => o.id === orderId || o.orderNumber === orderId) || INITIAL_ORDERS.find(o => o.id === 'AV10294') || orders[0] || {
     id: orderId || 'AV41186',
     status: 'Out for Delivery',
     date: '18 Aug 2026',
@@ -73,11 +89,33 @@ export default function OrderTrackingPage() {
               <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5 sm:mt-1">
                 Placed on {order.date} • Expected delivery today by 03:15 PM
               </p>
+              {['Order Received', 'Packed', 'Confirmed'].includes(order.status) && (
+                <button
+                  onClick={async () => {
+                    const reason = window.prompt("Enter reason for cancelling your order:", "Changed my mind");
+                    if (reason === null) return;
+                    try {
+                      await cancelOrder(order.id, reason);
+                      alert("Your order has been cancelled successfully.");
+                      if (orderId) {
+                        orderApi.getOrderById(orderId).then(res => {
+                          if (res?.data?.order) setLiveOrder(formatOrder(res.data.order));
+                        });
+                      }
+                    } catch (err) {
+                      alert(`Could not cancel order: ${err.message || 'Error'}`);
+                    }
+                  }}
+                  className="inline-block mt-1.5 text-xs font-semibold text-rose-600 hover:text-rose-800 underline transition-colors"
+                >
+                  Cancel this order
+                </button>
+              )}
             </div>
 
             <div className="text-left sm:text-right pt-1 sm:pt-0 border-t sm:border-t-0 border-stone-100">
               <span className="text-[10.5px] sm:text-xs text-stone-500 block">Total Paid Amount</span>
-              <p className="font-serif text-base sm:text-xl font-bold text-[#0E2A1B]">₹{order.total}</p>
+              <p className="font-sans text-base sm:text-xl font-bold text-[#0E2A1B]">₹{order.total}</p>
             </div>
           </div>
 

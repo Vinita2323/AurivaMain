@@ -88,51 +88,54 @@ export default function CartDrawer() {
                 </button>
               </div>
             ) : (
-              cartItems.map((item) => (
-                <div key={`${item.id}-${item.weight}`} className="pt-3 flex gap-3 items-center">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-16 h-16 rounded-xl object-cover border border-[#D4AF37]/20 bg-white"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-serif text-sm font-semibold text-[#0E2A1B] truncate">{item.name}</h4>
-                    <p className="text-[11px] text-stone-500">Weight: {item.weight}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#0E2A1B]">
-                        <span>₹{item.price}</span>
-                        {item.oldPrice && (
-                          <span className="text-[10px] text-stone-400 line-through font-normal">₹{item.oldPrice}</span>
-                        )}
-                      </div>
+              cartItems.map((item) => {
+                const itemId = item.productId || item.id || item._id;
+                return (
+                  <div key={`${itemId}-${item.weight}`} className="pt-3 flex gap-3 items-center">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-16 h-16 rounded-xl object-cover border border-[#D4AF37]/20 bg-white"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-serif text-sm font-semibold text-[#0E2A1B] truncate">{item.name}</h4>
+                      <p className="text-[11px] text-stone-500">Weight: {item.weight}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#0E2A1B]">
+                          <span>₹{item.price}</span>
+                          {item.oldPrice && (
+                            <span className="text-[10px] text-stone-400 line-through font-normal">₹{item.oldPrice}</span>
+                          )}
+                        </div>
 
-                      {/* Quantity Controller */}
-                      <div className="flex items-center border border-stone-300 rounded-lg bg-white overflow-hidden shadow-xs">
-                        <button
-                          onClick={() => updateQty(item.id, item.weight, -1)}
-                          className="px-2 py-1 text-stone-600 hover:bg-stone-100 transition-colors"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="px-2.5 text-xs font-semibold">{item.qty}</span>
-                        <button
-                          onClick={() => updateQty(item.id, item.weight, 1)}
-                          className="px-2 py-1 text-stone-600 hover:bg-stone-100 transition-colors"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
+                        {/* Quantity Controller */}
+                        <div className="flex items-center border border-stone-300 rounded-lg bg-white overflow-hidden shadow-xs">
+                          <button
+                            onClick={() => updateQty(itemId, item.weight, -1)}
+                            className="px-2 py-1 text-stone-600 hover:bg-stone-100 transition-colors"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="px-2.5 text-xs font-semibold">{item.qty}</span>
+                          <button
+                            onClick={() => updateQty(itemId, item.weight, 1)}
+                            className="px-2 py-1 text-stone-600 hover:bg-stone-100 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
+                    <button
+                      onClick={() => removeFromCart(itemId, item.weight)}
+                      className="text-stone-400 hover:text-red-500 p-1 transition-colors"
+                      title="Remove item"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => removeFromCart(item.id, item.weight)}
-                    className="text-stone-400 hover:text-red-500 p-1 transition-colors"
-                    title="Remove item"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 

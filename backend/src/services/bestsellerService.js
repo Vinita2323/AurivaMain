@@ -1,6 +1,8 @@
+import mongoose from 'mongoose';
 import Bestseller from '../models/Bestseller.js';
 import BestsellerConfig from '../models/BestsellerConfig.js';
 import Product from '../models/Product.js';
+import { INITIAL_PRODUCTS_SEED } from './productService.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
 class BestsellerService {
@@ -8,6 +10,25 @@ class BestsellerService {
    * Get singleton Bestseller section configuration
    */
   async getSectionConfig() {
+    if (mongoose.connection.readyState !== 1) {
+      return {
+        isEnabled: true,
+        sectionLabel: 'OUR BESTSELLERS',
+        sectionHeading: 'DISCOVER OUR MOST LOVED FLAVOURS',
+        viewAllText: 'VIEW ALL PRODUCTS',
+        viewAllLink: '/shop',
+        toJSON() {
+          return {
+            isEnabled: true,
+            sectionLabel: 'OUR BESTSELLERS',
+            sectionHeading: 'DISCOVER OUR MOST LOVED FLAVOURS',
+            viewAllText: 'VIEW ALL PRODUCTS',
+            viewAllLink: '/shop'
+          };
+        }
+      };
+    }
+
     let config = await BestsellerConfig.findOne();
     if (!config) {
       config = await BestsellerConfig.create({
@@ -26,6 +47,27 @@ class BestsellerService {
    */
   async getPublicBestsellers() {
     const config = await this.getSectionConfig();
+
+    if (mongoose.connection.readyState !== 1) {
+      const fallbackProducts = INITIAL_PRODUCTS_SEED
+        .filter(p => p.isBestseller !== false)
+        .slice(0, 10)
+        .map((p, idx) => ({
+          ...p,
+          id: p._id || p.id || `seed-bs-${idx + 1}`,
+          _id: p._id || p.id || `seed-bs-${idx + 1}`,
+          bestsellerId: `seed-bs-${idx + 1}`,
+          displayOrder: idx + 1
+        }));
+      return {
+        isEnabled: config.isEnabled !== false,
+        sectionLabel: config.sectionLabel || 'OUR BESTSELLERS',
+        sectionHeading: config.sectionHeading || 'DISCOVER OUR MOST LOVED FLAVOURS',
+        viewAllText: config.viewAllText || 'VIEW ALL PRODUCTS',
+        viewAllLink: config.viewAllLink || '/shop',
+        products: fallbackProducts
+      };
+    }
 
     if (!config.isEnabled) {
       return {
@@ -73,6 +115,27 @@ class BestsellerService {
   async getAdminBestsellers() {
     const config = await this.getSectionConfig();
 
+    if (mongoose.connection.readyState !== 1) {
+      const fallbackItems = INITIAL_PRODUCTS_SEED.slice(0, 5).map((p, idx) => ({
+        _id: `seed-bs-${idx + 1}`,
+        product: { ...p, _id: `seed-prod-${idx + 1}`, id: `seed-prod-${idx + 1}` },
+        displayOrder: idx + 1,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }));
+      return {
+        config: config.toJSON ? config.toJSON() : config,
+        bestsellers: fallbackItems,
+        stats: {
+          total: fallbackItems.length,
+          activeCount: fallbackItems.length,
+          inactiveCount: 0,
+          isSectionEnabled: true
+        }
+      };
+    }
+
     const items = await Bestseller.find()
       .sort({ displayOrder: 1, createdAt: -1 })
       .populate('product');
@@ -84,7 +147,7 @@ class BestsellerService {
     const inactiveCount = total - activeCount;
 
     return {
-      config: config.toJSON(),
+      config: config.toJSON ? config.toJSON() : config,
       bestsellers: validItems.map((item) => ({
         _id: item._id,
         product: item.product,
@@ -141,6 +204,7 @@ class BestsellerService {
     // Create new Bestseller reference documents
     const toInsert = products.map((prod) => ({
       product: prod._id,
+      productName: prod.name,
       displayOrder: nextOrder++,
       isActive: true
     }));
@@ -268,6 +332,7 @@ class BestsellerService {
         if (products.length > 0) {
           const bestsellerEntries = products.map((p, idx) => ({
             product: p._id,
+            productName: p.name,
             displayOrder: idx + 1,
             isActive: true
           }));

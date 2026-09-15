@@ -83,9 +83,24 @@ export default function ShopPage() {
   // Filter & Sort computation
   const filteredProducts = useMemo(() => {
     return PRODUCTS.filter(product => {
-      // Category switch
-      if (selectedCategory !== 'all' && product.category !== selectedCategory) {
-        return false;
+      // Category switch (robust matching by slug, ID, or name)
+      if (selectedCategory !== 'all') {
+        const catObj = CATEGORIES.find(c => 
+          c.slug === selectedCategory || 
+          String(c.id || c._id) === selectedCategory || 
+          c.name?.toLowerCase() === selectedCategory.toLowerCase()
+        );
+        const prodCat = String(product.category || '').toLowerCase();
+        const matchesCategory = 
+          prodCat === selectedCategory.toLowerCase() ||
+          (catObj && (
+            prodCat === String(catObj.slug || '').toLowerCase() ||
+            prodCat === String(catObj.id || catObj._id || '').toLowerCase() ||
+            prodCat === String(catObj.name || '').toLowerCase()
+          ));
+        if (!matchesCategory) {
+          return false;
+        }
       }
       // Flavor filter
       if (selectedFlavor !== 'all' && product.flavor && !product.flavor.toLowerCase().includes(selectedFlavor.toLowerCase())) {
@@ -134,6 +149,16 @@ export default function ShopPage() {
   const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const activeCategoryObj = CATEGORIES.find(c => c.slug === selectedCategory);
+
+  const getCategoryProductCount = (cat) => {
+    const catSlug = (cat.slug || '').toLowerCase();
+    const catId = String(cat.id || cat._id || '').toLowerCase();
+    const catName = (cat.name || '').toLowerCase();
+    return PRODUCTS.filter(p => {
+      const prodCat = String(p.category || '').toLowerCase();
+      return prodCat === catSlug || prodCat === catId || prodCat === catName;
+    }).length;
+  };
 
   const sortOptions = [
     { value: 'best-selling', label: 'Best Selling' },
@@ -233,7 +258,7 @@ export default function ShopPage() {
                       </div>
                       <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${isSelected ? 'bg-[#D4AF37]/20 text-[#D4AF37]' : 'bg-stone-200 text-stone-600'
                         }`}>
-                        {cat.count}
+                        {getCategoryProductCount(cat)}
                       </span>
                     </button>
                   );
@@ -274,7 +299,7 @@ export default function ShopPage() {
                   <span>{cat.name}</span>
                   <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-bold ${isSelected ? 'bg-[#D4AF37] text-[#0E2A1B]' : 'bg-stone-100 text-stone-500'
                     }`}>
-                    {cat.count}
+                    {getCategoryProductCount(cat)}
                   </span>
                 </button>
               );
@@ -358,9 +383,9 @@ export default function ShopPage() {
                       <span className={`w-2 h-2 rounded-full transition-colors ${isSelected ? 'bg-[#D4AF37]' : 'bg-stone-300 group-hover:bg-[#0E2A1B]'}`} />
                       <span className="text-xs">{cat.name}</span>
                     </div>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold transition-colors ${isSelected ? 'bg-[#D4AF37]/20 text-[#D4AF37]' : 'bg-stone-100 text-stone-500 group-hover:bg-stone-200'
+                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold transition-colors ${isSelected ? 'bg-[#D4AF37]/20 text-[#D4AF37]' : 'bg-stone-100 text-stone-500 group-hover:bg-stone-200'
                       }`}>
-                      {cat.count}
+                      {getCategoryProductCount(cat)}
                     </span>
                   </button>
                 );

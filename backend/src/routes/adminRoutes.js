@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import * as adminController from '../controllers/adminController.js';
 import adminBestsellerRoutes from './adminBestsellerRoutes.js';
+import adminCategoryRoutes from './adminCategoryRoutes.js';
+import adminOrderRoutes from './adminOrderRoutes.js';
+import adminSettingsRoutes from './adminSettingsRoutes.js';
+import adminReviewRoutes from './adminReviewRoutes.js';
+import adminPaymentRoutes from './adminPaymentRoutes.js';
+import adminCouponRoutes from './adminCouponRoutes.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { requireAdmin } from '../middleware/roleMiddleware.js';
 import { adminLoginLimiter } from '../middleware/rateLimiter.js';
@@ -11,8 +17,15 @@ const router = Router();
 // Public Admin Login Route (Rate-limited)
 router.post('/login', adminLoginLimiter, validateAdminLogin, adminController.login);
 
-// Sub-router for Bestsellers Management (has its own authMiddleware & requireAdmin)
+// Sub-routers for Management (each has authMiddleware & requireAdmin)
 router.use('/bestsellers', adminBestsellerRoutes);
+router.use('/categories', adminCategoryRoutes);
+router.use('/orders', adminOrderRoutes);
+router.use('/settings', adminSettingsRoutes);
+router.use('/reviews', adminReviewRoutes);
+router.use('/payments', adminPaymentRoutes);
+router.use('/coupons', adminCouponRoutes);
+
 
 // Protected Admin Routes (Require Auth + ADMIN Role)
 router.use(authMiddleware, requireAdmin);

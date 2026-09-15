@@ -6,13 +6,13 @@ import { useAdmin } from '../../../context/AdminContext';
 
 export default function AdminInventory() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { products, updateProductStock, adjustProductStock, bulkRestock } = useAdmin();
+  const { products, updateProductStock, bulkRestock, settings } = useAdmin();
 
   const [activeTab, setActiveTab] = useState('all'); // 'all', 'low', 'out', 'healthy'
   const [search, setSearch] = useState('');
   const [restockSuccess, setRestockSuccess] = useState('');
 
-  const lowStockThreshold = 30;
+  const lowStockThreshold = settings?.lowStockThreshold ?? 30;
 
   // Inventory computations
   const totalUnits = products.reduce((acc, p) => acc + (p.stockCount || 0), 0);
@@ -29,7 +29,7 @@ export default function AdminInventory() {
 
       if (search) {
         const q = search.toLowerCase();
-        return p.name.toLowerCase().includes(q) || (p.flavor && p.flavor.toLowerCase().includes(q)) || (p.subcategory && p.subcategory.toLowerCase().includes(q));
+        return p.name.toLowerCase().includes(q) || (p.flavor && p.flavor.toLowerCase().includes(q));
       }
       return true;
     });
@@ -144,7 +144,7 @@ export default function AdminInventory() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search SKU, flavor or subcategory..."
+                placeholder="Search SKU, name or flavor..."
                 className="bg-transparent focus:outline-none text-xs sm:text-sm w-full text-stone-800 placeholder:text-stone-400 font-medium"
               />
             </div>
@@ -181,7 +181,7 @@ export default function AdminInventory() {
                             />
                             <div>
                               <div className="font-sans font-bold text-sm sm:text-[15px] text-[#0E2A1B]">{p.name}</div>
-                              <span className="text-xs sm:text-[12.5px] text-stone-500 font-medium">{p.flavor || p.subcategory || 'Original'} • {p.weight || '250g'}</span>
+                              <span className="text-xs sm:text-[12.5px] text-stone-500 font-medium">{p.flavor || 'Original'} • {p.weight || '250g'}</span>
                             </div>
                           </div>
                         </td>

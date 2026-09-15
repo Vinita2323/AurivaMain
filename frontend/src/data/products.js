@@ -137,6 +137,8 @@ export const PRODUCTS = [
     image: periPeriImg,
     gallery: [periPeriImg, classicMakhanaImg],
     description: "Extra large 6-suta jumbo lotus seeds gently slow-roasted in cold-pressed virgin olive mist with light Himalayan salt in signature pouch.",
+    details: "• Grade: Premium 6-suta W240 hand-sorted jumbo fox nuts\n• Roast: Slow roasted in virgin cold-pressed olive mist\n• Ingredients: 94% Jumbo Fox Nuts, 4% Olive Mist, 2% Himalayan Salt\n• Shelf Life: 9 Months from date of packaging\n• Storage: Store in a cool, airtight container after opening\n• Origin: Sustainably harvested in Bihar, India",
+    productDetails: "• Grade: Premium 6-suta W240 hand-sorted jumbo fox nuts\n• Roast: Slow roasted in virgin cold-pressed olive mist\n• Ingredients: 94% Jumbo Fox Nuts, 4% Olive Mist, 2% Himalayan Salt\n• Shelf Life: 9 Months from date of packaging\n• Storage: Store in a cool, airtight container after opening\n• Origin: Sustainably harvested in Bihar, India",
     ingredients: "Jumbo Fox Nuts (Phool Makhana 92%), Cold-Pressed Olive Mist (6%), Himalayan Pink Salt (2%).",
     tags: ["Makhana", "Roasted", "Salted", "Bestseller"]
   },

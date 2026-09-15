@@ -15,10 +15,12 @@ export default function MobileBottomNav() {
   const isShop = location.pathname === '/shop' && !location.search.includes('categories');
   const isCategories = location.pathname === '/shop' && location.search.includes('categories');
   const isCart = location.pathname.startsWith('/cart');
+  const isCheckout = location.pathname.startsWith('/checkout');
   const isAccount = location.pathname.startsWith('/account');
   const isAccountSubpage = location.pathname === '/account' && location.search.includes('tab=');
 
-  if (isAccountSubpage) {
+  // Hide mobile bottom nav on Cart and Checkout pages so sticky action bar is displayed instead
+  if (isCart || isCheckout || isAccountSubpage) {
     return null;
   }
 

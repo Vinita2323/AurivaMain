@@ -6,7 +6,7 @@ import { useAdmin } from '../../../context/AdminContext';
 
 export default function AdminReviews() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { reviews, approveReview, featureReview, rejectReview, replyToReview, deleteReview } = useAdmin();
+  const { reviews, approveReview, featureReview, rejectReview, replyToReview, deleteReview, reviewsLoading, reviewsStats, refreshReviews } = useAdmin();
 
   const [activeStatus, setActiveStatus] = useState('All');
   const [search, setSearch] = useState('');
@@ -14,9 +14,12 @@ export default function AdminReviews() {
   const [replyText, setReplyText] = useState('');
 
   // Stats
-  const approvedCount = reviews.filter(r => r.status === 'Approved').length;
-  const pendingCount = reviews.filter(r => r.status === 'Pending').length;
-  const avgRating = (reviews.reduce((acc, r) => acc + (r.rating || 5), 0) / (reviews.length || 1)).toFixed(1);
+  const approvedCount = reviewsStats?.approvedCount ?? reviews.filter(r => r.status === 'Approved').length;
+  const pendingCount = reviewsStats?.pendingCount ?? reviews.filter(r => r.status === 'Pending').length;
+  const rejectedCount = reviewsStats?.rejectedCount ?? reviews.filter(r => r.status === 'Rejected').length;
+  const featuredCount = reviewsStats?.featuredCount ?? reviews.filter(r => r.featured).length;
+  const totalCount = reviewsStats?.total ?? reviews.length;
+  const avgRating = reviewsStats?.avgRating ? Number(reviewsStats.avgRating).toFixed(1) : (reviews.reduce((acc, r) => acc + (r.rating || 5), 0) / (reviews.length || 1)).toFixed(1);
 
   const filteredReviews = reviews.filter(r => {
     if (activeStatus !== 'All') {
@@ -26,10 +29,10 @@ export default function AdminReviews() {
     if (search) {
       const q = search.toLowerCase();
       return (
-        r.author.toLowerCase().includes(q) ||
-        r.product.toLowerCase().includes(q) ||
+        (r.author || '').toLowerCase().includes(q) ||
+        (r.product || '').toLowerCase().includes(q) ||
         (r.title && r.title.toLowerCase().includes(q)) ||
-        r.content.toLowerCase().includes(q)
+        (r.content || r.comment || '').toLowerCase().includes(q)
       );
     }
     return true;
@@ -58,7 +61,7 @@ export default function AdminReviews() {
                 <span>Total Reviews</span>
                 <MessageSquare className="w-4 h-4 text-[#0E2A1B]" />
               </div>
-              <h2 className="font-sans text-xl sm:text-2xl font-semibold text-[#0E2A1B]">{reviews.length}</h2>
+              <h2 className="font-sans text-xl sm:text-2xl font-semibold text-[#0E2A1B]">{totalCount}</h2>
               <p className="text-[11px] sm:text-xs text-stone-400 font-normal">Verified buyer ratings</p>
             </div>
 
@@ -68,7 +71,7 @@ export default function AdminReviews() {
                 <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
               </div>
               <h2 className="font-sans text-xl sm:text-2xl font-semibold text-[#0E2A1B]">{avgRating} <span className="text-xs sm:text-sm font-normal text-stone-400">/ 5.0</span></h2>
-              <p className="text-[11px] sm:text-xs text-emerald-700 font-medium">98% 5-Star Satisfaction</p>
+              <p className="text-[11px] sm:text-xs text-emerald-700 font-medium">Verified Customer Ratings</p>
             </div>
 
             <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-[#E8E2D5] shadow-2xs space-y-0.5">
@@ -94,11 +97,11 @@ export default function AdminReviews() {
           <div className="bg-white rounded-xl p-2.5 sm:p-3 border border-[#E8E2D5] shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar p-1 bg-[#FAF7F2] rounded-lg border border-stone-200 text-xs">
               {[
-                { id: 'All', label: 'All Reviews', count: reviews.length },
+                { id: 'All', label: 'All Reviews', count: totalCount },
                 { id: 'Pending', label: 'Pending', count: pendingCount },
                 { id: 'Approved', label: 'Approved', count: approvedCount },
-                { id: 'Featured', label: 'Featured on Home', count: reviews.filter(r => r.featured).length },
-                { id: 'Rejected', label: 'Rejected', count: reviews.filter(r => r.status === 'Rejected').length },
+                { id: 'Featured', label: 'Featured on Home', count: featuredCount },
+                { id: 'Rejected', label: 'Rejected', count: rejectedCount },
               ].map(tab => (
                 <button
                   key={tab.id}

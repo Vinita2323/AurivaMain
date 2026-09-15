@@ -3,6 +3,7 @@ import { Star, Heart, ShoppingBag, Check, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../../../context/CartContext';
 import { useWishlist } from '../../../context/WishlistContext';
+import { resolveProductImage } from '../../../utils/productImage';
 
 export default function ProductCard({ product }) {
   const { addToCart } = useCart();
@@ -10,7 +11,7 @@ export default function ProductCard({ product }) {
   const [isAdded, setIsAdded] = useState(false);
   const [selectedWeight, setSelectedWeight] = useState(product.weight || '150g');
 
-  const isWishlisted = isInWishlist(product.id);
+  const isWishlisted = isInWishlist(product);
 
   // Price calculation
   let currentPrice = product.price;
@@ -35,7 +36,7 @@ export default function ProductCard({ product }) {
   const handleWishlistClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    toggleWishlist(product.id);
+    toggleWishlist(product);
   };
 
   // Badge styling matching reference
@@ -55,35 +56,6 @@ export default function ProductCard({ product }) {
     return 'bg-[#C89038] text-white';
   };
 
-  // Image resolver: Prioritize Cloudinary/uploaded images, fallback intelligently for seeded flavors
-  const resolveProductImage = (prod) => {
-    const img = typeof prod?.image === 'string' ? prod.image : '';
-    if (img && (img.includes('cloudinary') || img.startsWith('data:') || img.includes('assets') || img.includes('/uploads/'))) {
-      return img;
-    }
-    if (img && img.startsWith('http') && !img.includes('1599488615731') && !img.includes('unsplash')) {
-      return img;
-    }
-    const nameStr = (prod?.name || '').toLowerCase();
-    if (nameStr.includes('peri')) {
-      return new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('cheese') || nameStr.includes('cream') || nameStr.includes('onion')) {
-      return new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('tomato')) {
-      return new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('salted') || nameStr.includes('w240') || nameStr.includes('classic')) {
-      return new URL('../../../assets/user/Classic Makhana.jpg', import.meta.url).href;
-    } else if (nameStr.includes('masala')) {
-      return new URL('../../../assets/user/Flavored Makhana.jpg', import.meta.url).href;
-    } else if (nameStr.includes('pudina') || nameStr.includes('mint')) {
-      return new URL('../../../assets/user/Healthy Makhana2.jpg', import.meta.url).href;
-    } else if (nameStr.includes('combo')) {
-      return new URL('../../../assets/user/combo Makhana.jpg', import.meta.url).href;
-    } else if (nameStr.includes('premium')) {
-      return new URL('../../../assets/user/Premium Makhana.jpg', import.meta.url).href;
-    }
-    return img || new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-  };
 
   const displayImage = resolveProductImage(product);
 
@@ -117,7 +89,7 @@ export default function ProductCard({ product }) {
         </div>
 
         {/* Product Image */}
-        <Link to={`/product/${product.slug}`} className="block w-full h-full">
+        <Link to={`/product/${product.id || product._id || product.slug}`} className="block w-full h-full">
           <img
             src={displayImage}
             alt={product.name}
@@ -137,12 +109,12 @@ export default function ProductCard({ product }) {
             ))}
           </div>
           <span className="text-[9.5px] sm:text-[11px] text-stone-500 font-medium ml-0.5">
-            ({product.reviewsCount || 100})
+            ({product.reviewsCount ?? 0})
           </span>
         </div>
 
         {/* Product Name */}
-        <Link to={`/product/${product.slug}`} className="block">
+        <Link to={`/product/${product.id || product._id || product.slug}`} className="block">
           <h3 className="font-serif text-[11px] sm:text-[15px] font-bold text-[#0E2A1B] group-hover:text-[#28543B] line-clamp-1 transition-colors leading-snug">
             {product.name}
           </h3>

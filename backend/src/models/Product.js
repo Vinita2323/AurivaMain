@@ -68,7 +68,7 @@ const productSchema = new mongoose.Schema(
     rating: {
       type: Number,
       default: 5.0,
-      min: 1,
+      min: 0,
       max: 5
     },
     reviewsCount: {
@@ -120,6 +120,16 @@ const productSchema = new mongoose.Schema(
       default: []
     },
     description: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    details: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    productDetails: {
       type: String,
       trim: true,
       default: ''

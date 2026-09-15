@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   Star, Heart, Plus, Minus, Check, ShoppingBag, Zap, Truck, ShieldCheck, 
@@ -14,16 +14,43 @@ import Footer from '../components/Footer';
 import { useAdmin } from '../../../context/AdminContext';
 import { useCart } from '../../../context/CartContext';
 import { useWishlist } from '../../../context/WishlistContext';
+import { useAuth } from '../../../context/AuthContext';
+import { resolveProductImage } from '../../../utils/productImage';
+import { reviewApi } from '../../../utils/api';
 
 export default function ProductDetailPage() {
-  const { slug } = useParams();
+  const { id, slug } = useParams();
+  const targetKey = (id || slug || '').toString().trim().toLowerCase();
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { products: PRODUCTS, reviews: REVIEWS, addReview } = useAdmin();
 
-  // Find product by slug or default to first product
-  const product = (PRODUCTS || []).find(p => p.slug === slug) || PRODUCTS[0] || {};
+  // Find product by unique product ID first, with fallback to slug
+  const product = useMemo(() => {
+    if (!PRODUCTS || PRODUCTS.length === 0) return {};
+    const matchById = PRODUCTS.find(p => {
+      const pid = String(p.id || p._id || '').trim().toLowerCase();
+      return pid === targetKey;
+    });
+    if (matchById) return matchById;
+
+    const matchBySlug = PRODUCTS.find(p => {
+      const pslug = String(p.slug || '').trim().toLowerCase();
+      return pslug === targetKey;
+    });
+    return matchBySlug || PRODUCTS[0] || {};
+  }, [PRODUCTS, targetKey]);
+
+  // If accessed by old slug name, seamlessly update URL to unique product ID
+  useEffect(() => {
+    if (product && (product.id || product._id)) {
+      const uniqueId = String(product.id || product._id);
+      if (targetKey && targetKey !== uniqueId.toLowerCase() && targetKey === String(product.slug || '').toLowerCase()) {
+        navigate(`/product/${uniqueId}`, { replace: true });
+      }
+    }
+  }, [product, targetKey, navigate]);
 
   const [selectedImage, setSelectedImage] = useState(product?.image);
   const [selectedWeight, setSelectedWeight] = useState(product?.weight || '250g');
@@ -33,6 +60,14 @@ export default function ProductDetailPage() {
   const [isAdded, setIsAdded] = useState(false);
 
   // Write Review State
+  const { user: authUser, isAuthenticated } = useAuth ? useAuth() : {};
+  const [productReviews, setProductReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsTotal, setReviewsTotal] = useState(0);
+  const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
   const [newReviewAuthor, setNewReviewAuthor] = useState('');
   const [newReviewRating, setNewReviewRating] = useState(5);
@@ -40,14 +75,91 @@ export default function ProductDetailPage() {
   const [newReviewContent, setNewReviewContent] = useState('');
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
+  const fetchReviews = async () => {
+    const pid = product?._id || product?.id;
+    if (!pid) return;
+    setReviewsLoading(true);
+    try {
+      const res = await reviewApi.getProductReviews(pid);
+      if (res?.data?.reviews) {
+        setProductReviews(res.data.reviews);
+        setReviewsTotal(res.data.pagination?.total ?? res.data.reviews.length);
+      }
+    } catch (e) {
+      console.warn('Could not fetch reviews:', e.message);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  const checkEligibility = async () => {
+    const pid = product?._id || product?.id;
+    if (!pid || !isAuthenticated) {
+      setReviewEligibility(null);
+      return;
+    }
+    try {
+      const res = await reviewApi.checkReviewEligibility(pid);
+      setReviewEligibility(res?.data || null);
+    } catch {
+      setReviewEligibility(null);
+    }
+  };
+
+  useEffect(() => {
+    if (product?._id || product?.id) {
+      fetchReviews();
+      checkEligibility();
+    }
+  }, [product?._id, product?.id, isAuthenticated]);
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    setReviewError('');
+    const pid = product?._id || product?.id;
+    if (!pid) return;
+    if (!newReviewContent.trim()) {
+      setReviewError('Please provide your review feedback.');
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      await reviewApi.submitReview(pid, {
+        rating: newReviewRating,
+        title: newReviewTitle || 'Wonderful taste & quality',
+        comment: newReviewContent
+      });
+      setReviewSubmitted(true);
+      setNewReviewAuthor('');
+      setNewReviewTitle('');
+      setNewReviewContent('');
+      checkEligibility();
+    } catch (err) {
+      setReviewError(err.message || 'Review submission failed. Verified purchase required.');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const resolvedMainImage = resolveProductImage(product);
+
+  const galleryList = useMemo(() => {
+    const cleanImg = (img) => (typeof img === 'string' && !img.includes('1599488615731') ? img : resolvedMainImage);
+    const raw = Array.isArray(product.gallery) && product.gallery.length > 0
+      ? product.gallery.map(cleanImg)
+      : [resolvedMainImage];
+    const list = Array.from(new Set([resolvedMainImage, ...raw]));
+    return list;
+  }, [product, resolvedMainImage]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    setSelectedImage(product.image);
+    setSelectedImage(resolvedMainImage);
     setSelectedWeight(product.weight || '250g');
     setQuantity(1);
-  }, [slug, product]);
+  }, [id, slug, product, resolvedMainImage]);
 
-  const isWishlisted = isInWishlist(product.id);
+  const isWishlisted = isInWishlist(product);
 
   // Price calculations based on selected weight
   let currentPrice = product.price;
@@ -76,18 +188,18 @@ export default function ProductDetailPage() {
     .slice(0, 4);
 
   return (
-    <div className="min-h-screen bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] pb-36 md:pb-0">
+    <div className="min-h-screen bg-[#FAF7F2] font-sans">
       <AnnouncementBar />
       <Header />
 
-      <main className="py-6 sm:py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         
         {/* Breadcrumb Navigation */}
         <nav className="flex items-center gap-1.5 text-xs text-stone-500 mb-8">
           <Link to="/" className="hover:text-[#0E2A1B] transition-colors">Home</Link>
           <ChevronRight className="w-3.5 h-3.5" />
           <Link to={`/shop?category=${product.category}`} className="hover:text-[#0E2A1B] capitalize transition-colors">
-            {product.category.replace('-', ' ')}
+            {product.category?.replace('-', ' ')}
           </Link>
           <ChevronRight className="w-3.5 h-3.5" />
           <span className="text-[#0E2A1B] font-semibold">{product.name}</span>
@@ -97,57 +209,58 @@ export default function ProductDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 bg-white rounded-3xl p-6 sm:p-10 border border-[#E8E2D5] shadow-xs">
           
           {/* LEFT: Product Gallery */}
-          <div className="lg:col-span-6 space-y-4">
-            {/* Main Active Image with Zoom effect */}
-            <div className="relative aspect-square rounded-2xl bg-[#FAF7F2] p-6 border border-[#E8E2D5] flex items-center justify-center overflow-hidden group">
+          <div className="lg:col-span-6 flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 items-start">
+            {/* Left Vertical Gallery Thumbnails */}
+            {galleryList.length > 1 && (
+              <div className="flex sm:flex-col gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-y-auto max-w-full sm:max-h-[520px] shrink-0 no-scrollbar py-1 sm:py-0 w-full sm:w-auto">
+                {galleryList.map((img, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedImage(img)}
+                    className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-[#FAF7F2] border-2 transition-all shrink-0 cursor-pointer ${
+                      selectedImage === img
+                        ? 'border-[#0E2A1B] ring-2 ring-[#D4AF37]/60 shadow-md scale-102'
+                        : 'border-stone-200 hover:border-stone-400 opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={img} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Main Active Image with Zoom effect - Cover Entire Card */}
+            <div className="relative flex-1 w-full aspect-square rounded-2xl bg-[#FAF7F2] border border-[#E8E2D5] overflow-hidden group shadow-xs">
               {product.badge && (
-                <span className="absolute top-4 left-4 bg-[#D4AF37] text-[#0E2A1B] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm z-10">
+                <span className="absolute top-4 left-4 bg-[#D4AF37] text-[#0E2A1B] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-md z-10">
                   {product.badge}
                 </span>
               )}
 
               <button
-                onClick={() => toggleWishlist(product.id)}
-                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 shadow-md flex items-center justify-center text-stone-600 hover:text-rose-600 transition-colors"
+                onClick={() => toggleWishlist(product)}
+                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-xs shadow-md flex items-center justify-center text-stone-600 hover:text-rose-600 transition-all hover:scale-105 cursor-pointer"
                 aria-label="Wishlist"
               >
                 <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-rose-600 text-rose-600' : ''}`} />
               </button>
 
               <img
-                src={selectedImage}
+                src={selectedImage || product.image}
                 alt={product.name}
-                className="w-full h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
 
               {/* Watch Video Button trigger */}
               <button
                 onClick={() => setIsVideoModalOpen(true)}
-                className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0E2A1B]/90 hover:bg-[#0E2A1B] text-white text-xs font-semibold backdrop-blur-xs border border-[#D4AF37]/30 transition-all shadow-md"
+                className="absolute bottom-4 left-4 z-10 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0E2A1B]/90 hover:bg-[#0E2A1B] text-white text-xs font-semibold backdrop-blur-xs border border-[#D4AF37]/30 transition-all shadow-md cursor-pointer"
               >
                 <Play className="w-3.5 h-3.5 fill-[#D4AF37] text-[#D4AF37]" />
                 <span>Watch Video</span>
               </button>
             </div>
-
-            {/* Thumbnails Row */}
-            {product.gallery && product.gallery.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-1">
-                {product.gallery.map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedImage(img)}
-                    className={`relative w-20 h-20 rounded-xl overflow-hidden bg-[#FAF7F2] p-1 border-2 transition-all shrink-0 ${
-                      selectedImage === img
-                        ? 'border-[#0E2A1B] ring-2 ring-[#D4AF37]/50'
-                        : 'border-stone-200 hover:border-stone-400 opacity-80 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={img} alt="" className="w-full h-full object-contain mix-blend-multiply" />
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* RIGHT: Product Details & Purchase Actions */}
@@ -310,21 +423,19 @@ export default function ProductDetailPage() {
         <div className="mt-12 bg-white rounded-3xl p-6 sm:p-10 border border-[#E8E2D5] shadow-xs">
           
           {/* Tabs Navigation Header */}
+          {/* Tabs Navigation Header - Only Description, Product Details, and Reviews */}
           <div className="flex items-center gap-2 sm:gap-6 border-b border-stone-200 overflow-x-auto no-scrollbar pb-1">
             {[
               { id: 'description', label: 'Description' },
-              { id: 'ingredients', label: 'Ingredients' },
-              { id: 'nutrition', label: 'Nutrition Facts' },
-              { id: 'benefits', label: 'Health Benefits' },
-              { id: 'reviews', label: `Reviews (${product.reviewsCount})` },
-              { id: 'faqs', label: 'FAQs' }
+              { id: 'details', label: 'Product Details' },
+              { id: 'reviews', label: `Reviews (${reviewsTotal || productReviews.length || (REVIEWS || []).filter(r => r.status === 'Approved').length || product.reviewsCount || 0})` }
             ].map(tab => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${
+                  className={`py-3 px-3 sm:px-5 text-xs sm:text-sm font-bold uppercase tracking-wider whitespace-nowrap transition-all border-b-2 cursor-pointer ${
                     isActive
                       ? 'border-[#0E2A1B] text-[#0E2A1B]'
                       : 'border-transparent text-stone-500 hover:text-stone-900'
@@ -339,106 +450,131 @@ export default function ProductDetailPage() {
           {/* Tab Content Display */}
           <div className="py-6 text-sm text-stone-700 leading-relaxed">
             
+            {/* 1. Description Tab */}
             {activeTab === 'description' && (
               <div className="space-y-4">
-                <p className="text-base text-stone-800 font-serif">
-                  {product.description}
+                <p className="text-base text-stone-800 font-serif leading-relaxed whitespace-pre-line">
+                  {product.description || "Crafted with love and artisanal care. Sourced ethically from organic wetlands, our lotus seeds undergo rigorous air cleaning, manual sizing, and slow thermal roasting."}
                 </p>
-                <p>
-                  Sourced ethically from organic wetlands, our lotus seeds undergo rigorous air cleaning, manual sizing, and slow thermal roasting. Never deep-fried in palm oils or infused with artificial flavor enhancers.
-                </p>
-                <div className="p-4 bg-[#FAF7F2] rounded-2xl border border-[#E8E2D5] mt-4">
-                  <h4 className="font-serif font-bold text-xs uppercase text-[#0E2A1B] mb-1">Storage Instructions</h4>
-                  <p className="text-xs text-stone-600">{product.storage}</p>
-                </div>
+                {product.storage && (
+                  <div className="p-4 bg-[#FAF7F2] rounded-2xl border border-[#E8E2D5] mt-4">
+                    <h4 className="font-serif font-bold text-xs uppercase text-[#0E2A1B] mb-1">Storage Instructions</h4>
+                    <p className="text-xs text-stone-600">{product.storage}</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {activeTab === 'ingredients' && (
-              <div className="space-y-3">
-                <h4 className="font-serif text-base font-bold text-[#0E2A1B]">100% Honest Ingredient List</h4>
-                <p className="p-4 bg-[#FAF7F2] rounded-2xl border border-[#E8E2D5] font-medium text-stone-800">
-                  {product.ingredients}
-                </p>
-                <p className="text-xs text-stone-500">
-                  Allergen information: Packed in a facility that also processes almonds, cashews and natural sesame seeds.
-                </p>
-              </div>
-            )}
-
-            {activeTab === 'nutrition' && product.nutrition && (
+            {/* 2. Product Details Tab */}
+            {activeTab === 'details' && (
               <div className="space-y-4">
-                <h4 className="font-serif text-base font-bold text-[#0E2A1B]">Nutritional Breakdown (Per Serving: {product.nutrition.servingSize})</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full max-w-xl text-xs text-left border border-stone-200 rounded-xl overflow-hidden">
-                    <thead className="bg-[#0E2A1B] text-white">
-                      <tr>
-                        <th className="p-3">Nutrient</th>
-                        <th className="p-3">Amount per Serving</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100 bg-[#FAF7F2]">
-                      <tr><td className="p-3 font-semibold">Energy (Calories)</td><td className="p-3 font-bold text-[#0E2A1B]">{product.nutrition.calories}</td></tr>
-                      <tr><td className="p-3 font-semibold">Protein</td><td className="p-3 font-bold text-emerald-700">{product.nutrition.protein}</td></tr>
-                      <tr><td className="p-3 font-semibold">Carbohydrates</td><td className="p-3">{product.nutrition.carbohydrates}</td></tr>
-                      <tr><td className="p-3 font-semibold">Dietary Fiber</td><td className="p-3 font-bold text-emerald-700">{product.nutrition.fiber}</td></tr>
-                      <tr><td className="p-3 font-semibold">Total Fat</td><td className="p-3">{product.nutrition.totalFat}</td></tr>
-                      <tr><td className="p-3 font-semibold">Cholesterol</td><td className="p-3">0 mg</td></tr>
-                      <tr><td className="p-3 font-semibold">Sodium</td><td className="p-3">{product.nutrition.sodium || '140mg'}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
+                {(product.productDetails || product.details) ? (
+                  <div className="p-5 sm:p-6 bg-[#FAF7F2] rounded-2xl border border-[#E8E2D5] space-y-3">
+                    <h4 className="font-serif text-base sm:text-lg font-bold text-[#0E2A1B]">
+                      Product Specifications & Details
+                    </h4>
+                    <div className="space-y-2.5 pt-1">
+                      {(product.productDetails || product.details).split('\n').map((line, idx) => {
+                        const trimmed = line.trim();
+                        if (!trimmed) return null;
+                        return (
+                          <div key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-stone-700">
+                            <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>{trimmed.replace(/^[•\-\*]\s*/, '')}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-5 sm:p-6 bg-[#FAF7F2] rounded-2xl border border-[#E8E2D5] space-y-4">
+                    <h4 className="font-serif text-base sm:text-lg font-bold text-[#0E2A1B]">
+                      Product Specifications
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+                      <div className="p-3.5 bg-white rounded-xl border border-stone-200 shadow-2xs">
+                        <span className="text-stone-400 block text-[11px] font-bold uppercase tracking-wider">Weight / Pack Size</span>
+                        <span className="font-bold text-stone-900 mt-0.5 block">{product.weight || selectedWeight || '150g'}</span>
+                      </div>
+                      <div className="p-3.5 bg-white rounded-xl border border-stone-200 shadow-2xs">
+                        <span className="text-stone-400 block text-[11px] font-bold uppercase tracking-wider">Category</span>
+                        <span className="font-bold text-stone-900 capitalize mt-0.5 block">{product.category?.replace(/-/g, ' ')}</span>
+                      </div>
+                      <div className="p-3.5 bg-white rounded-xl border border-stone-200 shadow-2xs">
+                        <span className="text-stone-400 block text-[11px] font-bold uppercase tracking-wider">Dietary & Processing</span>
+                        <span className="font-bold text-stone-900 mt-0.5 block">100% Vegan, Gluten-Free, Slow-Roasted (Zero Palm Oil)</span>
+                      </div>
+                      <div className="p-3.5 bg-white rounded-xl border border-stone-200 shadow-2xs">
+                        <span className="text-stone-400 block text-[11px] font-bold uppercase tracking-wider">Shelf Life & Storage</span>
+                        <span className="font-bold text-stone-900 mt-0.5 block">9 Months • Store in a cool, dry airtight container</span>
+                      </div>
+                    </div>
+                    {product.ingredients && (
+                      <div className="p-3.5 bg-white rounded-xl border border-stone-200 shadow-2xs">
+                        <span className="text-stone-400 block text-[11px] font-bold uppercase tracking-wider">Key Ingredients</span>
+                        <span className="font-semibold text-stone-800 mt-0.5 block">{product.ingredients}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {activeTab === 'benefits' && (
-              <div className="space-y-3">
-                <h4 className="font-serif text-base font-bold text-[#0E2A1B]">Health & Wellness Advantages</h4>
-                <ul className="space-y-2.5">
-                  {(product.benefits || [
-                    "High in plant protein and vital amino acids",
-                    "Low glycemic index supporting balanced glucose",
-                    "Zero trans fat and zero cholesterol"
-                  ]).map((benefit, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <span>{benefit}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
+            {/* 3. Reviews Tab */}
             {activeTab === 'reviews' && (
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-[#FAF7F2] rounded-2xl border border-[#E8E2D5]">
                   <div>
-                    <h4 className="font-serif text-2xl font-bold text-[#0E2A1B]">4.8 Out of 5 Stars</h4>
-                    <p className="text-xs text-stone-500">Based on verified purchases & ratings</p>
+                    <h4 className="font-serif text-2xl font-bold text-[#0E2A1B]">
+                      {product.rating ? Number(product.rating).toFixed(1) : '5.0'} Out of 5 Stars
+                    </h4>
+                    <p className="text-xs text-stone-500">
+                      Based on {reviewsTotal || productReviews.length || product.reviewsCount || 0} verified customer reviews
+                    </p>
                   </div>
                   <button 
-                    onClick={() => setIsWriteReviewOpen(true)}
-                    className="px-5 py-2.5 bg-[#0E2A1B] text-white hover:bg-[#1B3B29] rounded-xl text-xs font-bold uppercase tracking-wider shadow-md"
+                    onClick={() => {
+                      setReviewError('');
+                      if (authUser?.name && !newReviewAuthor) {
+                        setNewReviewAuthor(authUser.name);
+                      }
+                      setIsWriteReviewOpen(true);
+                    }}
+                    className="px-5 py-2.5 bg-[#0E2A1B] text-white hover:bg-[#1B3B29] rounded-xl text-xs font-bold uppercase tracking-wider shadow-md cursor-pointer"
                   >
                     Write a Review
                   </button>
                 </div>
 
                 <div className="space-y-4">
-                  {(REVIEWS || []).filter(r => r.status === 'Approved').map(r => (
-                    <div key={r.id} className="p-4 rounded-xl border border-stone-100 bg-white space-y-2">
+                  {productReviews.length === 0 && !reviewsLoading && (
+                    <div className="text-center py-8 text-stone-500 text-xs bg-white rounded-xl border border-stone-200">
+                      No reviews yet for this flavor. Be the first verified buyer to share your thoughts!
+                    </div>
+                  )}
+
+                  {(productReviews.length > 0 ? productReviews : (REVIEWS || []).filter(r => r.status === 'Approved')).map(r => (
+                    <div key={r.id || r._id} className="p-4 rounded-xl border border-stone-100 bg-white space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <img src={r.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+                          <img src={r.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'} alt="" className="w-7 h-7 rounded-full object-cover" />
                           <span className="font-serif text-xs font-bold text-[#0E2A1B]">{r.author}</span>
-                          <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Verified Buyer</span>
+                          {r.verified && (
+                            <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Verified Buyer</span>
+                          )}
+                          {r.featured && (
+                            <span className="text-[10px] text-[#D4AF37] bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-semibold">
+                              ★ Featured
+                            </span>
+                          )}
                         </div>
                         <span className="text-[11px] text-stone-400">{r.date}</span>
                       </div>
                       <div className="flex text-amber-400">
                         {[...Array(r.rating || 5)].map((_, idx) => <Star key={idx} className="w-3.5 h-3.5 fill-amber-400" />)}
                       </div>
-                      <p className="text-xs text-stone-700 italic">"{r.content}"</p>
+                      {r.title && <h5 className="font-bold text-xs text-stone-800">"{r.title}"</h5>}
+                      <p className="text-xs text-stone-700 italic">"{r.content || r.comment}"</p>
                       {r.adminReply && (
                         <div className="mt-2 text-[11px] bg-stone-50 p-2.5 rounded-lg border-l-2 border-[#0E2A1B] text-stone-600">
                           <strong className="text-[#0E2A1B]">AURIVÁ Team Response:</strong> {r.adminReply}
@@ -447,25 +583,6 @@ export default function ProductDetailPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {activeTab === 'faqs' && (
-              <div className="space-y-3 max-w-2xl">
-                {[
-                  { q: "How is AURIVÁ makhana roasted?", a: "We slow-roast our lotus seeds in small batches using olive oil mist at controlled temperatures to ensure maximum crunch without degrading natural nutrients." },
-                  { q: "Is this suitable for diabetic and keto diets?", a: "Yes! Fox nuts have a low Glycemic Index (GI) and are low in calories and saturated fats." },
-                  { q: "What is the shelf life?", a: "Our nitrogen-flushed packaging maintains crispness for 9 months from manufacture. Once opened, consume within 15 days for optimal freshness." },
-                  { q: "Are there any artificial preservatives?", a: "Zero preservatives, zero artificial food colors, and no MSG." }
-                ].map((faq, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] space-y-1">
-                    <h5 className="font-serif text-xs sm:text-sm font-bold text-[#0E2A1B] flex items-center gap-2">
-                      <HelpCircle className="w-4 h-4 text-[#D4AF37]" />
-                      {faq.q}
-                    </h5>
-                    <p className="text-xs text-stone-600 pl-6">{faq.a}</p>
-                  </div>
-                ))}
               </div>
             )}
 
@@ -568,25 +685,26 @@ export default function ProductDetailPage() {
               </div>
             ) : (
               <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!newReviewAuthor || !newReviewContent) return;
-                  addReview({
-                    author: newReviewAuthor,
-                    product: product.name,
-                    rating: newReviewRating,
-                    title: newReviewTitle || 'Wonderful taste & quality',
-                    content: newReviewContent,
-                    role: 'Verified Buyer',
-                    city: 'India'
-                  });
-                  setReviewSubmitted(true);
-                  setNewReviewAuthor('');
-                  setNewReviewTitle('');
-                  setNewReviewContent('');
-                }}
+                onSubmit={handleReviewSubmit}
                 className="p-6 space-y-4 text-xs"
               >
+                {!isAuthenticated && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                    Please log in to your customer account to submit a review for your delivered purchase.
+                  </div>
+                )}
+
+                {reviewEligibility && !reviewEligibility.canReview && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                    {reviewEligibility.message}
+                  </div>
+                )}
+
+                {reviewError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
+                    {reviewError}
+                  </div>
+                )}
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">Your Full Name *</label>
                   <input

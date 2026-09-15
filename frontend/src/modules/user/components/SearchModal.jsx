@@ -41,9 +41,9 @@ export default function SearchModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const handleSelectProduct = (slug) => {
+  const handleSelectProduct = (productId) => {
     onClose();
-    navigate(`/product/${slug}`);
+    navigate(`/product/${productId}`);
   };
 
   const handleSearchSubmit = (e) => {
@@ -113,7 +113,7 @@ export default function SearchModal({ isOpen, onClose }) {
             {results.map((product) => (
               <div
                 key={product.id}
-                onClick={() => handleSelectProduct(product.slug)}
+                onClick={() => handleSelectProduct(product.id || product._id || product.slug)}
                 className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 cursor-pointer transition-colors group"
               >
                 <img

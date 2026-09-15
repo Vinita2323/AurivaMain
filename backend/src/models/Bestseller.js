@@ -8,6 +8,10 @@ const bestsellerSchema = new mongoose.Schema(
       required: [true, 'Product reference is required for bestseller item'],
       unique: true // Strictly prevents duplicate product entries in Bestsellers
     },
+    productName: {
+      type: String,
+      required: false // Optional to not break existing records
+    },
     displayOrder: {
       type: Number,
       default: 0,

@@ -3,10 +3,22 @@ import { X, Check, MapPin, User, Package, ShieldCheck } from 'lucide-react';
 
 export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatus }) {
   const [status, setStatus] = useState('Packed');
+  const [courierName, setCourierName] = useState('');
+  const [awbNumber, setAwbNumber] = useState('');
+  const [riderName, setRiderName] = useState('');
+  const [riderPhone, setRiderPhone] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [statusNote, setStatusNote] = useState('');
 
   useEffect(() => {
     if (order) {
       setStatus(order.status || 'Packed');
+      setCourierName(order.courierName || '');
+      setAwbNumber(order.awbNumber || '');
+      setRiderName(order.rider?.name || '');
+      setRiderPhone(order.rider?.phone || '');
+      setDeliveryNotes(order.deliveryNotes || '');
+      setStatusNote('');
     }
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -22,7 +34,16 @@ export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatu
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onUpdateStatus(order.id, status);
+    onUpdateStatus(order.id, status, {
+      courierName,
+      awbNumber,
+      deliveryNotes,
+      note: statusNote,
+      rider: {
+        name: riderName || order.rider?.name,
+        phone: riderPhone || order.rider?.phone
+      }
+    });
     onClose();
   };
 
@@ -63,7 +84,7 @@ export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatu
           >
             
             {/* Top Section: Single Unified Status Dropdown */}
-            <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] space-y-2">
+            <div className="p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] space-y-3">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-[#0E2A1B] uppercase tracking-wider">
                   Order Fulfillment Status *
@@ -78,12 +99,89 @@ export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatu
                 onChange={(e) => setStatus(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-bold rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white text-stone-800 shadow-2xs cursor-pointer"
               >
-                <option value="Order Received">Order Received</option>
+                <option value="Order Received">Order Received (Confirmed)</option>
                 <option value="Packed">Packed</option>
+                <option value="Ready for Dispatch">Ready for Dispatch (Shipped)</option>
                 <option value="Out for Delivery">Out for Delivery</option>
                 <option value="Delivered">Delivered</option>
                 <option value="Cancelled">Cancelled</option>
               </select>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-600 mb-1">Status Note / Reason</label>
+                <input
+                  type="text"
+                  value={statusNote}
+                  onChange={(e) => setStatusNote(e.target.value)}
+                  placeholder="e.g. Packed in Hub 2, Handed over to BlueDart"
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white text-stone-800"
+                />
+              </div>
+            </div>
+
+            {/* Section: Dispatch Logistics Details */}
+            <div className="p-4 rounded-xl bg-white border border-[#E8E2D5] space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#0E2A1B]">Dispatch & Logistics Assignment</span>
+                <span className="text-[11px] text-stone-400">Optional / Live Courier Sync</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">Courier Partner</label>
+                  <input
+                    type="text"
+                    value={courierName}
+                    onChange={(e) => setCourierName(e.target.value)}
+                    placeholder="e.g. Delhivery, BlueDart, Shadowfax"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] text-stone-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">AWB / Tracking Number</label>
+                  <input
+                    type="text"
+                    value={awbNumber}
+                    onChange={(e) => setAwbNumber(e.target.value)}
+                    placeholder="e.g. AWB987654321IN"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] text-stone-800 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">Delivery Rider / Captain</label>
+                  <input
+                    type="text"
+                    value={riderName}
+                    onChange={(e) => setRiderName(e.target.value)}
+                    placeholder="e.g. Rohan Kumar"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] text-stone-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">Rider Phone</label>
+                  <input
+                    type="text"
+                    value={riderPhone}
+                    onChange={(e) => setRiderPhone(e.target.value)}
+                    placeholder="e.g. +91 9811122334"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] text-stone-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-600 mb-1">Delivery / Handling Notes</label>
+                <input
+                  type="text"
+                  value={deliveryNotes}
+                  onChange={(e) => setDeliveryNotes(e.target.value)}
+                  placeholder="e.g. Fragile snacks packaging. Handle with care."
+                  className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] text-stone-800"
+                />
+              </div>
             </div>
 
             {/* Section 2: Customer Info & Delivery Address */}

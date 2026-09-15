@@ -18,9 +18,9 @@ export default function AdminSettings() {
     }
   }, [settings]);
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    updateSettings(formData);
+    await updateSettings(formData);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };

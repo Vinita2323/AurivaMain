@@ -1,8 +1,38 @@
+import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 import Bestseller from '../models/Bestseller.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
 export const INITIAL_PRODUCTS_SEED = [
+  {
+    name: "Artisanal Truffle & Herb Makhana",
+    subtitle: "Natural Seasoning • 150g",
+    tagline: "Natural Seasoning • 150g",
+    slug: "artisanal-truffle-herb-makhana",
+    category: "flavoured-makhana",
+    flavor: "Natural Seasoning",
+    diet: ["gluten-free", "vegan", "low-calorie"],
+    price: 249,
+    oldPrice: 299,
+    discountPercent: 17,
+    rating: 5.0,
+    reviewsCount: 1,
+    weight: "150g",
+    weightOptions: [
+      { weight: "150g", price: 249, oldPrice: 299, isDefault: true }
+    ],
+    inStock: true,
+    stockCount: 150,
+    badge: "BESTSELLER",
+    badgeType: "bestseller",
+    isBestseller: true,
+    image: "/src/assets/user/Premium Makhana.jpg",
+    gallery: ["/src/assets/user/Premium Makhana.jpg"],
+    description: "Slow roasted premium makhana infused with gourmet natural seasonings.",
+    ingredients: "Jumbo Fox Nuts (Phool Makhana), Natural Herbs & Sea Salt.",
+    tags: ["Makhana", "Bestseller"],
+    status: "ACTIVE"
+  },
   {
     name: "Peri Peri Makhana",
     subtitle: "Fiery African Bird's Eye Chilli & Herbs",
@@ -27,7 +57,8 @@ export const INITIAL_PRODUCTS_SEED = [
     badge: "BESTSELLER",
     badgeType: "bestseller",
     isBestseller: true,
-    image: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=700&auto=format&fit=crop&q=80",
+    image: "/src/assets/user/Types/PeriPeri.jpeg",
+    gallery: ["/src/assets/user/Types/PeriPeri.jpeg", "/src/assets/user/Flavored Makhana.jpg"],
     description: "Bold & zesty peri peri botanicals with garlic crisps, oregano, and zesty lemon in our signature air-tight freshness pouch.",
     ingredients: "Jumbo Fox Nuts (Phool Makhana 89%), Olive Mist (6%), Peri Peri Spice Mix (5%).",
     tags: ["Makhana", "Peri Peri", "Spicy", "Bestseller"],
@@ -57,7 +88,8 @@ export const INITIAL_PRODUCTS_SEED = [
     badge: "POPULAR",
     badgeType: "popular",
     isBestseller: true,
-    image: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=700&auto=format&fit=crop&q=80",
+    image: "/src/assets/user/Types/CreamOnion.jpeg",
+    gallery: ["/src/assets/user/Types/CreamOnion.jpeg", "/src/assets/user/Healthy Makhana2.jpg"],
     description: "Creamy sour cream combined with roasted spring onions and cracked peppercorns in our signature freshness pouch.",
     ingredients: "Jumbo Fox Nuts (88%), Olive Mist (7%), Sour Cream & Onion Seasoning (5%).",
     tags: ["Makhana", "Cream Onion", "Snack", "Crispy"],
@@ -87,7 +119,8 @@ export const INITIAL_PRODUCTS_SEED = [
     badge: "BESTSELLER",
     badgeType: "bestseller",
     isBestseller: true,
-    image: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=700&auto=format&fit=crop&q=80",
+    image: "/src/assets/user/Types/Tomato.jpeg",
+    gallery: ["/src/assets/user/Types/Tomato.jpeg", "/src/assets/user/Flavored Makhana.jpg"],
     description: "Rich Italian sun-dried tomato seasoning blended with basil and Himalayan rock salt.",
     ingredients: "Jumbo Fox Nuts (88%), Sun-dried Tomato Flakes (6%), Olive Mist (6%).",
     tags: ["Makhana", "Tomato", "Tangy", "Bestseller"],
@@ -116,8 +149,11 @@ export const INITIAL_PRODUCTS_SEED = [
     badge: "PREMIUM",
     badgeType: "premium",
     isBestseller: true,
-    image: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=700&auto=format&fit=crop&q=80",
+    image: "/src/assets/user/Classic Makhana.jpg",
+    gallery: ["/src/assets/user/Classic Makhana.jpg", "/src/assets/user/Types/PeriPeri.jpeg"],
     description: "Jumbo hand-graded 6-suta W240 fox nuts slow-roasted in pure cold-pressed olive mist with coarse mineral Himalayan salt.",
+    details: "• Grade: Premium 6-suta W240 hand-sorted jumbo fox nuts\n• Roast: Slow roasted in virgin cold-pressed olive mist\n• Ingredients: 94% Jumbo Fox Nuts, 4% Olive Mist, 2% Himalayan Salt\n• Shelf Life: 9 Months from date of packaging\n• Storage: Store in a cool, airtight container after opening\n• Origin: Sustainably harvested in Bihar, India",
+    productDetails: "• Grade: Premium 6-suta W240 hand-sorted jumbo fox nuts\n• Roast: Slow roasted in virgin cold-pressed olive mist\n• Ingredients: 94% Jumbo Fox Nuts, 4% Olive Mist, 2% Himalayan Salt\n• Shelf Life: 9 Months from date of packaging\n• Storage: Store in a cool, airtight container after opening\n• Origin: Sustainably harvested in Bihar, India",
     ingredients: "Grade-1 Jumbo Fox Nuts (94%), Cold-Pressed Olive Mist (4%), Himalayan Rock Salt (2%).",
     tags: ["Jumbo", "Plain", "Healthy", "Keto"],
     status: "ACTIVE"
@@ -146,7 +182,8 @@ export const INITIAL_PRODUCTS_SEED = [
     badge: "POPULAR",
     badgeType: "popular",
     isBestseller: true,
-    image: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=700&auto=format&fit=crop&q=80",
+    image: "/src/assets/user/Flavored Makhana.jpg",
+    gallery: ["/src/assets/user/Flavored Makhana.jpg", "/src/assets/user/Types/Tomato.jpeg"],
     description: "Aromatic blend of roasted cumin, dry mango powder, black pepper, and mint.",
     ingredients: "Jumbo Fox Nuts (87%), Chaat Masala Blend (8%), Olive Mist (5%).",
     tags: ["Masala", "Chatpata", "Desi", "Makhana"],
@@ -175,7 +212,8 @@ export const INITIAL_PRODUCTS_SEED = [
     badge: "NEW",
     badgeType: "new",
     isBestseller: false,
-    image: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=700&auto=format&fit=crop&q=80",
+    image: "/src/assets/user/Healthy Makhana2.jpg",
+    gallery: ["/src/assets/user/Healthy Makhana2.jpg", "/src/assets/user/Types/CreamOnion.jpeg"],
     description: "Crisp sun-dried spearmint leaves paired with tangy rock salt for a refreshing cooling burst.",
     ingredients: "Jumbo Fox Nuts (88%), Spearmint Seasoning (6%), Olive Mist (6%).",
     tags: ["Pudina", "Mint", "Cooling", "Makhana"],
@@ -188,6 +226,23 @@ class ProductService {
    * Get all active store products with query filtering
    */
   async getAllProducts(filters = {}) {
+    // If database is currently disconnected (e.g. initial connection pending), return read-only fallback seed products with stable IDs
+    if (mongoose.connection.readyState !== 1) {
+      let list = INITIAL_PRODUCTS_SEED.map((p, idx) => ({
+        ...p,
+        _id: `seed-prod-${p.slug || idx + 1}`,
+        id: `seed-prod-${p.slug || idx + 1}`
+      }));
+      if (filters.category && filters.category !== 'all') {
+        list = list.filter(p => p.category === filters.category);
+      }
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        list = list.filter(p => (p.name || '').toLowerCase().includes(q) || (p.flavor || '').toLowerCase().includes(q));
+      }
+      return list;
+    }
+
     const query = { status: { $ne: 'ARCHIVED' } };
 
     if (filters.status && filters.status !== 'all') {
@@ -204,13 +259,18 @@ class ProductService {
       query.$or = [{ name: regex }, { flavor: regex }, { tags: regex }, { subtitle: regex }];
     }
 
-    return Product.find(query).sort({ createdAt: -1 });
+    return await Product.find(query).sort({ createdAt: -1 });
   }
 
   /**
    * Get product by MongoDB ID or slug
    */
   async getProductById(idOrSlug) {
+    if (mongoose.connection.readyState !== 1) {
+      const found = INITIAL_PRODUCTS_SEED.find(p => p.slug === idOrSlug || p.id === idOrSlug) || INITIAL_PRODUCTS_SEED[0];
+      return { ...found, _id: found.slug, id: found.slug };
+    }
+
     let product = null;
     if (idOrSlug && idOrSlug.match(/^[0-9a-fA-F]{24}$/)) {
       product = await Product.findById(idOrSlug);
@@ -236,6 +296,14 @@ class ProductService {
       err.statusCode = HTTP_STATUS.BAD_REQUEST;
       throw err;
     }
+
+    // Require active MongoDB connection for data persistence
+    if (mongoose.connection.readyState !== 1) {
+      const err = new Error('Database is currently offline. Cannot persist product to database.');
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      throw err;
+    }
+
 
     // Generate unique slug
     let slug = (data.slug || data.name)
@@ -302,7 +370,10 @@ class ProductService {
       badgeType: data.badgeType || (data.isBestseller ? 'bestseller' : 'popular'),
       isBestseller: Boolean(data.isBestseller),
       image: resolvedImage,
+      gallery: Array.isArray(data.gallery) && data.gallery.length > 0 ? data.gallery : [resolvedImage],
       description: data.description || '',
+      details: data.details || data.productDetails || '',
+      productDetails: data.productDetails || data.details || '',
       ingredients: data.ingredients || '',
       tags: data.tags || [data.name, data.category].filter(Boolean),
       status: data.status || 'ACTIVE'
@@ -315,6 +386,7 @@ class ProductService {
         const nextOrder = (highestOrder?.displayOrder ?? 0) + 1;
         await Bestseller.create({
           product: newProduct._id,
+          productName: newProduct.name,
           displayOrder: nextOrder,
           isActive: true
         });
@@ -330,6 +402,12 @@ class ProductService {
    * Update existing product catalog details
    */
   async updateProduct(productId, updateData) {
+    if (mongoose.connection.readyState !== 1) {
+      const err = new Error('Database connection is not available. Cannot update product while database is offline.');
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      throw err;
+    }
+
     const product = await Product.findById(productId);
     if (!product) {
       const err = new Error('Product not found.');
@@ -375,6 +453,7 @@ class ProductService {
           const nextOrder = (highestOrder?.displayOrder ?? 0) + 1;
           await Bestseller.create({
             product: product._id,
+            productName: product.name,
             displayOrder: nextOrder,
             isActive: true
           });
@@ -391,6 +470,12 @@ class ProductService {
    * Delete product and clean up references
    */
   async deleteProduct(productId) {
+    if (mongoose.connection.readyState !== 1) {
+      const err = new Error('Database connection is not available. Cannot delete product while database is offline.');
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      throw err;
+    }
+
     const product = await Product.findById(productId);
     if (!product) {
       const err = new Error('Product not found.');
@@ -409,6 +494,12 @@ class ProductService {
    * Toggle in-stock status
    */
   async toggleProductStatus(productId) {
+    if (mongoose.connection.readyState !== 1) {
+      const err = new Error('Database connection is not available. Cannot change product status while database is offline.');
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      throw err;
+    }
+
     const product = await Product.findById(productId);
     if (!product) {
       const err = new Error('Product not found.');
@@ -427,6 +518,12 @@ class ProductService {
    * Update stock count
    */
   async updateStock(productId, stockCount) {
+    if (mongoose.connection.readyState !== 1) {
+      const err = new Error('Database connection is not available. Cannot update stock while database is offline.');
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      throw err;
+    }
+
     const product = await Product.findById(productId);
     if (!product) {
       const err = new Error('Product not found.');

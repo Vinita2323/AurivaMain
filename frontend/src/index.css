@@ -44,6 +44,12 @@
   }
 }
 
+/* Ensure currency prices render with tabular numbers and sans-serif */
+.price, [data-price], .font-price {
+  font-family: var(--font-sans) !important;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Custom smooth scrolling and luxury aesthetics */
 html {
   scroll-behavior: smooth;

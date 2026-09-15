@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { INITIAL_ORDERS } from '../data/adminData';
-import { userAuthApi } from '../utils/api';
+import { userAuthApi, addressApi, orderApi } from '../utils/api';
 import confetti from 'canvas-confetti';
 
 const AuthContext = createContext();
 
-export const INITIAL_CUSTOMERS = [
+const INITIAL_CUSTOMERS = [
   {
     id: "cust-1",
     name: "Vini Sharma",
@@ -37,6 +37,98 @@ export const INITIAL_CUSTOMERS = [
     status: "Active"
   }
 ];
+
+export const formatAddress = (a) => ({
+  id: a._id || a.id,
+  _id: a._id || a.id,
+  type: a.addressType ? (a.addressType.charAt(0).toUpperCase() + a.addressType.slice(1)) : (a.type || 'Home'),
+  addressType: (a.addressType || a.type || 'home').toLowerCase(),
+  isDefault: Boolean(a.isDefault),
+  street: a.addressLine1
+    ? a.addressLine1 + (a.addressLine2 ? `, ${a.addressLine2}` : '') + (a.landmark ? `, Near ${a.landmark}` : '')
+    : (a.street || ''),
+  addressLine1: a.addressLine1 || a.street || '',
+  addressLine2: a.addressLine2 || '',
+  landmark: a.landmark || '',
+  city: a.city || '',
+  state: a.state || 'Madhya Pradesh',
+  pincode: a.postalCode || a.pincode || '',
+  postalCode: a.postalCode || a.pincode || '',
+  phone: a.phoneNumber || a.phone || '',
+  phoneNumber: a.phoneNumber || a.phone || '',
+  name: a.fullName || a.name || ''
+});
+
+export const formatOrder = (o) => {
+  const mapStatusToDisplay = (s) => {
+    if (!s) return 'Order Received';
+    const u = String(s).toUpperCase().replace(/\s+/g, '_');
+    if (u === 'CONFIRMED' || u === 'ORDER_RECEIVED') return 'Order Received';
+    if (u === 'PACKED' || u === 'PROCESSING') return 'Packed';
+    if (u === 'SHIPPED' || u === 'READY_FOR_DISPATCH') return 'Ready for Dispatch';
+    if (u === 'OUT_FOR_DELIVERY') return 'Out for Delivery';
+    if (u === 'DELIVERED') return 'Delivered';
+    if (u === 'CANCELLED' || u === 'CANCELED') return 'Cancelled';
+    return s;
+  };
+
+  return {
+    id: o.orderNumber || o.id || o._id,
+    _id: o._id,
+    orderNumber: o.orderNumber || o.id,
+    customer: o.shippingAddress?.fullName || o.customer || "Customer",
+    email: o.email || "customer@aurivafoods.com",
+    phone: o.shippingAddress?.phoneNumber || o.phone || "+91 9876543210",
+    date: o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (o.date || 'Today'),
+    time: o.createdAt ? new Date(o.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : (o.time || 'Just now'),
+    items: o.items || [],
+    subtotal: o.pricing?.subtotal ?? o.subtotal ?? 0,
+    discount: o.pricing?.discount ?? o.discount ?? 0,
+    couponApplied: o.pricing?.couponCode || o.couponApplied || 'None',
+    deliveryFee: o.pricing?.deliveryFee ?? o.deliveryFee ?? 0,
+    tax: o.pricing?.tax ?? o.tax ?? 0,
+    total: o.pricing?.total ?? o.total ?? 0,
+    paymentMethod: o.payment?.method || o.paymentMethod || 'COD',
+    paymentStatus: o.payment?.status || 'PENDING',
+    transactionId: o.payment?.transactionId || '',
+    deliveryType: o.delivery?.type || o.deliveryType || "Standard Express Courier",
+    status: mapStatusToDisplay(o.status),
+    rawStatus: o.status,
+    courierName: o.courierName || o.delivery?.type || '',
+    awbNumber: o.awbNumber || '',
+    deliveryNotes: o.deliveryNotes || '',
+    dispatchedAt: o.dispatchedAt || null,
+    cancelReason: o.cancelReason || '',
+    cancelledBy: o.cancelledBy || null,
+    cancelledAt: o.cancelledAt || null,
+    timeline: o.timeline && o.timeline.length > 0 ? o.timeline : [
+      { status: "Order Received", time: "Order Placed", done: true, current: false },
+      { status: "Packed", time: "Warehouse Hub", done: true, current: false },
+      { status: "Ready for Dispatch", time: "In process", done: true, current: false },
+      { status: "Out for Delivery", time: "Live", done: true, current: true },
+      { status: "Delivered", time: "Estimated in 25 mins", done: false, current: false }
+    ],
+    rider: o.rider || {
+      name: "Rohan Kumar",
+      phone: "+91 9811122334",
+      rating: 4.9,
+      vehicle: "MP09-AB-1234",
+      eta: "25 mins",
+      distance: "2.5 km away",
+      lat: 22.7196,
+      lng: 75.8577
+    },
+    address: o.shippingAddress ? {
+      type: o.shippingAddress.addressType ? (o.shippingAddress.addressType.charAt(0).toUpperCase() + o.shippingAddress.addressType.slice(1)) : 'Home',
+      street: o.shippingAddress.addressLine1 + (o.shippingAddress.addressLine2 ? `, ${o.shippingAddress.addressLine2}` : '') + (o.shippingAddress.landmark ? `, Near ${o.shippingAddress.landmark}` : ''),
+      city: o.shippingAddress.city,
+      state: o.shippingAddress.state,
+      pincode: o.shippingAddress.postalCode,
+      phone: o.shippingAddress.phoneNumber,
+      name: o.shippingAddress.fullName
+    } : o.address
+  };
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -146,6 +238,32 @@ export function AuthProvider({ children }) {
       console.error(e);
     }
   }, [customers]);
+
+  // Synchronize addresses and orders with backend whenever user is authenticated
+  useEffect(() => {
+    if (token) {
+      addressApi.getAddresses()
+        .then(res => {
+          if (res?.data?.addresses && res.data.addresses.length > 0) {
+            const formatted = res.data.addresses.map(formatAddress);
+            setAddresses(formatted);
+            const def = formatted.find(a => a.isDefault);
+            if (def) setSelectedAddressId(def.id);
+            else setSelectedAddressId(formatted[0].id);
+          }
+        })
+        .catch(err => console.warn('[AuthContext] Backend addresses load note:', err.message));
+
+      orderApi.getUserOrders()
+        .then(res => {
+          if (res?.data?.orders && res.data.orders.length > 0) {
+            const formatted = res.data.orders.map(formatOrder);
+            setOrders(formatted);
+          }
+        })
+        .catch(err => console.warn('[AuthContext] Backend orders load note:', err.message));
+    }
+  }, [token]);
 
   /**
    * Request OTP from backend API
@@ -268,7 +386,38 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const addAddress = (addr) => {
+  const addAddress = async (addr) => {
+    if (token) {
+      try {
+        const payload = {
+          fullName: addr.name || addr.fullName || user?.name || 'Customer',
+          phoneNumber: addr.phone || addr.phoneNumber || user?.phone || '9999999999',
+          addressLine1: addr.addressLine1 || addr.street || '',
+          addressLine2: addr.addressLine2 || '',
+          landmark: addr.landmark || '',
+          city: addr.city || '',
+          state: addr.state || 'Madhya Pradesh',
+          postalCode: addr.postalCode || addr.pincode || '',
+          addressType: (addr.addressType || addr.type || 'home').toLowerCase(),
+          isDefault: Boolean(addr.isDefault || addresses.length === 0)
+        };
+        const res = await addressApi.addAddress(payload);
+        if (res?.data?.address) {
+          const newFormatted = formatAddress(res.data.address);
+          setAddresses(prev => {
+            if (newFormatted.isDefault) {
+              return [newFormatted, ...prev.map(a => ({ ...a, isDefault: false }))];
+            }
+            return [...prev, newFormatted];
+          });
+          setSelectedAddressId(newFormatted.id);
+          return newFormatted.id;
+        }
+      } catch (err) {
+        console.error('[AuthContext] Backend addAddress failed:', err);
+        throw err;
+      }
+    }
     const newAddr = {
       ...addr,
       id: `addr-${Date.now()}`,
@@ -281,11 +430,43 @@ export function AuthProvider({ children }) {
     return newAddr.id;
   };
 
-  const updateAddress = (id, updatedData) => {
+  const updateAddress = async (id, updatedData) => {
+    if (token && !String(id).startsWith('addr-')) {
+      try {
+        const payload = {
+          fullName: updatedData.name || updatedData.fullName,
+          phoneNumber: updatedData.phone || updatedData.phoneNumber,
+          addressLine1: updatedData.addressLine1 || updatedData.street,
+          addressLine2: updatedData.addressLine2,
+          landmark: updatedData.landmark,
+          city: updatedData.city,
+          state: updatedData.state,
+          postalCode: updatedData.postalCode || updatedData.pincode,
+          addressType: updatedData.addressType || (updatedData.type ? updatedData.type.toLowerCase() : undefined)
+        };
+        const res = await addressApi.updateAddress(id, payload);
+        if (res?.data?.address) {
+          const formatted = formatAddress(res.data.address);
+          setAddresses(prev => prev.map(a => a.id === id ? formatted : a));
+          return formatted;
+        }
+      } catch (err) {
+        console.error('[AuthContext] Backend updateAddress failed:', err);
+        throw err;
+      }
+    }
     setAddresses(prev => prev.map(a => a.id === id ? { ...a, ...updatedData } : a));
   };
 
-  const deleteAddress = (id) => {
+  const deleteAddress = async (id) => {
+    if (token && !String(id).startsWith('addr-')) {
+      try {
+        await addressApi.deleteAddress(id);
+      } catch (err) {
+        console.error('[AuthContext] Backend deleteAddress failed:', err);
+        throw err;
+      }
+    }
     setAddresses(prev => {
       const filtered = prev.filter(a => a.id !== id);
       if (selectedAddressId === id && filtered.length > 0) {
@@ -295,15 +476,95 @@ export function AuthProvider({ children }) {
     });
   };
 
-  const setPrimaryAddress = (id) => {
+  const setPrimaryAddress = async (id) => {
     setSelectedAddressId(id);
+    if (token && !String(id).startsWith('addr-')) {
+      try {
+        await addressApi.setDefaultAddress(id);
+      } catch (err) {
+        console.warn('[AuthContext] Backend setDefaultAddress note:', err.message);
+      }
+    }
     setAddresses(prev => prev.map(a => ({
       ...a,
       isDefault: a.id === id
     })));
   };
 
-  const placeOrder = (orderPayload) => {
+  const placeOrder = async (orderPayload) => {
+    // If authenticated, place real order via backend API
+    if (token) {
+      const targetAddress = orderPayload.address || addresses.find(a => a.id === selectedAddressId) || addresses[0];
+      let addressId = targetAddress?._id;
+      if (!addressId && targetAddress?.id && /^[0-9a-fA-F]{24}$/.test(String(targetAddress.id))) {
+        addressId = targetAddress.id;
+      }
+
+      // Auto-persist mock/local address to backend DB if it does not have a real MongoDB ID
+      if (!addressId && targetAddress) {
+        try {
+          const addrPayload = {
+            fullName: targetAddress.name || targetAddress.fullName || user?.name || 'Customer',
+            phoneNumber: targetAddress.phone || targetAddress.phoneNumber || user?.phone || '9876543210',
+            addressLine1: targetAddress.street || targetAddress.addressLine1 || 'Main Street',
+            addressLine2: targetAddress.addressLine2 || '',
+            landmark: targetAddress.landmark || '',
+            city: targetAddress.city || 'Indore',
+            state: targetAddress.state || 'Madhya Pradesh',
+            postalCode: targetAddress.pincode || targetAddress.postalCode || '452001',
+            addressType: (targetAddress.type || 'home').toLowerCase()
+          };
+          const newAddrRes = await addressApi.addAddress(addrPayload);
+          if (newAddrRes?.data?.address?._id) {
+            addressId = newAddrRes.data.address._id;
+            const formattedAddr = formatAddress(newAddrRes.data.address);
+            setAddresses(prev => [formattedAddr, ...prev.filter(a => a.id !== targetAddress.id)]);
+            setSelectedAddressId(formattedAddr.id);
+          }
+        } catch (addrErr) {
+          console.warn('[AuthContext] Auto-sync address error:', addrErr.message);
+        }
+      }
+
+      let normalizedPayment = 'COD';
+      const rawPayment = orderPayload.paymentMethod || '';
+      if (rawPayment.includes('UPI')) normalizedPayment = 'UPI';
+      else if (rawPayment.includes('Card')) normalizedPayment = 'CARD';
+      else if (rawPayment.includes('Net')) normalizedPayment = 'NETBANKING';
+
+      const payload = {
+        addressId,
+        paymentMethod: normalizedPayment,
+        paymentDetails: {
+          transactionId: orderPayload.paymentDetails?.transactionId || '',
+          upiApp: orderPayload.selectedUpiApp || ''
+        },
+        couponCode: orderPayload.couponApplied || undefined,
+        idempotencyKey: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      };
+
+      const res = await orderApi.placeOrder(payload);
+      if (res && res.data && res.data.order) {
+        const formatted = formatOrder(res.data.order);
+        setOrders(prev => [formatted, ...prev]);
+
+        // Trigger confetti
+        try {
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#D4AF37', '#1B3B29', '#E5C358', '#0E2A1B']
+          });
+        } catch {
+          // ignore
+        }
+
+        return formatted.id;
+      }
+    }
+
+    // Fallback simulation for offline testing
     const newOrderId = `AV${Math.floor(10000 + Math.random() * 90000)}`;
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -349,29 +610,6 @@ export function AuthProvider({ children }) {
 
     setOrders(prev => [newOrder, ...prev]);
 
-    // Give loyalty reward points (10% of total) if logged in
-    const pointsEarned = Math.round(orderPayload.total * 0.1);
-    if (user) {
-      setUser(prev => ({
-        ...prev,
-        rewardsPoints: (prev.rewardsPoints || 0) + pointsEarned
-      }));
-
-      // Update Customer CRM record
-      setCustomers(prev => prev.map(c => {
-        if (c.email === user.email) {
-          return {
-            ...c,
-            totalOrders: (c.totalOrders || 0) + 1,
-            totalSpent: (c.totalSpent || 0) + orderPayload.total,
-            rewardsPoints: (c.rewardsPoints || 0) + pointsEarned
-          };
-        }
-        return c;
-      }));
-    }
-
-    // Trigger celebration confetti
     try {
       confetti({
         particleCount: 80,
@@ -427,8 +665,24 @@ export function AuthProvider({ children }) {
     }));
   };
 
-  const cancelOrder = (orderId, reason = "Customer requested cancellation") => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "Cancelled", cancelReason: reason } : o));
+  const cancelOrder = async (orderId, reason = "Customer requested cancellation") => {
+    // 1. Optimistic UI update
+    setOrders(prev => prev.map(o => (o.id === orderId || o._id === orderId) ? { ...o, status: "Cancelled", cancelReason: reason } : o));
+
+    // 2. Real API call if authenticated
+    if (token) {
+      try {
+        const res = await orderApi.cancelOrder(orderId, reason);
+        if (res?.data?.order) {
+          const formatted = formatOrder(res.data.order);
+          setOrders(prev => prev.map(o => (o.id === orderId || o._id === orderId) ? formatted : o));
+          return formatted;
+        }
+      } catch (err) {
+        console.warn('[AuthContext] Backend cancelOrder note:', err.message);
+        throw err;
+      }
+    }
   };
 
   const updateProfile = (data) => {

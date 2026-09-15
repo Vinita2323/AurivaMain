@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { PRODUCTS } from '../data/products';
 import { INITIAL_COUPONS } from '../data/coupons';
 import { CATEGORIES } from '../data/categories';
@@ -7,7 +7,7 @@ import { BANNERS_DATA } from '../data/adminData';
 
 const AdminContext = createContext();
 
-export const INITIAL_SETTINGS = {
+const INITIAL_SETTINGS = {
   storeName: "AURIVÁ Foods Private Limited",
   supportEmail: "care@aurivafoods.com",
   supportPhone: "+91 9876543210",
@@ -19,7 +19,7 @@ export const INITIAL_SETTINGS = {
   currency: "₹"
 };
 
-export const INITIAL_PROMOTIONS = [
+const INITIAL_PROMOTIONS = [
   {
     id: "promo-1",
     name: "Festive Monsoon Super Saver",
@@ -61,12 +61,35 @@ export const INITIAL_PROMOTIONS = [
   }
 ];
 
-import { adminAuthApi, productApi } from '../utils/api';
+import { adminAuthApi, productApi, categoryApi, adminSettingsApi, settingsApi, adminReviewApi, reviewApi, adminCouponApi } from '../utils/api';
 
-export const DEFAULT_ADMIN_CREDENTIALS = {
+const DEFAULT_ADMIN_CREDENTIALS = {
   email: "admin@aurivafoods.com",
   password: "admin"
 };
+
+export const normalizeCoupon = (c) => ({
+  ...c,
+  id: (c._id || c.id)?.toString(),
+  _id: (c._id || c.id)?.toString(),
+  code: (c.code || '').toUpperCase(),
+  type: c.discountType === 'PERCENTAGE' ? 'Percentage' : (c.discountType === 'FIXED' ? 'Flat' : (c.type || 'Percentage')),
+  discountType: c.discountType || (c.type === 'Flat' ? 'FIXED' : 'PERCENTAGE'),
+  discount: c.discountValue !== undefined ? c.discountValue : (c.discount || 0),
+  discountValue: c.discountValue !== undefined ? c.discountValue : (c.discount || 0),
+  minOrder: c.minOrderValue !== undefined ? c.minOrderValue : (c.minOrder || 0),
+  minOrderValue: c.minOrderValue !== undefined ? c.minOrderValue : (c.minOrder || 0),
+  maxDiscount: c.maxDiscount || 0,
+  usageLimit: c.usageLimit || 0,
+  usageCount: c.usedCount !== undefined ? c.usedCount : (c.usageCount || 0),
+  usedCount: c.usedCount !== undefined ? c.usedCount : (c.usageCount || 0),
+  status: (c.status === 'ACTIVE' || c.status === 'Active') ? 'Active' : 'Inactive',
+  startDate: c.startDate,
+  endDate: c.endDate,
+  validity: c.endDate
+    ? `Valid until ${new Date(c.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
+    : (c.validity || 'Ongoing')
+});
 
 export function AdminProvider({ children }) {
   // 0. Admin Authentication State
@@ -182,7 +205,7 @@ export function AdminProvider({ children }) {
     return PRODUCTS;
   });
 
-  // 2. Categories State (Active Mock Subcategories)
+  // 2. Categories State
   const [categories, setCategories] = useState(() => {
     try {
       const saved = localStorage.getItem('auriva_admin_categories');
@@ -190,11 +213,11 @@ export function AdminProvider({ children }) {
         const parsed = JSON.parse(saved);
         return parsed.map(c => {
           const defaultCat = CATEGORIES.find(dc => dc.id === c.id || dc.slug === c.slug);
+          const { subcategories, ...cleanC } = c;
           return {
-            ...c,
+            ...cleanC,
             status: c.status || 'Active',
-            order: c.order || defaultCat?.order || 1,
-            subcategories: (c.subcategories && c.subcategories.length > 0) ? c.subcategories : (defaultCat?.subcategories || [])
+            order: c.order || defaultCat?.order || 1
           };
         });
       }
@@ -288,7 +311,7 @@ export function AdminProvider({ children }) {
     try { localStorage.setItem('auriva_admin_promotions', JSON.stringify(promotions)); } catch (e) { console.error(e); }
   }, [promotions]);
 
-  // Sync products from backend on mount
+  // Sync products from backend on mount with smart merging
   const refreshProducts = async () => {
     try {
       const res = await productApi.getAllProducts();
@@ -298,7 +321,15 @@ export function AdminProvider({ children }) {
           id: (p._id || p.id)?.toString()
         }));
         if (fetched.length > 0) {
-          setProducts(fetched);
+          setProducts(prev => {
+            const serverIds = new Set(fetched.map(p => String(p.id || p._id)));
+            const serverSlugs = new Set(fetched.map(p => p.slug));
+            const localOnly = (prev || []).filter(p => {
+              const pid = String(p.id || p._id || '');
+              return !serverIds.has(pid) && !serverSlugs.has(p.slug);
+            });
+            return [...localOnly, ...fetched];
+          });
         }
       }
     } catch (err) {
@@ -306,8 +337,103 @@ export function AdminProvider({ children }) {
     }
   };
 
+  // Category Sync from Backend API
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState(null);
+
+  const refreshCategories = async () => {
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    try {
+      let res;
+      try {
+        res = await categoryApi.getCategories();
+      } catch (adminErr) {
+        console.warn('[AdminContext] Admin categories endpoint error, trying public endpoint:', adminErr.message);
+        res = await categoryApi.getActiveCategories();
+      }
+      const rawList = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.data?.categories)
+          ? res.data.categories
+          : [];
+      if (rawList.length > 0) {
+        const fetched = rawList.map(c => ({
+          ...c,
+          id: (c._id || c.id)?.toString(),
+          order: c.order || c.sortOrder || 1,
+          sortOrder: c.sortOrder || c.order || 1,
+          status: c.status || 'Active'
+        }));
+        setCategories(prev => {
+          const serverIds = new Set(fetched.map(c => String(c.id || c._id)));
+          const serverSlugs = new Set(fetched.map(c => c.slug));
+          // Retain any locally created or custom categories that aren't yet on server
+          const localOnly = prev.filter(c => {
+            const cid = String(c.id || c._id || '');
+            return !serverIds.has(cid) && !serverSlugs.has(c.slug);
+          });
+          return [...localOnly, ...fetched];
+        });
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Could not fetch categories from backend API, using cached state:', err.message);
+      setCategoriesError(err.message || 'Could not fetch categories from server');
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  // Store Settings Sync from Backend API
+  const refreshSettings = async () => {
+    try {
+      let res;
+      if (isAdminAuthenticated) {
+        try {
+          res = await adminSettingsApi.getSettings();
+        } catch (adminErr) {
+          res = await settingsApi.getPublicSettings();
+        }
+      } else {
+        res = await settingsApi.getPublicSettings();
+      }
+      if (res && res.data && res.data.settings) {
+        setSettings(prev => ({ ...prev, ...res.data.settings }));
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Could not fetch settings from API, using cached state:', err.message);
+    }
+  };
+
+  // Reviews State & Backend API Sync
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsStats, setReviewsStats] = useState(null);
+
+  const refreshReviews = async (params = {}) => {
+    setReviewsLoading(true);
+    try {
+      const res = await adminReviewApi.getAllReviews(params);
+      if (res && res.data) {
+        if (Array.isArray(res.data.reviews)) {
+          setReviews(res.data.reviews);
+        }
+        if (res.data.stats) {
+          setReviewsStats(res.data.stats);
+        }
+        return res.data;
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Could not fetch reviews from backend API, using cached state:', err.message);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
   useEffect(() => {
     refreshProducts();
+    refreshCategories();
+    refreshSettings();
+    refreshReviews();
   }, []);
 
   // Product Actions
@@ -331,7 +457,10 @@ export function AdminProvider({ children }) {
       stockCount: stockCount,
       isBestseller: isBestseller,
       badge: productData.badge || (isBestseller ? "BESTSELLER" : "New"),
-      image: productData.image || "/src/assets/user/Types/PeriPeri.jpeg",
+      image: productData.image || productData.gallery?.[0] || "/src/assets/user/Types/PeriPeri.jpeg",
+      gallery: Array.isArray(productData.gallery) && productData.gallery.length > 0
+        ? productData.gallery
+        : (productData.image ? [productData.image] : ["/src/assets/user/Types/PeriPeri.jpeg"]),
       weight: productData.weight || '150g',
       inStock: productData.inStock !== false,
       rating: Number(productData.rating || 4.8),
@@ -361,34 +490,40 @@ export function AdminProvider({ children }) {
         return saved;
       }
     } catch (err) {
-      console.warn('[AdminContext] Backend product create failed:', err.message);
+      console.warn('[AdminContext] Backend product create failed, rolling back:', err.message);
+      // Rollback optimistic UI update
+      setProducts(prev => prev.filter(p => (p.id || p._id) !== tempId));
       throw err;
     }
     return newProduct;
   };
 
   const updateProduct = async (id, updatedData) => {
+    const targetId = id?.toString();
+    const prevProducts = [...products];
     // Optimistic UI update
-    setProducts(prev => prev.map(p => (p.id === id || p._id === id) ? { ...p, ...updatedData } : p));
+    setProducts(prev => prev.map(p => ((p.id || p._id)?.toString() === targetId) ? { ...p, ...updatedData } : p));
 
     try {
-      const res = await productApi.updateProduct(id, updatedData);
+      const res = await productApi.updateProduct(targetId, updatedData);
       if (res && res.data && res.data.product) {
         const saved = {
           ...res.data.product,
           id: (res.data.product._id || res.data.product.id).toString()
         };
-        setProducts(prev => prev.map(p => (p.id === id || p._id === id) ? saved : p));
-        await refreshProducts();
+        setProducts(prev => prev.map(p => ((p.id || p._id)?.toString() === targetId) ? saved : p));
         return saved;
       }
     } catch (err) {
-      console.warn('[AdminContext] Backend product update failed:', err.message);
+      console.warn('[AdminContext] Backend product update failed, rolling back:', err.message);
+      // Rollback optimistic UI update
+      setProducts(prevProducts);
       throw err;
     }
   };
 
   const deleteProduct = async (id) => {
+    const prevProducts = [...products];
     // Optimistic UI update
     setProducts(prev => prev.filter(p => p.id !== id && p._id !== id));
 
@@ -396,12 +531,14 @@ export function AdminProvider({ children }) {
       await productApi.deleteProduct(id);
       await refreshProducts();
     } catch (err) {
-      console.warn('[AdminContext] Backend product deletion failed:', err.message);
+      console.warn('[AdminContext] Backend product deletion failed, rolling back:', err.message);
+      setProducts(prevProducts);
       throw err;
     }
   };
 
   const toggleProductStatus = async (id) => {
+    const prevProducts = [...products];
     setProducts(prev => prev.map(p => {
       if (p.id === id || p._id === id) {
         const nextInStock = !p.inStock;
@@ -418,7 +555,8 @@ export function AdminProvider({ children }) {
         await refreshProducts();
       }
     } catch (err) {
-      console.warn('[AdminContext] Backend product status toggle failed:', err.message);
+      console.warn('[AdminContext] Backend product status toggle failed, rolling back:', err.message);
+      setProducts(prevProducts);
       throw err;
     }
   };
@@ -454,71 +592,251 @@ export function AdminProvider({ children }) {
     });
   };
 
-  // Category Actions
-  const addCategory = (categoryData) => {
+  // Category Actions (Backend API + Optimistic UI)
+  const addCategory = async (categoryData) => {
     const slug = (categoryData.slug || categoryData.name || `cat-${Date.now()}`)
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    const newCategory = {
+    const orderNum = Number(categoryData.order || categoryData.sortOrder || 1);
+    const payload = {
       ...categoryData,
-      id: categoryData.id || `cat-${Date.now()}`,
-      slug: slug,
-      count: 0,
+      slug,
+      order: orderNum,
+      sortOrder: orderNum,
+      status: categoryData.status || 'Active',
       badge: categoryData.badge || 'Popular',
       popular: categoryData.popular !== false,
       image: categoryData.image || "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop&q=80"
     };
+
+    const tempId = categoryData.id || `cat-${Date.now()}`;
+    const newCategory = { ...payload, id: tempId };
+
+    // Optimistic UI update
     setCategories(prev => [...prev, newCategory]);
+
+    try {
+      const res = await categoryApi.createCategory(payload);
+      if (res && res.data) {
+        const saved = {
+          ...res.data,
+          id: (res.data._id || res.data.id).toString(),
+          order: res.data.order || res.data.sortOrder || orderNum,
+          sortOrder: res.data.sortOrder || res.data.order || orderNum
+        };
+        setCategories(prev => [
+          ...prev.filter(c => (c.id || c._id) !== tempId && (c.id || c._id) !== saved.id),
+          saved
+        ]);
+        return saved;
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend category create failed, rolling back:', err.message);
+      setCategories(prev => prev.filter(c => (c.id || c._id) !== tempId));
+      throw err;
+    }
     return newCategory;
   };
 
-  const updateCategory = (id, updatedData) => {
-    setCategories(prev => prev.map(c => c.id === id ? { ...c, ...updatedData } : c));
+  const updateCategory = async (id, updatedData) => {
+    const targetId = id?.toString();
+    const prevCategories = [...categories];
+
+    // Optimistic UI update
+    setCategories(prev => prev.map(c => {
+      if ((c.id || c._id)?.toString() === targetId) {
+        return { ...c, ...updatedData, id: targetId };
+      }
+      return c;
+    }));
+
+    try {
+      const res = await categoryApi.updateCategory(targetId, updatedData);
+      if (res && res.data) {
+        const saved = {
+          ...res.data,
+          id: (res.data._id || res.data.id).toString(),
+          order: res.data.order || res.data.sortOrder || 1,
+          sortOrder: res.data.sortOrder || res.data.order || 1
+        };
+        setCategories(prev => prev.map(c => ((c.id || c._id)?.toString() === targetId ? saved : c)));
+        return saved;
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend category update error, rolling back:', err.message);
+      setCategories(prevCategories);
+      throw err;
+    }
   };
 
-  const deleteCategory = (id) => {
-    setCategories(prev => prev.filter(c => c.id !== id));
+  const deleteCategory = async (id) => {
+    const targetId = id?.toString();
+    const prevCategories = [...categories];
+
+    try {
+      await categoryApi.deleteCategory(targetId);
+      setCategories(prev => prev.filter(c => (c.id || c._id)?.toString() !== targetId));
+      return { success: true };
+    } catch (err) {
+      console.warn('[AdminContext] Backend category deletion failed:', err.message);
+      setCategories(prevCategories);
+      throw err;
+    }
   };
 
-  // Coupon Actions
-  const addCoupon = (couponData) => {
-    const newCoupon = {
-      ...couponData,
-      id: `coupon-${Date.now()}`,
+  const toggleCategoryStatus = async (id) => {
+    const targetId = id?.toString();
+    const target = categories.find(c => (c.id || c._id)?.toString() === targetId);
+    if (!target) return;
+
+    const nextStatus = target.status === 'Inactive' ? 'Active' : 'Inactive';
+    const prevCategories = [...categories];
+
+    setCategories(prev => prev.map(c => {
+      if ((c.id || c._id)?.toString() === targetId) {
+        return { ...c, status: nextStatus };
+      }
+      return c;
+    }));
+
+    try {
+      const res = await categoryApi.updateCategoryStatus(targetId, nextStatus);
+      if (res && res.data) {
+        const saved = {
+          ...res.data,
+          id: (res.data._id || res.data.id).toString()
+        };
+        setCategories(prev => prev.map(c => ((c.id || c._id)?.toString() === targetId ? saved : c)));
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend category toggle failed, rolling back:', err.message);
+      setCategories(prevCategories);
+      throw err;
+    }
+  };
+
+  // Coupon Actions (Backend API Integration)
+  const refreshCoupons = useCallback(async () => {
+    try {
+      const res = await adminCouponApi.getCoupons({ limit: 100 });
+      if (res && res.data && Array.isArray(res.data.coupons)) {
+        const normalized = res.data.coupons.map(normalizeCoupon);
+        setCoupons(normalized);
+        try {
+          localStorage.setItem('auriva_admin_coupons', JSON.stringify(normalized));
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Could not fetch coupons from backend:', err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCoupons();
+  }, [refreshCoupons]);
+
+  const addCoupon = async (couponData) => {
+    const rawType = (couponData.discountType || (couponData.type === 'Flat' ? 'FIXED' : 'PERCENTAGE')).toUpperCase();
+    const payload = {
       code: (couponData.code || '').toUpperCase().trim(),
-      status: "Active",
-      usageCount: 0,
-      discount: Number(couponData.discount || 15),
-      minOrder: Number(couponData.minOrder || 0),
-      type: couponData.type || "Percentage",
-      validity: couponData.validity || "Valid until Dec 2024",
-      description: couponData.description || "Special promotional discount"
+      description: couponData.description || '',
+      discountType: rawType === 'FIXED' ? 'FIXED' : 'PERCENTAGE',
+      discountValue: Number(couponData.discountValue !== undefined ? couponData.discountValue : (couponData.discount || 0)),
+      minOrderValue: Number(couponData.minOrderValue !== undefined ? couponData.minOrderValue : (couponData.minOrder || 0)),
+      maxDiscount: Number(couponData.maxDiscount || 0),
+      startDate: couponData.startDate ? new Date(couponData.startDate) : new Date(),
+      endDate: couponData.endDate ? new Date(couponData.endDate) : null,
+      usageLimit: Number(couponData.usageLimit || 0),
+      status: (couponData.status === 'Inactive' || couponData.status === 'INACTIVE') ? 'INACTIVE' : 'ACTIVE'
     };
-    setCoupons(prev => [newCoupon, ...prev]);
-    return newCoupon;
+
+    try {
+      const res = await adminCouponApi.createCoupon(payload);
+      if (res && res.data && res.data.coupon) {
+        const normalized = normalizeCoupon(res.data.coupon);
+        setCoupons(prev => [normalized, ...prev]);
+        return normalized;
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend coupon creation failed:', err.message);
+      throw err;
+    } finally {
+      await refreshCoupons();
+    }
   };
 
-  const updateCoupon = (id, updatedData) => {
-    setCoupons(prev => prev.map(c => c.id === id ? { ...c, ...updatedData } : c));
+  const updateCoupon = async (id, updatedData) => {
+    const targetId = (id?._id || id?.id || id)?.toString();
+    const payload = {
+      ...(updatedData.code ? { code: updatedData.code.toUpperCase().trim() } : {}),
+      ...(updatedData.description !== undefined ? { description: updatedData.description } : {}),
+      ...(updatedData.discountType ? { discountType: updatedData.discountType.toUpperCase() } : updatedData.type ? { discountType: updatedData.type === 'Flat' ? 'FIXED' : 'PERCENTAGE' } : {}),
+      ...(updatedData.discountValue !== undefined ? { discountValue: Number(updatedData.discountValue) } : updatedData.discount !== undefined ? { discountValue: Number(updatedData.discount) } : {}),
+      ...(updatedData.minOrderValue !== undefined ? { minOrderValue: Number(updatedData.minOrderValue) } : updatedData.minOrder !== undefined ? { minOrderValue: Number(updatedData.minOrder) } : {}),
+      ...(updatedData.maxDiscount !== undefined ? { maxDiscount: Number(updatedData.maxDiscount) } : {}),
+      ...(updatedData.startDate ? { startDate: new Date(updatedData.startDate) } : {}),
+      ...(updatedData.endDate !== undefined ? { endDate: updatedData.endDate ? new Date(updatedData.endDate) : null } : {}),
+      ...(updatedData.usageLimit !== undefined ? { usageLimit: Number(updatedData.usageLimit) } : {}),
+      ...(updatedData.status ? { status: (updatedData.status === 'Active' || updatedData.status === 'ACTIVE') ? 'ACTIVE' : 'INACTIVE' } : {})
+    };
+
+    try {
+      const res = await adminCouponApi.updateCoupon(targetId, payload);
+      if (res && res.data && res.data.coupon) {
+        const normalized = normalizeCoupon(res.data.coupon);
+        setCoupons(prev => prev.map(c => ((c.id || c._id)?.toString() === targetId ? normalized : c)));
+        return normalized;
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend coupon update failed:', err.message);
+      throw err;
+    } finally {
+      await refreshCoupons();
+    }
   };
 
-  const deleteCoupon = (id) => {
-    setCoupons(prev => prev.filter(c => c.id !== id));
+  const deleteCoupon = async (id) => {
+    const targetId = (id?._id || id?.id || id)?.toString();
+    const prevCoupons = [...coupons];
+    setCoupons(prev => prev.filter(c => (c.id || c._id)?.toString() !== targetId));
+
+    try {
+      await adminCouponApi.deleteCoupon(targetId);
+    } catch (err) {
+      console.warn('[AdminContext] Backend coupon delete failed, rolling back:', err.message);
+      setCoupons(prevCoupons);
+      throw err;
+    }
   };
 
-  const toggleCouponStatus = (id) => {
+  const toggleCouponStatus = async (id) => {
+    const targetId = (id?._id || id?.id || id)?.toString();
+    const target = coupons.find(c => (c.id || c._id)?.toString() === targetId);
+    if (!target) return;
+
+    const nextStatus = (target.status === 'Active' || target.status === 'ACTIVE') ? 'INACTIVE' : 'ACTIVE';
+    const prevCoupons = [...coupons];
+
     setCoupons(prev => prev.map(c => {
-      if (c.id === id) {
+      if ((c.id || c._id)?.toString() === targetId) {
         return {
           ...c,
-          status: c.status === "Active" ? "Inactive" : "Active"
+          status: nextStatus === 'ACTIVE' ? 'Active' : 'Inactive'
         };
       }
       return c;
     }));
+
+    try {
+      await adminCouponApi.updateCoupon(targetId, { status: nextStatus });
+    } catch (err) {
+      console.warn('[AdminContext] Backend coupon status toggle failed, rolling back:', err.message);
+      setCoupons(prevCoupons);
+      throw err;
+    }
   };
 
   // Banner Actions
@@ -565,24 +883,56 @@ export function AdminProvider({ children }) {
     return newReview;
   };
 
-  const approveReview = (id) => {
-    setReviews(prev => prev.map(r => r.id === id ? { ...r, status: 'Approved' } : r));
+  const approveReview = async (id) => {
+    setReviews(prev => prev.map(r => (r.id === id || r._id === id) ? { ...r, status: 'Approved' } : r));
+    try {
+      await adminReviewApi.updateReviewStatus(id, 'APPROVED');
+      refreshReviews();
+      refreshProducts();
+    } catch (e) {
+      console.warn('API review approval failed, saved locally:', e.message);
+    }
   };
 
-  const featureReview = (id) => {
-    setReviews(prev => prev.map(r => r.id === id ? { ...r, featured: !r.featured, status: 'Approved' } : r));
+  const featureReview = async (id) => {
+    const target = reviews.find(r => r.id === id || r._id === id);
+    const newFeatured = !target?.featured;
+    setReviews(prev => prev.map(r => (r.id === id || r._id === id) ? { ...r, featured: newFeatured, status: 'Approved' } : r));
+    try {
+      await adminReviewApi.toggleReviewFeatured(id, newFeatured);
+    } catch (e) {
+      console.warn('API review feature toggle failed:', e.message);
+    }
   };
 
-  const rejectReview = (id) => {
-    setReviews(prev => prev.map(r => r.id === id ? { ...r, status: 'Rejected' } : r));
+  const rejectReview = async (id) => {
+    setReviews(prev => prev.map(r => (r.id === id || r._id === id) ? { ...r, status: 'Rejected', featured: false } : r));
+    try {
+      await adminReviewApi.updateReviewStatus(id, 'REJECTED');
+      refreshReviews();
+      refreshProducts();
+    } catch (e) {
+      console.warn('API review rejection failed, saved locally:', e.message);
+    }
   };
 
-  const replyToReview = (id, replyText) => {
-    setReviews(prev => prev.map(r => r.id === id ? { ...r, adminReply: replyText } : r));
+  const replyToReview = async (id, replyText) => {
+    setReviews(prev => prev.map(r => (r.id === id || r._id === id) ? { ...r, adminReply: replyText } : r));
+    try {
+      await adminReviewApi.replyToReview(id, replyText);
+    } catch (e) {
+      console.warn('API review reply failed, saved locally:', e.message);
+    }
   };
 
-  const deleteReview = (id) => {
-    setReviews(prev => prev.filter(r => r.id !== id));
+  const deleteReview = async (id) => {
+    setReviews(prev => prev.filter(r => r.id !== id && r._id !== id));
+    try {
+      await adminReviewApi.deleteReview(id);
+      refreshProducts();
+    } catch (e) {
+      console.warn('API review deletion failed:', e.message);
+    }
   };
 
   // Promotion Campaign Actions
@@ -617,8 +967,18 @@ export function AdminProvider({ children }) {
   };
 
   // Settings Actions
-  const updateSettings = (newSettings) => {
+  const updateSettings = async (newSettings) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
+    try {
+      const res = await adminSettingsApi.updateSettings(newSettings);
+      if (res && res.data && res.data.settings) {
+        setSettings(res.data.settings);
+        return { success: true, settings: res.data.settings };
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Server settings update failed, saved locally:', err.message);
+    }
+    return { success: true };
   };
 
   return (
@@ -646,10 +1006,15 @@ export function AdminProvider({ children }) {
       adjustProductStock,
       bulkRestock,
       // Category Actions
+      categoriesLoading,
+      categoriesError,
+      refreshCategories,
       addCategory,
       updateCategory,
       deleteCategory,
+      toggleCategoryStatus,
       // Coupon Actions
+      refreshCoupons,
       addCoupon,
       updateCoupon,
       deleteCoupon,
@@ -659,6 +1024,9 @@ export function AdminProvider({ children }) {
       updateBanner,
       deleteBanner,
       // Review Actions
+      reviewsLoading,
+      reviewsStats,
+      refreshReviews,
       addReview,
       approveReview,
       featureReview,
@@ -671,7 +1039,8 @@ export function AdminProvider({ children }) {
       deletePromotion,
       togglePromotionStatus,
       // Settings Actions
-      updateSettings
+      updateSettings,
+      refreshSettings
     }}>
       {children}
     </AdminContext.Provider>

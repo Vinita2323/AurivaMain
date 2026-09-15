@@ -5,23 +5,32 @@ import adminAuthService from './services/adminAuthService.js';
 import userAuthService from './services/userAuthService.js';
 import productService from './services/productService.js';
 import bestsellerService from './services/bestsellerService.js';
+import categoryService from './services/categoryService.js';
+import couponService from './services/couponService.js';
 import User from './models/User.js';
+import Category from './models/Category.js';
 
 /**
  * Start Auriva Backend Server
  */
 const startServer = async () => {
   try {
-    // 1. Connect to MongoDB
-    const conn = await connectDB();
-    if (conn) {
-      // Sync schema indexes and seed defaults
+    const initializeDatabase = async () => {
+      console.log('[Database Init] Synchronizing indexes and ensuring seed defaults...');
       await User.syncIndexes().catch(() => {});
-      await adminAuthService.ensureDefaultAdmin();
-      await userAuthService.ensureDefaultDemoUsers();
-      await productService.seedInitialProducts();
-      await bestsellerService.seedInitialBestsellers();
-    }
+      await Category.syncIndexes().catch(() => {});
+      await adminAuthService.ensureDefaultAdmin().catch((e) => console.warn('[Admin Seed Note]', e.message));
+      await userAuthService.ensureDefaultDemoUsers().catch((e) => console.warn('[User Seed Note]', e.message));
+      await categoryService.seedInitialCategories().catch((e) => console.warn('[Category Seed Note]', e.message));
+      await productService.seedInitialProducts().catch((e) => console.warn('[Product Seed Note]', e.message));
+      await bestsellerService.seedInitialBestsellers().catch((e) => console.warn('[Bestseller Seed Note]', e.message));
+      await couponService.seedInitialCoupons().catch((e) => console.warn('[Coupon Seed Note]', e.message));
+      console.log('[Database Init] Database synchronization complete.');
+    };
+
+    // 1. Connect to MongoDB with automated initialization on connection
+    await connectDB(initializeDatabase);
+
 
     // 2. Start Express HTTP Server
     const server = app.listen(env.PORT, () => {

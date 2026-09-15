@@ -25,6 +25,12 @@ const env = {
     API_KEY: process.env.CLOUDINARY_API_KEY || '',
     API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
     FOLDER: process.env.CLOUDINARY_FOLDER || 'auriva_products'
+  },
+  RAZORPAY: {
+    KEY_ID: process.env.RAZORPAY_KEY_ID || '',
+    KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
+    WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+    IS_CONFIGURED: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
   }
 };
 

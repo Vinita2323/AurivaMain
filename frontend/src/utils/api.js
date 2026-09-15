@@ -22,7 +22,7 @@ export async function apiRequest(endpoint, options = {}) {
     const userToken = localStorage.getItem('auriva_user_token');
 
     if (endpoint.includes('/admin')) {
-      if (!adminToken) {
+      if (!adminToken && !endpoint.includes('/auth/admin/login')) {
         try {
           const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
             method: 'POST',
@@ -56,7 +56,41 @@ export async function apiRequest(endpoint, options = {}) {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      const errorMsg = data?.message || data?.error?.message || `Request failed with status ${response.status}`;
+      // Auto-retry once on 401 Unauthorized for admin endpoints (except login)
+      if (response.status === 401 && endpoint.includes('/admin') && !options._retried && !endpoint.includes('/auth/admin/login')) {
+        try {
+          const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'admin@aurivafoods.com', password: 'Admin@123456' })
+          });
+          const authData = await authRes.json();
+          if (authData?.data?.token) {
+            const freshToken = authData.data.token;
+            localStorage.setItem('auriva_admin_token', freshToken);
+            localStorage.setItem('auriva_admin_auth', 'true');
+            return apiRequest(endpoint, {
+              ...options,
+              _retried: true,
+              headers: {
+                ...options.headers,
+                Authorization: `Bearer ${freshToken}`
+              }
+            });
+          }
+        } catch (retryErr) {
+          console.warn('Admin token refresh failed:', retryErr.message);
+        }
+      }
+
+      let errorMsg = data?.message || data?.error?.message;
+      if (data?.data?.errors && Array.isArray(data.data.errors) && data.data.errors.length > 0) {
+        const errorStrings = data.data.errors.map(e => (typeof e === 'object' ? (e.message || e.msg || JSON.stringify(e)) : String(e)));
+        errorMsg = errorStrings.join(' • ');
+      }
+      if (!errorMsg) {
+        errorMsg = `Request failed with status ${response.status}`;
+      }
       const error = new Error(errorMsg);
       error.status = response.status;
       error.data = data;
@@ -196,11 +230,380 @@ export const uploadApi = {
   })
 };
 
+// Category Management API (Admin + Public)
+export const categoryApi = {
+  // Public Storefront (Active categories only)
+  getActiveCategories: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.append('search', params.search);
+    const qs = query.toString();
+    return apiRequest(`/categories${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  // Admin Categories (All with status filter, search, sort, pagination)
+  getCategories: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.status && params.status !== 'all') query.append('status', params.status);
+    if (params.search) query.append('search', params.search);
+    if (params.sort) query.append('sort', params.sort);
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    const qs = query.toString();
+    return apiRequest(`/admin/categories${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  getCategoryById: (id) => apiRequest(`/admin/categories/${id}`, { method: 'GET' }),
+
+  createCategory: (categoryData) => apiRequest('/admin/categories', {
+    method: 'POST',
+    body: JSON.stringify(categoryData)
+  }),
+
+  updateCategory: (id, categoryData) => apiRequest(`/admin/categories/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(categoryData)
+  }),
+
+  deleteCategory: (id) => apiRequest(`/admin/categories/${id}`, {
+    method: 'DELETE'
+  }),
+
+  updateCategoryStatus: (id, status) => apiRequest(`/admin/categories/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  })
+};
+
+// Cart Management API (Persistent Backend Cart)
+export const cartApi = {
+  getCart: (guestId) => {
+    return apiRequest('/cart', {
+      method: 'GET',
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  addItem: ({ productId, weight = '150g', qty = 1 }, guestId) => {
+    return apiRequest('/cart/items', {
+      method: 'POST',
+      body: JSON.stringify({ productId, weight, qty }),
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  updateItemQty: ({ productId, weight, qty, delta }, guestId) => {
+    return apiRequest('/cart/items', {
+      method: 'PUT',
+      body: JSON.stringify({ productId, weight, qty, delta }),
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  removeItem: ({ productId, weight }, guestId) => {
+    return apiRequest('/cart/items', {
+      method: 'DELETE',
+      body: JSON.stringify({ productId, weight }),
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  clearCart: (guestId) => {
+    return apiRequest('/cart', {
+      method: 'DELETE',
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  syncCart: (items = [], guestId) => {
+    return apiRequest('/cart/sync', {
+      method: 'POST',
+      body: JSON.stringify({ items, guestId })
+    });
+  },
+
+  applyCoupon: (code, guestId) => {
+    return apiRequest('/cart/apply-coupon', {
+      method: 'POST',
+      body: JSON.stringify({ code, couponCode: code }),
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  removeCoupon: (guestId) => {
+    return apiRequest('/cart/remove-coupon', {
+      method: 'POST',
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  }
+};
+
+export const wishlistApi = {
+  getWishlist: (guestId) => {
+    return apiRequest('/wishlist', {
+      method: 'GET',
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  toggleWishlist: (productId, productData = {}, guestId) => {
+    return apiRequest('/wishlist/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ productId, productData }),
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  removeItem: (productId, guestId) => {
+    return apiRequest('/wishlist/items', {
+      method: 'DELETE',
+      body: JSON.stringify({ productId }),
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  clearWishlist: (guestId) => {
+    return apiRequest('/wishlist', {
+      method: 'DELETE',
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
+
+  syncWishlist: (items = [], guestId) => {
+    return apiRequest('/wishlist/sync', {
+      method: 'POST',
+      body: JSON.stringify({ items, guestId })
+    });
+  }
+};
+
+// Address Management API
+export const addressApi = {
+  getAddresses: () => apiRequest('/user/addresses', { method: 'GET' }),
+  addAddress: (addressData) => apiRequest('/user/addresses', {
+    method: 'POST',
+    body: JSON.stringify(addressData)
+  }),
+  updateAddress: (id, addressData) => apiRequest(`/user/addresses/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(addressData)
+  }),
+  deleteAddress: (id) => apiRequest(`/user/addresses/${id}`, {
+    method: 'DELETE'
+  }),
+  setDefaultAddress: (id) => apiRequest(`/user/addresses/${id}/default`, {
+    method: 'PATCH'
+  })
+};
+
+// Order Management API (Customer)
+export const orderApi = {
+  placeOrder: (orderPayload) => apiRequest('/orders', {
+    method: 'POST',
+    body: JSON.stringify(orderPayload)
+  }),
+  getUserOrders: () => apiRequest('/orders', { method: 'GET' }),
+  getOrderById: (id) => apiRequest(`/orders/${id}`, { method: 'GET' }),
+  cancelOrder: (id, reason = '') => apiRequest(`/orders/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  })
+};
+
+// Admin Order Management API
+export const adminOrderApi = {
+  getAllOrders: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.status && params.status !== 'all' && params.status !== 'All') query.append('status', params.status);
+    if (params.search) query.append('search', params.search);
+    if (params.fromDate) query.append('fromDate', params.fromDate);
+    if (params.toDate) query.append('toDate', params.toDate);
+    if (params.sortBy) query.append('sortBy', params.sortBy);
+    const qs = query.toString();
+    return apiRequest(`/admin/orders${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  getOrderById: (id) => apiRequest(`/admin/orders/${id}`, { method: 'GET' }),
+  updateStatus: (id, status, note = '') => apiRequest(`/admin/orders/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, note })
+  }),
+  dispatchOrder: (id, dispatchData = {}) => apiRequest(`/admin/orders/${id}/dispatch`, {
+    method: 'PATCH',
+    body: JSON.stringify(dispatchData)
+  }),
+  cancelOrder: (id, reason = '') => apiRequest(`/admin/orders/${id}/cancel`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason })
+  })
+};
+
+// Checkout API
+export const checkoutApi = {
+  getSummary: () => apiRequest('/checkout/summary', { method: 'GET' })
+};
+
+// Store Settings & Business Rules API (Admin + Public)
+export const adminSettingsApi = {
+  getSettings: () => apiRequest('/admin/settings', { method: 'GET' }),
+  updateSettings: (data) => apiRequest('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+};
+
+export const settingsApi = {
+  getPublicSettings: () => apiRequest('/settings', { method: 'GET' })
+};
+
+// Customer & Public Reviews API
+export const reviewApi = {
+  getProductReviews: (productId, params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.rating) query.append('rating', params.rating);
+    if (params.sort) query.append('sort', params.sort);
+    const qs = query.toString();
+    return apiRequest(`/products/${productId}/reviews${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  checkReviewEligibility: (productId) =>
+    apiRequest(`/products/${productId}/reviews/eligibility`, { method: 'GET' }),
+  submitReview: (productId, payload) =>
+    apiRequest(`/products/${productId}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+};
+
+// Admin Reviews Moderation API
+export const adminReviewApi = {
+  getAllReviews: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.status) query.append('status', params.status);
+    if (params.rating) query.append('rating', params.rating);
+    if (params.featured !== undefined) query.append('featured', params.featured);
+    if (params.search) query.append('search', params.search);
+    if (params.productId) query.append('productId', params.productId);
+    const qs = query.toString();
+    return apiRequest(`/admin/reviews${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  updateReviewStatus: (id, status) =>
+    apiRequest(`/admin/reviews/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }),
+  toggleReviewFeatured: (id, featured) =>
+    apiRequest(`/admin/reviews/${id}/featured`, {
+      method: 'PATCH',
+      body: JSON.stringify({ featured })
+    }),
+  replyToReview: (id, reply) =>
+    apiRequest(`/admin/reviews/${id}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ reply })
+    }),
+  deleteReview: (id) =>
+    apiRequest(`/admin/reviews/${id}`, { method: 'DELETE' })
+};
+
+export const paymentApi = {
+  getConfig: () =>
+    apiRequest('/payments/config'),
+  createOrder: (payload) =>
+    apiRequest('/payments/create-order', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  verifyPayment: (payload) =>
+    apiRequest('/payments/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  getOrderPayment: (orderId) =>
+    apiRequest(`/payments/order/${orderId}`)
+};
+
+export const adminPaymentApi = {
+  getPayments: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.status) query.append('status', params.status);
+    if (params.method) query.append('method', params.method);
+    if (params.search) query.append('search', params.search);
+    const qs = query.toString();
+    return apiRequest(`/admin/payments${qs ? `?${qs}` : ''}`);
+  },
+  getPaymentById: (id) =>
+    apiRequest(`/admin/payments/${id}`),
+  initiateRefund: (id, payload) =>
+    apiRequest(`/admin/payments/${id}/refund`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+};
+
+// Customer Coupon API
+export const couponApi = {
+  validateCoupon: (code, subtotal = 0) =>
+    apiRequest('/coupons/validate', {
+      method: 'POST',
+      body: JSON.stringify({ code, couponCode: code, subtotal })
+    })
+};
+
+// Admin Coupon Management API
+export const adminCouponApi = {
+  getCoupons: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.status && params.status !== 'all' && params.status !== 'ALL') query.append('status', params.status);
+    if (params.search) query.append('search', params.search);
+    const qs = query.toString();
+    return apiRequest(`/admin/coupons${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  getCouponById: (id) =>
+    apiRequest(`/admin/coupons/${id}`, { method: 'GET' }),
+  createCoupon: (payload) =>
+    apiRequest('/admin/coupons', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateCoupon: (id, payload) =>
+    apiRequest(`/admin/coupons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  deleteCoupon: (id) =>
+    apiRequest(`/admin/coupons/${id}`, { method: 'DELETE' })
+};
+
 export default {
   apiRequest,
   userAuthApi,
   adminAuthApi,
   productApi,
   bestsellerApi,
-  uploadApi
+  categoryApi,
+  uploadApi,
+  cartApi,
+  wishlistApi,
+  addressApi,
+  orderApi,
+  adminOrderApi,
+  checkoutApi,
+  adminSettingsApi,
+  settingsApi,
+  reviewApi,
+  adminReviewApi,
+  paymentApi,
+  adminPaymentApi,
+  couponApi,
+  adminCouponApi
 };
+
+

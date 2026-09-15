@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, UploadCloud, Image as ImageIcon, Trash2, Plus, RefreshCw, Star, Loader2, Cloud, Sparkles } from 'lucide-react';
+import { X, Check, UploadCloud, Image as ImageIcon, Trash2, Plus, RefreshCw, Star, Loader2, Cloud, Sparkles, Link as LinkIcon, Layers } from 'lucide-react';
 
 import { CATEGORIES } from '../../../data/categories';
 import { useAdmin } from '../../../context/AdminContext';
@@ -9,7 +9,6 @@ const EMPTY_PRODUCT = {
   name: '',
   tagline: '',
   category: 'flavoured-makhana',
-  subcategory: '',
   isBestseller: true,
   price: 249,
   oldPrice: 299,
@@ -17,45 +16,77 @@ const EMPTY_PRODUCT = {
   stockCount: 150,
   badge: 'BESTSELLER',
   image: '',
+  gallery: [],
   description: '',
+  details: '',
+  productDetails: '',
   variants: [
     { id: 'v1', name: 'Standard Pack', weight: '150g', price: 249, oldPrice: 299, stock: 150 }
   ]
 };
 
-export default function AddProductModal({ isOpen, onClose, onSave, initialData = null }) {
+export default function AddProductModal({ isOpen, onClose, onSave, initialData = null, categories: propCategories = null }) {
   const [activeTab, setActiveTab] = useState('basic');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadStatusMsg, setUploadStatusMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInputValue, setUrlInputValue] = useState('');
   const fileInputRef = useRef(null);
-  const { categories: adminCategories } = useAdmin();
+  const { categories: adminCategories, refreshCategories } = useAdmin();
 
-  const allCategories = (adminCategories && adminCategories.length > 0) ? adminCategories : CATEGORIES;
+  const allCategories = (propCategories && propCategories.length > 0)
+    ? propCategories
+    : (adminCategories && adminCategories.length > 0)
+      ? adminCategories
+      : CATEGORIES;
 
   const [formData, setFormData] = useState(EMPTY_PRODUCT);
 
   useEffect(() => {
     if (isOpen) {
+      if (refreshCategories) {
+        refreshCategories();
+      }
       if (initialData) {
+        const rawGallery = Array.isArray(initialData.gallery) && initialData.gallery.length > 0
+          ? initialData.gallery
+          : (initialData.image ? [initialData.image] : []);
+        const mainImg = initialData.image || rawGallery[0] || '';
+        const resolvedGallery = rawGallery.includes(mainImg)
+          ? rawGallery
+          : (mainImg ? [mainImg, ...rawGallery] : rawGallery);
+
         setFormData({
           ...initialData,
+          image: mainImg,
+          gallery: resolvedGallery,
           price: initialData.price !== undefined ? initialData.price : 249,
           oldPrice: initialData.oldPrice !== undefined ? initialData.oldPrice : 299,
           stockCount: initialData.stockCount !== undefined ? initialData.stockCount : 150,
-          subcategory: initialData.subcategory || '',
           isBestseller: initialData.isBestseller !== undefined ? Boolean(initialData.isBestseller) : true,
+          description: initialData.description || '',
+          details: initialData.details || initialData.productDetails || '',
+          productDetails: initialData.productDetails || initialData.details || '',
           variants: initialData.variants || [
             { id: 'v1', name: 'Standard Pack', weight: initialData.weight || '150g', price: initialData.price || 249, oldPrice: initialData.oldPrice || 299, stock: initialData.stockCount || 150 }
           ]
         });
       } else {
-        setFormData(EMPTY_PRODUCT);
+        const defaultCat = (allCategories && allCategories.length > 0)
+          ? (allCategories[0].slug || allCategories[0].id || 'flavoured-makhana')
+          : 'flavoured-makhana';
+        setFormData({
+          ...EMPTY_PRODUCT,
+          category: defaultCat
+        });
       }
       setActiveTab('basic');
       setIsUploadingImage(false);
       setIsSubmitting(false);
       setUploadStatusMsg('');
+      setShowUrlInput(false);
+      setUrlInputValue('');
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -67,40 +98,135 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
 
   if (!isOpen) return null;
 
-  // Selected Category's live subcategories
-  const selectedCategoryObj = allCategories.find(
-    c => c.slug === formData.category || c.id === formData.category
-  );
-  const currentSubcategories = selectedCategoryObj?.subcategories || [];
 
-  // Handle local file image upload to Cloudinary
-  const handleImageChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Multi-image upload to Cloudinary (up to 4 gallery photos)
+  const handleGalleryFilesUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    // Instant local preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFormData(prev => ({ ...prev, image: reader.result }));
-    };
-    reader.readAsDataURL(file);
+    const currentGallery = Array.isArray(formData.gallery) ? formData.gallery : [];
+    const maxImages = 4;
+    const remainingSlots = maxImages - currentGallery.length;
 
-    // Upload to Cloudinary API
+    if (remainingSlots <= 0) {
+      alert("You can select up to 4 gallery photos. Please remove an existing photo first.");
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const filesToProcess = files.slice(0, remainingSlots);
+
+    // 1. Instant local base64 previews for rapid UI response
+    const previewPromises = filesToProcess.map(file => {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    const newPreviews = await Promise.all(previewPromises);
+
+    setFormData(prev => {
+      const existing = Array.isArray(prev.gallery) ? prev.gallery : [];
+      const updated = [...existing, ...newPreviews].slice(0, maxImages);
+      return {
+        ...prev,
+        gallery: updated,
+        image: prev.image || updated[0] || ''
+      };
+    });
+
+    // 2. Upload to Cloudinary API
     setIsUploadingImage(true);
-    setUploadStatusMsg('Uploading image to Cloudinary...');
+    setUploadStatusMsg(`Uploading ${filesToProcess.length} photo(s) to Cloudinary...`);
+
     try {
-      const res = await uploadApi.uploadImage(file, 'auriva_products');
-      if (res && res.data && res.data.url) {
-        setFormData(prev => ({ ...prev, image: res.data.url }));
-        setUploadStatusMsg('Uploaded to Cloudinary!');
+      const uploadPromises = filesToProcess.map(file => uploadApi.uploadImage(file, 'auriva_products'));
+      const results = await Promise.allSettled(uploadPromises);
+
+      const uploadedUrls = [];
+      results.forEach(res => {
+        if (res.status === 'fulfilled' && res.value?.data?.url) {
+          uploadedUrls.push(res.value.data.url);
+        }
+      });
+
+      if (uploadedUrls.length > 0) {
+        setFormData(prev => {
+          const curGallery = Array.isArray(prev.gallery) ? [...prev.gallery] : [];
+          let replaceIdx = 0;
+          const finalGallery = curGallery.map(img => {
+            if (typeof img === 'string' && img.startsWith('data:') && uploadedUrls[replaceIdx]) {
+              return uploadedUrls[replaceIdx++];
+            }
+            return img;
+          });
+          return {
+            ...prev,
+            gallery: finalGallery,
+            image: finalGallery[0] || prev.image || ''
+          };
+        });
+        setUploadStatusMsg(`Uploaded ${uploadedUrls.length} photo(s) to Cloudinary!`);
+      } else {
+        setUploadStatusMsg('Photos preview saved');
       }
     } catch (err) {
-      console.warn('Cloudinary upload notification:', err.message);
-      setUploadStatusMsg('Image preview saved');
+      console.warn('Cloudinary upload error:', err.message);
+      setUploadStatusMsg('Photos preview saved locally');
     } finally {
       setIsUploadingImage(false);
-      setTimeout(() => setUploadStatusMsg(''), 3500);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setTimeout(() => setUploadStatusMsg(''), 4000);
     }
+  };
+
+  // Remove single image from gallery
+  const handleRemoveGalleryImage = (idxToRemove) => {
+    setFormData(prev => {
+      const cur = Array.isArray(prev.gallery) ? prev.gallery : [];
+      const updated = cur.filter((_, idx) => idx !== idxToRemove);
+      return {
+        ...prev,
+        gallery: updated,
+        image: updated[0] || ''
+      };
+    });
+  };
+
+  // Set selected gallery image as Primary Cover Photo
+  const handleSetPrimaryImage = (targetIdx) => {
+    setFormData(prev => {
+      const cur = Array.isArray(prev.gallery) ? [...prev.gallery] : [];
+      if (targetIdx < 0 || targetIdx >= cur.length) return prev;
+      const [selected] = cur.splice(targetIdx, 1);
+      const updated = [selected, ...cur];
+      return {
+        ...prev,
+        gallery: updated,
+        image: selected
+      };
+    });
+  };
+
+  // Add image by URL
+  const handleAddUrlImage = () => {
+    const url = urlInputValue.trim();
+    if (!url) return;
+    const cur = Array.isArray(formData.gallery) ? formData.gallery : [];
+    if (cur.length >= 4) {
+      alert("Maximum 4 photos allowed. Please remove a photo first.");
+      return;
+    }
+    const updated = [...cur, url];
+    setFormData(prev => ({
+      ...prev,
+      gallery: updated,
+      image: prev.image || updated[0] || ''
+    }));
+    setUrlInputValue('');
+    setShowUrlInput(false);
   };
 
   // Variant operations
@@ -148,8 +274,17 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
 
     setIsSubmitting(true);
     try {
+      const { subcategory, ...cleanFormData } = formData;
+      const rawGallery = Array.isArray(formData.gallery) ? formData.gallery : [];
+      const primaryImg = formData.image || rawGallery[0] || '/src/assets/user/Types/PeriPeri.jpeg';
+      const finalGallery = rawGallery.length > 0
+        ? (rawGallery.includes(primaryImg) ? rawGallery : [primaryImg, ...rawGallery])
+        : [primaryImg];
+
       const payload = {
-        ...formData,
+        ...cleanFormData,
+        image: primaryImg,
+        gallery: finalGallery,
         name: formData.name.trim(),
         price: priceNum,
         oldPrice: Number(formData.oldPrice || Math.round(priceNum * 1.2)),
@@ -242,49 +377,26 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                   />
                 </div>
 
-                {/* Category and Associated Subcategory */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs sm:text-[13px] font-bold text-stone-800 mb-1">Category *</label>
-                    <select
-                      value={formData.category}
-                      onChange={e => {
-                        setFormData(prev => ({
-                          ...prev,
-                          category: e.target.value,
-                          subcategory: ''
-                        }));
-                      }}
-                      className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white cursor-pointer"
-                    >
-                      {allCategories.map(c => (
-                        <option key={c.id} value={c.slug || c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs sm:text-[13px] font-bold text-stone-800 mb-1">Subcategory</label>
-                    <select
-                      value={formData.subcategory || ''}
-                      onChange={e => setFormData({ ...formData, subcategory: e.target.value })}
-                      disabled={currentSubcategories.length === 0}
-                      className={`w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white cursor-pointer ${
-                        currentSubcategories.length === 0 ? 'bg-stone-100 text-stone-400 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      {currentSubcategories.length > 0 ? (
-                        <>
-                          <option value="">Select Subcategory (Optional)</option>
-                          {currentSubcategories.map(sub => (
-                            <option key={sub.id || sub.name} value={sub.name}>{sub.name}</option>
-                          ))}
-                        </>
-                      ) : (
-                        <option value="">No subcategories available</option>
-                      )}
-                    </select>
-                  </div>
+                {/* Category Selection */}
+                <div>
+                  <label className="block text-xs sm:text-[13px] font-bold text-stone-800 mb-1">Category *</label>
+                  <select
+                    value={formData.category}
+                    onChange={e => {
+                      setFormData(prev => ({
+                        ...prev,
+                        category: e.target.value
+                      }));
+                    }}
+                    className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white cursor-pointer"
+                  >
+                    {allCategories.map(c => {
+                      const catVal = c.slug || c.id || c._id;
+                      return (
+                        <option key={c.id || c.slug || c._id} value={catVal}>{c.name}</option>
+                      );
+                    })}
+                  </select>
                 </div>
 
                 {/* Pricing & Stock Row */}
@@ -381,78 +493,211 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                   </label>
                 </div>
 
-                {/* Upload Image Section with Direct Cloudinary */}
-                <div>
-                  <label className="block text-xs sm:text-[13px] font-bold text-stone-800 mb-1.5">
-                    Product Image (Cloudinary Direct Upload)
-                  </label>
-                  
+                {/* Product Photos & Gallery (3-4 Images Selection Option) */}
+                <div className="p-3.5 sm:p-4 bg-[#FAF7F2] rounded-xl border border-stone-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <label className="block text-xs sm:text-[13px] font-bold text-stone-900">
+                          Product Photos & Gallery
+                        </label>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          (formData.gallery?.length || 0) >= 3
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : (formData.gallery?.length || 0) > 0
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-stone-100 text-stone-600 border-stone-300'
+                        }`}>
+                          {(formData.gallery?.length || 0)} of 4 photos selected
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-500 mt-0.5 font-normal">
+                        Select <strong>3 to 4 images</strong> to showcase packaging front, roasted makhana texture, and nutrition details in the user app gallery slider.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowUrlInput(!showUrlInput)}
+                      className="text-[11px] font-bold text-[#0E2A1B] hover:text-[#D4AF37] transition-colors flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+                    >
+                      <LinkIcon className="w-3 h-3" />
+                      <span>{showUrlInput ? 'Hide URL' : '+ Add via URL'}</span>
+                    </button>
+                  </div>
+
+                  {/* Multi-file Hidden Input */}
                   <input
                     type="file"
                     ref={fileInputRef}
-                    onChange={handleImageChange}
+                    onChange={handleGalleryFilesUpload}
+                    multiple
                     accept="image/*"
                     className="hidden"
                   />
 
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-stone-300 hover:border-[#0E2A1B] rounded-xl p-4 bg-[#FAF7F2] transition-all cursor-pointer flex flex-col sm:flex-row items-center gap-4 group relative"
-                  >
-                    {isUploadingImage ? (
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-stone-100 border border-stone-200 flex flex-col items-center justify-center text-[#0E2A1B] shrink-0 gap-1 animate-pulse">
-                        <Loader2 className="w-6 h-6 animate-spin text-[#D4AF37]" />
-                        <span className="text-[9px] font-bold">Uploading...</span>
-                      </div>
-                    ) : formData.image ? (
-                      <div className="relative">
-                        <img
-                          src={formData.image}
-                          alt="Preview"
-                          className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg object-cover border border-stone-200 bg-white shadow-2xs shrink-0"
-                        />
-                        {formData.image.includes('cloudinary') && (
-                          <span className="absolute -bottom-1 -right-1 bg-[#0E2A1B] text-[#D4AF37] text-[8px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5">
-                            <Cloud className="w-2.5 h-2.5" /> Cloud
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400 shrink-0">
-                        <ImageIcon className="w-8 h-8" />
-                      </div>
-                    )}
-
-                    <div className="text-center sm:text-left space-y-1 flex-1">
-                      <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs sm:text-sm font-bold text-[#0E2A1B]">
-                        <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
-                        <span>{isUploadingImage ? 'Uploading directly to Cloudinary...' : 'Click to Upload Product Photo'}</span>
-                      </div>
-                      <p className="text-xs text-stone-500 font-normal">
-                        Direct upload to Cloudinary storage. Supports PNG, JPG, WEBP formats.
-                      </p>
-                      {uploadStatusMsg && (
-                        <p className="text-xs font-bold text-emerald-700 flex items-center gap-1 justify-center sm:justify-start">
-                          <Check className="w-3.5 h-3.5" />
-                          <span>{uploadStatusMsg}</span>
-                        </p>
-                      )}
-                      <div className="pt-0.5">
-                        <button
-                          type="button"
-                          disabled={isUploadingImage}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            fileInputRef.current?.click();
-                          }}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#0E2A1B] bg-white px-2.5 py-1 rounded border border-stone-300 shadow-2xs hover:bg-stone-50 cursor-pointer disabled:opacity-50"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${isUploadingImage ? 'animate-spin' : ''}`} />
-                          <span>{isUploadingImage ? 'Processing...' : 'Choose File'}</span>
-                        </button>
-                      </div>
+                  {/* Add by URL input */}
+                  {showUrlInput && (
+                    <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-stone-300 animate-in fade-in duration-150">
+                      <input
+                        type="url"
+                        value={urlInputValue}
+                        onChange={e => setUrlInputValue(e.target.value)}
+                        placeholder="Paste direct image URL (https://...)"
+                        className="flex-1 px-3 py-1.5 text-xs bg-transparent focus:outline-none text-stone-800 placeholder:text-stone-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddUrlImage}
+                        className="px-3 py-1.5 rounded bg-[#0E2A1B] text-[#D4AF37] text-xs font-bold uppercase tracking-wider hover:bg-[#1B3B29] cursor-pointer"
+                      >
+                        Add Photo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUrlInput(false);
+                          setUrlInputValue('');
+                        }}
+                        className="px-2 py-1.5 text-xs text-stone-500 hover:text-stone-800 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
                     </div>
+                  )}
+
+                  {/* Gallery Grid (3-4 Slots) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {(formData.gallery || []).map((imgUrl, idx) => {
+                      const isPrimary = idx === 0;
+                      return (
+                        <div 
+                          key={idx}
+                          className={`relative aspect-square rounded-xl overflow-hidden border-2 bg-white shadow-2xs group transition-all ${
+                            isPrimary ? 'border-[#0E2A1B] ring-2 ring-[#D4AF37]/40' : 'border-stone-200 hover:border-stone-400'
+                          }`}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`Gallery ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+
+                          {/* Top Badges */}
+                          <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 pointer-events-none">
+                            {isPrimary ? (
+                              <span className="bg-[#0E2A1B] text-[#D4AF37] text-[9.5px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5">
+                                <Star className="w-2.5 h-2.5 fill-[#D4AF37]" /> Cover
+                              </span>
+                            ) : (
+                              <span className="bg-black/60 backdrop-blur-xs text-white text-[9.5px] font-semibold px-1.5 py-0.5 rounded shadow-xs">
+                                #{idx + 1}
+                              </span>
+                            )}
+
+                            {imgUrl.includes('cloudinary') && (
+                              <span className="bg-[#0E2A1B]/80 text-[#D4AF37] text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5 shadow-xs">
+                                <Cloud className="w-2 h-2" /> Cloud
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Hover Actions Bar */}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveGalleryImage(idx);
+                                }}
+                                className="p-1 rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-xs cursor-pointer"
+                                title="Delete Photo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {!isPrimary && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetPrimaryImage(idx);
+                                }}
+                                className="w-full py-1 rounded bg-white text-[#0E2A1B] hover:bg-[#D4AF37] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                <Star className="w-2.5 h-2.5" />
+                                <span>Set as Cover</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Add More Photos Slot (Visible if fewer than 4 photos) */}
+                    {(formData.gallery?.length || 0) < 4 && (
+                      <button
+                        type="button"
+                        disabled={isUploadingImage}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="aspect-square rounded-xl border-2 border-dashed border-stone-300 hover:border-[#0E2A1B] bg-white/80 hover:bg-white transition-all flex flex-col items-center justify-center text-center p-3 gap-1.5 group cursor-pointer disabled:opacity-50"
+                      >
+                        {isUploadingImage ? (
+                          <>
+                            <Loader2 className="w-5 h-5 text-[#D4AF37] animate-spin" />
+                            <span className="text-[10px] font-bold text-stone-600">Uploading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-8 h-8 rounded-full bg-[#0E2A1B]/5 text-[#0E2A1B] group-hover:bg-[#0E2A1B] group-hover:text-[#D4AF37] flex items-center justify-center transition-colors">
+                              <Plus className="w-4 h-4" />
+                            </div>
+                            <span className="text-[11px] font-bold text-stone-800">
+                              Add Photo
+                            </span>
+                            <span className="text-[9.5px] text-stone-400 font-medium">
+                              Slot {(formData.gallery?.length || 0) + 1} of 4
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
+
+                  {/* Empty state / multi-upload banner if no photos added yet */}
+                  {(!formData.gallery || formData.gallery.length === 0) && (
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-stone-300 hover:border-[#0E2A1B] rounded-xl p-5 bg-white text-center cursor-pointer transition-all space-y-2"
+                    >
+                      <UploadCloud className="w-8 h-8 text-[#D4AF37] mx-auto" />
+                      <div>
+                        <p className="text-xs sm:text-sm font-bold text-[#0E2A1B]">
+                          Click to select 3–4 gallery photos at once
+                        </p>
+                        <p className="text-[11px] text-stone-500 font-normal mt-0.5">
+                          Hold <kbd className="px-1 py-0.5 bg-stone-100 border border-stone-300 rounded text-[10px]">Ctrl</kbd> or <kbd className="px-1 py-0.5 bg-stone-100 border border-stone-300 rounded text-[10px]">Shift</kbd> in file explorer to select multiple files. PNG, JPG, WEBP formats.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0E2A1B] text-[#D4AF37] text-xs font-bold uppercase tracking-wider shadow-xs hover:bg-[#1B3B29] pointer-events-none"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Choose 3–4 Photos</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Upload status message */}
+                  {uploadStatusMsg && (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      <span>{uploadStatusMsg}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Short Tagline */}
@@ -469,13 +714,39 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
 
                 {/* Description */}
                 <div>
-                  <label className="block text-xs sm:text-[13px] font-bold text-stone-800 mb-1">Full Description</label>
+                  <label className="block text-xs sm:text-[13px] font-bold text-stone-800 mb-1">
+                    Product Description
+                  </label>
+                  <p className="text-[11px] text-stone-500 mb-1.5 font-normal">
+                    Displays under the Description tab on the product details page.
+                  </p>
                   <textarea
                     rows={3}
-                    value={formData.description}
+                    value={formData.description || ''}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Describe the roast quality, ingredients, and flavor profile..."
                     className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B]"
+                  />
+                </div>
+
+                {/* Product Details & Specifications */}
+                <div>
+                  <label className="block text-xs sm:text-[13px] font-bold text-stone-800 mb-1">
+                    Product Details & Specifications
+                  </label>
+                  <p className="text-[11px] text-stone-500 mb-1.5 font-normal">
+                    Displays under the Product Details tab on the storefront. Add key specifications, ingredients, storage, origin, or shelf life (one bullet per line).
+                  </p>
+                  <textarea
+                    rows={4}
+                    value={formData.productDetails || formData.details || ''}
+                    onChange={e => setFormData({
+                      ...formData,
+                      productDetails: e.target.value,
+                      details: e.target.value
+                    })}
+                    placeholder="• Grade: Premium 6-suta hand-graded jumbo fox nuts&#10;• Roast: Slow-roasted in virgin cold-pressed olive mist&#10;• Ingredients: 94% Fox Nuts, 4% Olive Mist, 2% Himalayan Salt&#10;• Shelf Life: 9 Months from packaging date&#10;• Storage: Store in a cool, airtight container"
+                    className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] font-mono text-stone-800"
                   />
                 </div>
               </div>

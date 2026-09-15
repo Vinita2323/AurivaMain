@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Sparkles, Star, Award, Heart, ShieldCheck, Flame, Gift, Leaf, FlaskConical, Droplets, Flower2, Mountain, Quote, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -18,6 +18,7 @@ import { FLAVORS } from '../../../data/flavors';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../../../data/products';
 import { useAdmin } from '../../../context/AdminContext';
 import { bestsellerApi } from '../../../utils/api';
+import { resolveProductImage } from '../../../utils/productImage';
 import philosophyImg from '../../../assets/user/philosophy.png';
 
 export default function HomePage() {
@@ -96,34 +97,23 @@ export default function HomePage() {
     };
   }, []);
 
-  const resolveProductImage = (product) => {
-    const img = typeof product?.image === 'string' ? product.image : '';
-    if (img && (img.includes('cloudinary') || img.startsWith('data:') || img.includes('assets') || img.includes('/uploads/'))) {
-      return img;
-    }
-    if (img && img.startsWith('http') && !img.includes('1599488615731') && !img.includes('unsplash')) {
-      return img;
-    }
-    const nameStr = (product?.name || '').toLowerCase();
-    if (nameStr.includes('peri')) {
-      return new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('cheese') || nameStr.includes('cream') || nameStr.includes('onion')) {
-      return new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('tomato')) {
-      return new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('salted') || nameStr.includes('w240') || nameStr.includes('classic')) {
-      return new URL('../../../assets/user/Classic Makhana.jpg', import.meta.url).href;
-    } else if (nameStr.includes('masala')) {
-      return new URL('../../../assets/user/Flavored Makhana.jpg', import.meta.url).href;
-    } else if (nameStr.includes('pudina') || nameStr.includes('mint')) {
-      return new URL('../../../assets/user/Healthy Makhana2.jpg', import.meta.url).href;
-    }
-    return img || new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-  };
 
-  const activeProducts = bestsellerData.bestsellers && bestsellerData.bestsellers.length > 0
-    ? bestsellerData.bestsellers
-    : fallbackProducts;
+  // Dynamic Bestsellers merged with any admin products marked as bestsellers
+  const activeProducts = useMemo(() => {
+    const baseList = (bestsellerData.bestsellers && bestsellerData.bestsellers.length > 0)
+      ? bestsellerData.bestsellers
+      : fallbackProducts;
+
+    const seenIds = new Set(baseList.map(p => String(p.id || p._id || p.slug)));
+    // Include any active products from the store catalog that have isBestseller flag enabled
+    const extraAdminBestsellers = allProducts.filter(p =>
+      p.isBestseller &&
+      p.inStock !== false &&
+      !seenIds.has(String(p.id || p._id || p.slug))
+    );
+
+    return [...extraAdminBestsellers, ...baseList];
+  }, [bestsellerData.bestsellers, fallbackProducts, allProducts]);
 
   const isSectionEnabled = bestsellerData.config?.isEnabled !== false;
 

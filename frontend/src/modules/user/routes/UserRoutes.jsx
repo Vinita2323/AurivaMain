@@ -19,7 +19,7 @@ export default function UserRoutes() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/shop" element={<ShopPage />} />
-        <Route path="/product/:slug" element={<ProductDetailPage />} />
+        <Route path="/product/:id" element={<ProductDetailPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />

@@ -2,9 +2,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { X, Search, Check, AlertCircle, Plus, Sparkles, Package } from 'lucide-react';
 import { productApi } from '../../../utils/api';
 import { useAdmin } from '../../../context/AdminContext';
+import { resolveProductImage } from '../../../utils/productImage';
 
 export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, existingBestsellerProductIds = [] }) {
-  const { products: contextProducts } = useAdmin();
+  const { products: contextProducts, categories: adminCategories } = useAdmin();
   const [allProducts, setAllProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -50,15 +51,31 @@ export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, exis
     return new Set(existingBestsellerProductIds.map(id => String(id)));
   }, [existingBestsellerProductIds]);
 
+  // Dynamic category options from AdminContext or default list
+  const categoryOptions = useMemo(() => {
+    if (adminCategories && adminCategories.length > 0) {
+      return adminCategories;
+    }
+    return [
+      { id: 'flavoured-makhana', slug: 'flavoured-makhana', name: 'Flavoured Makhana' },
+      { id: 'plain-roasted-makhana', slug: 'plain-roasted-makhana', name: 'Plain / Roasted' },
+      { id: 'makhana-combos', slug: 'makhana-combos', name: 'Combos & Gifting' },
+      { id: 'healthy-fitness-makhana', slug: 'healthy-fitness-makhana', name: 'Fitness Snacks' }
+    ];
+  }, [adminCategories]);
+
   // Filter products by search and category
   const filteredProducts = useMemo(() => {
     return allProducts.filter(p => {
-      const pId = String(p._id || p.id);
-      if (selectedCategory !== 'all' && p.category !== selectedCategory) return false;
+      if (selectedCategory !== 'all') {
+        const catValue = (p.category || p.categorySlug || p.categoryId || '').toLowerCase();
+        const targetValue = selectedCategory.toLowerCase();
+        if (catValue !== targetValue) return false;
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const nameMatch = (p.name || '').toLowerCase().includes(q);
-        const flavorMatch = (p.flavor || '').toLowerCase().includes(q);
+        const flavorMatch = (p.flavor || p.subtitle || '').toLowerCase().includes(q);
         return nameMatch || flavorMatch;
       }
       return true;
@@ -98,9 +115,14 @@ export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, exis
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn font-sans selection:bg-[#D4AF37] selection:text-[#0E2A1B]">
-      
-      <div className="bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-[#E8E2D5] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div 
+      data-lenis-prevent
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn font-sans selection:bg-[#D4AF37] selection:text-[#0E2A1B] overflow-y-auto"
+    >
+      <div 
+        data-lenis-prevent
+        className="bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-[#E8E2D5] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] my-auto"
+      >
         
         {/* Modal Header */}
         <div className="bg-[#0E2A1B] text-white p-4 sm:p-5 flex items-center justify-between border-b border-[#D4AF37]/30 shrink-0">
@@ -119,8 +141,9 @@ export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, exis
           </div>
           
           <button 
+            type="button"
             onClick={onClose} 
-            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             title="Close"
           >
             <X className="w-5 h-5" />
@@ -150,17 +173,18 @@ export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, exis
               />
             </div>
 
-            {/* Category Select */}
+            {/* Dynamic Category Select */}
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 text-xs sm:text-sm rounded-xl border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white font-medium text-stone-700 shrink-0"
+              className="px-3 py-2 text-xs sm:text-sm rounded-xl border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white font-medium text-stone-700 shrink-0 cursor-pointer"
             >
               <option value="all">All Categories</option>
-              <option value="flavoured-makhana">Flavoured Makhana</option>
-              <option value="plain-roasted-makhana">Plain / Roasted</option>
-              <option value="makhana-combos">Combos & Gifting</option>
-              <option value="healthy-fitness-makhana">Fitness Snacks</option>
+              {categoryOptions.map(cat => (
+                <option key={cat.slug || cat.id} value={cat.slug || cat.id}>
+                  {cat.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -181,7 +205,10 @@ export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, exis
         </div>
 
         {/* Modal Products List (Scrollable) */}
-        <div className="flex-1 p-3.5 sm:p-4 overflow-y-auto space-y-2 max-h-[420px] divide-y divide-stone-100">
+        <div 
+          data-lenis-prevent
+          className="flex-1 p-3.5 sm:p-4 overflow-y-auto space-y-2 max-h-[420px] divide-y divide-stone-100"
+        >
           {loading ? (
             <div className="py-12 text-center text-stone-500 space-y-2">
               <div className="w-6 h-6 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin mx-auto" />
@@ -228,7 +255,7 @@ export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, exis
 
                     {/* Product Image */}
                     <img
-                      src={prod.image || 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=100&auto=format&fit=crop&q=80'}
+                      src={resolveProductImage(prod)}
                       alt={prod.name}
                       className="w-11 h-11 rounded-lg object-cover border border-stone-200 bg-[#FAF7F2] shrink-0"
                     />
@@ -283,7 +310,7 @@ export default function AddBestsellerProductModal({ isOpen, onClose, onAdd, exis
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs sm:text-sm font-semibold text-stone-600 hover:text-stone-900 bg-white border border-stone-300 rounded-xl hover:bg-stone-50 transition-colors"
+              className="px-4 py-2 text-xs sm:text-sm font-semibold text-stone-600 hover:text-stone-900 bg-white border border-stone-300 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>

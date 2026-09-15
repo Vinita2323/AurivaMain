@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Search, Edit2, Trash2, Flame, CheckCircle2, AlertCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Plus, Search, Edit2, Trash2, Flame, CheckCircle2, AlertCircle, ExternalLink, RefreshCw, Image as ImageIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import AdminSidebar from '../components/AdminSidebar';
@@ -7,10 +7,17 @@ import AdminHeader from '../components/AdminHeader';
 import AddProductModal from '../components/AddProductModal';
 import { useAdmin } from '../../../context/AdminContext';
 import { CATEGORIES } from '../../../data/categories';
+import { resolveProductImage } from '../../../utils/productImage';
 
 export default function AdminProducts() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { products, addProduct, updateProduct, deleteProduct, toggleProductStatus, refreshProducts } = useAdmin();
+  const { products, categories, refreshCategories, addProduct, updateProduct, deleteProduct, toggleProductStatus, refreshProducts } = useAdmin();
+
+  useEffect(() => {
+    if (refreshCategories) {
+      refreshCategories();
+    }
+  }, []);
 
   const [activeStatusFilter, setActiveStatusFilter] = useState('all'); // 'all', 'active', 'inactive'
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,27 +32,6 @@ export default function AdminProducts() {
     setTimeout(() => {
       setFeedback({ type: '', message: '' });
     }, 4500);
-  };
-
-  const resolveProductImage = (p) => {
-    if (p.image && typeof p.image === 'string' && (p.image.startsWith('http') || p.image.startsWith('data:') || p.image.startsWith('/assets') || p.image.startsWith('/src'))) {
-      return p.image;
-    }
-    const nameStr = (p.name || '').toLowerCase();
-    if (nameStr.includes('peri')) {
-      return new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('cheese') || nameStr.includes('cream') || nameStr.includes('onion')) {
-      return new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('tomato')) {
-      return new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('salted') || nameStr.includes('w240')) {
-      return new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('masala')) {
-      return new URL('../../../assets/user/Types/Tomato.jpeg', import.meta.url).href;
-    } else if (nameStr.includes('pudina')) {
-      return new URL('../../../assets/user/Types/CreamOnion.jpeg', import.meta.url).href;
-    }
-    return p.image || new URL('../../../assets/user/Types/PeriPeri.jpeg', import.meta.url).href;
   };
 
   // Compute counts
@@ -215,9 +201,12 @@ export default function AdminProducts() {
                 className="px-3 py-1.5 rounded-md border border-stone-300 text-xs sm:text-[13px] font-semibold bg-stone-50 text-stone-800 focus:outline-none cursor-pointer"
               >
                 <option value="all">All Categories</option>
-                {CATEGORIES.map(c => (
-                  <option key={c.id} value={c.slug || c.id}>{c.name}</option>
-                ))}
+                {(categories && categories.length > 0 ? categories : CATEGORIES).map(c => {
+                  const catVal = c.slug || c.id || c._id;
+                  return (
+                    <option key={c.id || c.slug || c._id} value={catVal}>{c.name}</option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -260,10 +249,18 @@ export default function AdminProducts() {
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-stone-400 font-normal mt-0.5 block">{p.flavor || p.subtitle || 'Natural Seasoning'} • {p.weight || '150g'}</span>
+                          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                            <span className="text-xs text-stone-400 font-normal">{p.flavor || p.subtitle || 'Natural Seasoning'} • {p.weight || '150g'}</span>
+                            {p.gallery && p.gallery.length > 1 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                <ImageIcon className="w-2.5 h-2.5 text-emerald-600" />
+                                {p.gallery.length} photos
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3.5 px-5 capitalize text-stone-700 font-medium text-xs sm:text-[13.5px]">
-                          {p.category?.replace('-', ' ')}
+                          {(categories || []).find(c => (c.slug === p.category || (c.id || c._id) === p.category))?.name || p.category?.replace(/-/g, ' ')}
                         </td>
                         <td className="py-3.5 px-5">
                           <span className="font-bold text-sm sm:text-base text-stone-900">₹{p.price}</span>
@@ -290,6 +287,15 @@ export default function AdminProducts() {
                         </td>
                         <td className="py-3.5 px-5 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            <a
+                              href={`/product/${p.id || p._id || p.slug}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 text-stone-500 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
+                              title="View product in storefront"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
                             <button
                               onClick={() => handleEdit(p)}
                               className="p-1.5 text-stone-600 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
@@ -332,6 +338,7 @@ export default function AdminProducts() {
         }}
         onSave={handleSaveProduct}
         initialData={editingProduct}
+        categories={categories}
       />
     </div>
   );

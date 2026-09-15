@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, User, ShoppingCart, Menu } from 'lucide-react';
+import { Search, User, ShoppingCart, Heart } from 'lucide-react';
 
 import Logo from './Logo';
 import SearchModal from './SearchModal';
 import MobileDrawer from './MobileDrawer';
 import { useCart } from '../../../context/CartContext';
+import { useWishlist } from '../../../context/WishlistContext';
 import { useAuth } from '../../../context/AuthContext';
 
 export default function Header() {
@@ -13,6 +14,7 @@ export default function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { itemCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -79,7 +81,7 @@ export default function Header() {
             : 'bg-[#FAF7F2] py-3.5 sm:py-4'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between">
           
           {/* Left: Auriva Brand Logo */}
           <div className="flex items-center">
@@ -114,7 +116,7 @@ export default function Header() {
           </nav>
 
           {/* Right: Action Icons */}
-          <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 ml-auto justify-end">
             {/* Search Icon */}
             <button
               onClick={() => setIsSearchOpen(true)}
@@ -124,6 +126,23 @@ export default function Header() {
             >
               <Search className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8]" />
             </button>
+
+            {/* Wishlist Icon with Badge */}
+            <Link
+              to="/wishlist"
+              className="p-2 sm:p-2.5 rounded-full text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors relative min-w-[40px] min-h-[40px] flex items-center justify-center"
+              aria-label="Wishlist"
+              title="Saved Snacks"
+            >
+              <div className="relative">
+                <Heart className={`w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[1.8] ${wishlistCount > 0 ? 'text-rose-500 fill-rose-500/20' : ''}`} />
+                {wishlistCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2 min-w-[17px] h-[17px] px-1 bg-rose-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-xs leading-none">
+                    {wishlistCount}
+                  </span>
+                )}
+              </div>
+            </Link>
 
             {/* Shopping Cart Icon with Badge */}
             <Link
@@ -164,16 +183,6 @@ export default function Header() {
                 )}
               </div>
             </Link>
-
-            {/* Mobile Menu Button (Hamburger) */}
-            <button
-              onClick={() => setIsMobileNavOpen(true)}
-              className="lg:hidden p-2 rounded-xl text-[#182019] hover:text-[#C58A2B] hover:bg-stone-200/40 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
-              aria-label="Open Navigation"
-              title="Menu"
-            >
-              <Menu className="w-6 h-6 stroke-[1.8]" />
-            </button>
           </div>
 
         </div>
