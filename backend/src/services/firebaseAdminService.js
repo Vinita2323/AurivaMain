@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,6 +13,8 @@ const backendRoot = path.resolve(__dirname, '../../');
 
 class FirebaseAdminService {
   constructor() {
+    this.app = null;
+    this.messaging = null;
     this.isInitialized = false;
     this.initError = null;
     this.initFirebase();
@@ -23,8 +26,10 @@ class FirebaseAdminService {
   initFirebase() {
     try {
       // Avoid re-initialization if already initialized
-      const apps = typeof admin.getApps === 'function' ? admin.getApps() : (admin.apps || []);
+      const apps = getApps();
       if (apps.length > 0) {
+        this.app = apps[0];
+        this.messaging = getMessaging(this.app);
         this.isInitialized = true;
         return;
       }
@@ -35,7 +40,7 @@ class FirebaseAdminService {
       if (env.FIREBASE?.CONFIG_JSON) {
         try {
           const serviceAccount = JSON.parse(env.FIREBASE.CONFIG_JSON);
-          credential = admin.credential.cert(serviceAccount);
+          credential = cert(serviceAccount);
         } catch (parseErr) {
           console.warn('[FCM] Could not parse FIREBASE_CONFIG JSON:', parseErr.message);
         }
@@ -59,7 +64,7 @@ class FirebaseAdminService {
               const fileContent = fs.readFileSync(filePath, 'utf8');
               const serviceAccount = JSON.parse(fileContent);
               if (serviceAccount.project_id && serviceAccount.private_key) {
-                credential = admin.credential.cert(serviceAccount);
+                credential = cert(serviceAccount);
                 break;
               }
             } catch (fileErr) {
@@ -70,7 +75,8 @@ class FirebaseAdminService {
       }
 
       if (credential) {
-        admin.initializeApp({ credential });
+        this.app = initializeApp({ credential });
+        this.messaging = getMessaging(this.app);
         this.isInitialized = true;
         this.initError = null;
         console.log('[FCM] Firebase Admin SDK initialized successfully.');
@@ -90,7 +96,7 @@ class FirebaseAdminService {
    * Get current configuration status
    */
   getStatus() {
-    const apps = typeof admin.getApps === 'function' ? admin.getApps() : (admin.apps || []);
+    const apps = getApps();
     return {
       isInitialized: this.isInitialized,
       hasApps: apps.length > 0,
@@ -154,7 +160,8 @@ class FirebaseAdminService {
         message.notification.icon = payload.icon;
       }
 
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const messaging = this.messaging || getMessaging(this.app);
+      const response = await messaging.sendEachForMulticast(message);
       console.log(`[FCM] Sent push: ${response.successCount} succeeded, ${response.failureCount} failed.`);
 
       // Identify stale tokens for cleanup
