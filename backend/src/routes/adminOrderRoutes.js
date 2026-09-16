@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as orderController from '../controllers/orderController.js';
+import invoiceController from '../controllers/invoiceController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { requireAdmin } from '../middleware/roleMiddleware.js';
 import {
@@ -27,6 +28,13 @@ router.get('/', orderController.getAllOrdersAdmin);
  * @access  Protected (Admin Only)
  */
 router.get('/:id', validateOrderId, orderController.getOrderById);
+
+/**
+ * @route   GET /api/v1/admin/orders/:id/invoice
+ * @desc    Download official order Invoice PDF
+ * @access  Protected (Admin Only)
+ */
+router.get('/:id/invoice', validateOrderId, invoiceController.getAdminOrderInvoice);
 
 /**
  * @route   PATCH /api/v1/admin/orders/:id/status

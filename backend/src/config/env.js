@@ -31,6 +31,11 @@ const env = {
     KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
     WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
     IS_CONFIGURED: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
+  },
+  FIREBASE: {
+    SERVICE_ACCOUNT_PATH: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './config/firebase-service-account.json',
+    CONFIG_JSON: process.env.FIREBASE_CONFIG || '',
+    PROJECT_ID: process.env.FIREBASE_PROJECT_ID || ''
   }
 };
 

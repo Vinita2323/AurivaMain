@@ -34,7 +34,7 @@ export default function Header() {
     { name: 'HOME', path: '/' },
     { name: 'SHOP', path: '/shop' },
     { name: 'OUR STORY', path: '/about' },
-    { name: 'RECIPES', path: '/shop?category=recipes' },
+    { name: 'RECIPES', path: '/recipes' },
     { name: 'CONTACT', path: '/contact' },
   ];
 
@@ -46,11 +46,11 @@ export default function Header() {
       const hash = itemPath.replace('/', '');
       return location.pathname === '/' && location.hash === hash;
     }
+    if (itemPath === '/recipes') {
+      return location.pathname.startsWith('/recipes');
+    }
     if (itemPath.startsWith('/shop')) {
-      if (itemPath.includes('category=recipes')) {
-        return location.pathname === '/shop' && location.search.includes('category=recipes');
-      }
-      return (location.pathname === '/shop' || location.pathname.startsWith('/product')) && !location.search.includes('category=recipes');
+      return location.pathname === '/shop' || location.pathname.startsWith('/product');
     }
     if (itemPath === '/about') {
       return location.pathname === '/about';
@@ -81,15 +81,15 @@ export default function Header() {
             : 'bg-[#FAF7F2] py-3.5 sm:py-4'
         }`}
       >
-        <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between">
+        <div className="relative w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between">
           
           {/* Left: Auriva Brand Logo */}
-          <div className="flex items-center">
+          <div className="flex items-center z-10">
             <Logo variant="dark" size={isScrolled ? 'default' : 'large'} />
           </div>
 
-          {/* Middle: Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center space-x-6 xl:space-x-8">
+          {/* Middle: Desktop Navigation Links (Centered) */}
+          <nav className="hidden lg:flex items-center space-x-6 xl:space-x-8 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
             {navLinks.map((item) => {
               const active = isLinkActive(item.path);
               return (
@@ -116,7 +116,7 @@ export default function Header() {
           </nav>
 
           {/* Right: Action Icons */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 ml-auto justify-end">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 justify-end z-10">
             {/* Search Icon */}
             <button
               onClick={() => setIsSearchOpen(true)}

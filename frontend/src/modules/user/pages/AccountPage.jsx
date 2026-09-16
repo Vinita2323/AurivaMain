@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { 
   Package, MapPin, Gift, Tag, CreditCard, Heart, User,
   LogOut, ChevronRight, ArrowRight, Copy, Check, Plus, 
   Edit3, Trash2, CheckCircle2, ShieldCheck, X, Sparkles, Lock,
-  ArrowLeft, ChevronLeft, Phone
+  ArrowLeft, ChevronLeft, Phone, FileText, Camera, Upload
 } from 'lucide-react';
+import { orderApi } from '../../../utils/api';
+import { formatOrder } from '../../../context/AuthContext';
 
 import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
 import { useAuth } from '../../../context/AuthContext';
 import { useWishlist } from '../../../context/WishlistContext';
@@ -35,8 +38,43 @@ export default function AccountPage() {
     updateAddress, 
     deleteAddress, 
     setPrimaryAddress,
-    cancelOrder 
+    cancelOrder,
+    updateProfile
   } = useAuth();
+
+  // Live orders state — refreshed every 15s when Orders tab is active
+  const [liveOrders, setLiveOrders] = useState(null);
+  const ordersPollRef = useRef(null);
+
+  const displayOrders = liveOrders ?? orders;
+
+  // Fetch latest orders from backend
+  const refreshOrders = async () => {
+    try {
+      const res = await orderApi.getUserOrders();
+      if (res?.data?.orders && res.data.orders.length >= 0) {
+        setLiveOrders(res.data.orders.map(formatOrder));
+      }
+    } catch (_) { /* silent */ }
+  };
+
+  // Start/stop polling based on orders tab being active
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab === 'orders') {
+      // Immediate refresh + 15s interval
+      refreshOrders();
+      ordersPollRef.current = setInterval(refreshOrders, 15_000);
+    } else {
+      if (ordersPollRef.current) {
+        clearInterval(ordersPollRef.current);
+        ordersPollRef.current = null;
+      }
+    }
+    return () => {
+      if (ordersPollRef.current) clearInterval(ordersPollRef.current);
+    };
+  }, [activeTab, user]);
 
   const { wishlistCount } = useWishlist();
   
@@ -53,6 +91,13 @@ export default function AccountPage() {
   const [addrState, setAddrState] = useState('Madhya Pradesh');
   const [addrPincode, setAddrPincode] = useState('');
   const [addrIsPrimary, setAddrIsPrimary] = useState(false);
+
+  // Invoice Preview Modal State
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
+
+  // Profile Picture Upload State
+  const avatarInputRef = useRef(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   // Profile Form State
   const [profileName, setProfileName] = useState(user?.name || 'Vini Sharma');
@@ -277,10 +322,87 @@ export default function AccountPage() {
     setIsAddressModalOpen(false);
   };
 
-  const handleSaveProfile = (e) => {
+  const resizeImageToDataUrl = (file, maxWidth = 300, maxHeight = 300, quality = 0.85) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAvatarFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (JPEG, PNG, WEBP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image file size should be less than 5MB.');
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      const resizedBase64 = await resizeImageToDataUrl(file, 300, 300, 0.85);
+      await updateProfile({ avatar: resizedBase64 });
+    } catch (err) {
+      console.error('[AccountPage] Avatar upload error:', err);
+      alert('Could not process the image. Please try another file.');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (window.confirm('Remove your profile picture and keep that space blank?')) {
+      await updateProfile({ avatar: '' });
+    }
+  };
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 2500);
+    try {
+      await updateProfile({
+        name: profileName.trim(),
+        phone: profilePhone.trim()
+      });
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 2500);
+    } catch (err) {
+      alert('Could not update profile: ' + (err.message || 'Error'));
+    }
   };
 
   // Complete List of Account Navigation Tabs
@@ -352,11 +474,53 @@ export default function AccountPage() {
           !isMobileMenu ? 'hidden lg:flex' : 'flex'
         }`}>
           <div className="flex items-center gap-3 sm:gap-4 relative z-10 w-full sm:w-auto">
-            <img
-              src={user?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
-              alt={user?.name}
-              className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-[#D4AF37] shadow-md shrink-0"
+            {/* Hidden file input for uploading profile picture */}
+            <input
+              type="file"
+              ref={avatarInputRef}
+              onChange={handleAvatarFileSelect}
+              accept="image/*"
+              className="hidden"
+              id="avatar-upload-top"
             />
+
+            {/* Profile Avatar: Custom Image or Blank Space (No static profile) */}
+            <div className="relative group shrink-0">
+              {user?.avatar ? (
+                <div className="relative">
+                  <img
+                    src={user.avatar}
+                    alt={user?.name || 'User Profile'}
+                    className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-[#D4AF37] shadow-md"
+                  />
+                  {/* Change Profile Photo Button Badge */}
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="absolute -bottom-1 -right-1 p-1 sm:p-1.5 rounded-full bg-[#D4AF37] text-[#0E2A1B] hover:bg-white hover:scale-110 transition-all shadow-md cursor-pointer border border-[#0E2A1B]"
+                    title="Change Profile Picture"
+                    aria-label="Change Profile Picture"
+                  >
+                    <Camera className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                /* Blank Profile Space — Empty until user adds one */
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-dashed border-[#D4AF37]/60 hover:border-[#D4AF37] bg-[#143322]/80 hover:bg-[#1B3B29] flex flex-col items-center justify-center text-[#D4AF37] transition-all cursor-pointer group shadow-sm"
+                  title="Click to add profile picture"
+                  aria-label="Add Profile Picture"
+                >
+                  <Camera className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110" />
+                  <span className="text-[7.5px] sm:text-[8.5px] font-bold uppercase tracking-wider text-[#D4AF37] mt-0.5">Add</span>
+                </button>
+              )}
+            </div>
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-base sm:text-2xl font-bold tracking-tight text-white truncate">
@@ -503,14 +667,14 @@ export default function AccountPage() {
                 <div className="flex items-center justify-between border-b border-stone-200 pb-3 sm:pb-4">
                   <div>
                     <h3 className="text-base sm:text-xl font-bold text-[#0E2A1B]">
-                      My Orders & Past Shipments ({orders.length})
+                      My Orders &amp; Past Shipments ({displayOrders.length})
                     </h3>
                     <p className="text-xs text-stone-500 mt-0.5">Track live deliveries and view invoice history.</p>
                   </div>
                 </div>
 
                 <div className="space-y-3 sm:space-y-4">
-                  {orders.map((ord) => (
+                  {displayOrders.map((ord) => (
                     <div key={ord.id} className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-stone-200 bg-[#FAF7F2] space-y-3 shadow-2xs">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-200 pb-2.5">
                         <div>
@@ -523,7 +687,12 @@ export default function AccountPage() {
 
                         <div className="flex items-center gap-2 sm:gap-3">
                           <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
-                            ord.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            ord.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800'
+                            : ord.status === 'Cancelled' ? 'bg-rose-100 text-rose-800'
+                            : ord.status === 'Out for Delivery' ? 'bg-blue-100 text-blue-800'
+                            : ord.status === 'Packed' ? 'bg-cyan-100 text-cyan-800'
+                            : ord.status === 'Ready for Dispatch' ? 'bg-purple-100 text-purple-800'
+                            : 'bg-amber-100 text-amber-800'
                           }`}>
                             {ord.status}
                           </span>
@@ -533,6 +702,14 @@ export default function AccountPage() {
                           >
                             Live Track
                           </Link>
+                          <button
+                            onClick={() => setSelectedInvoiceOrder(ord)}
+                            className="px-2.5 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Preview and download official tax invoice"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Invoice</span>
+                          </button>
                           {['Order Received', 'Packed', 'Confirmed'].includes(ord.status) && (
                             <button
                               onClick={async () => {
@@ -776,6 +953,51 @@ export default function AccountPage() {
                   Profile & Account Settings
                 </h3>
 
+                {/* Profile Photo Upload & Management Card */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8E2D5] max-w-lg">
+                  <div className="relative shrink-0">
+                    {user?.avatar ? (
+                      <img
+                        src={user.avatar}
+                        alt={user?.name || 'Profile'}
+                        className="w-16 h-16 rounded-full object-cover border-2 border-[#D4AF37] shadow-sm"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full border-2 border-dashed border-stone-300 bg-stone-100 flex items-center justify-center text-stone-400">
+                        <Camera className="w-6 h-6 stroke-[1.5]" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-bold text-[#0E2A1B] uppercase tracking-wider">Profile Picture</h4>
+                    <p className="text-[11px] text-stone-500 mt-0.5">
+                      {user?.avatar ? 'Custom picture uploaded. Click to update or remove.' : 'No photo uploaded. This space remains blank until you add one.'}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={isUploadingAvatar}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#0E2A1B] text-[#D4AF37] hover:bg-[#1B3B29] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>{user?.avatar ? 'Change Picture' : 'Upload Picture'}</span>
+                      </button>
+
+                      {user?.avatar && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveAvatar}
+                          className="px-3 py-1.5 rounded-xl border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <form onSubmit={handleSaveProfile} className="space-y-4 max-w-lg">
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">Full Name</label>
@@ -961,6 +1183,13 @@ export default function AccountPage() {
           </form>
         </div>
       )}
+
+      {/* Invoice Preview & Download Modal */}
+      <InvoicePreviewModal
+        isOpen={Boolean(selectedInvoiceOrder)}
+        onClose={() => setSelectedInvoiceOrder(null)}
+        order={selectedInvoiceOrder}
+      />
 
       <Footer />
     </div>

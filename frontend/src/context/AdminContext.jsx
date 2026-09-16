@@ -4,6 +4,9 @@ import { INITIAL_COUPONS } from '../data/coupons';
 import { CATEGORIES } from '../data/categories';
 import { REVIEWS } from '../data/reviews';
 import { BANNERS_DATA } from '../data/adminData';
+import { INITIAL_RECIPES } from '../data/recipes';
+import { recipeApi, adminRecipeApi } from '../utils/api';
+import pushNotificationService from '../services/pushNotificationService';
 
 const AdminContext = createContext();
 
@@ -171,6 +174,9 @@ export function AdminProvider({ children }) {
   };
 
   const logoutAdmin = () => {
+    // Unregister FCM device token from backend per Push Notification SOP
+    pushNotificationService.unregisterFCMToken().catch(() => {});
+
     setIsAdminAuthenticated(false);
     setAdminToken(null);
     try {
@@ -310,6 +316,47 @@ export function AdminProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem('auriva_admin_promotions', JSON.stringify(promotions)); } catch (e) { console.error(e); }
   }, [promotions]);
+
+  // Recipes State
+  const [recipes, setRecipes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('auriva_admin_recipes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_RECIPES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('auriva_admin_recipes', JSON.stringify(recipes));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [recipes]);
+
+  // Sync recipes from backend on mount
+  useEffect(() => {
+    recipeApi.getRecipes()
+      .then(res => {
+        if (res?.data?.recipes && res.data.recipes.length > 0) {
+          const fetched = res.data.recipes.map(r => ({
+            ...r,
+            id: (r._id || r.id)?.toString()
+          }));
+          setRecipes(prev => {
+            const serverIds = new Set(fetched.map(r => String(r.id || r._id)));
+            const localOnly = (prev || []).filter(r => !serverIds.has(String(r.id || r._id)));
+            return [...localOnly, ...fetched];
+          });
+        }
+      })
+      .catch(err => console.warn('[AdminContext] Recipes backend load note:', err.message));
+  }, []);
 
   // Sync products from backend on mount with smart merging
   const refreshProducts = async () => {
@@ -981,6 +1028,70 @@ export function AdminProvider({ children }) {
     return { success: true };
   };
 
+  // Recipe Actions
+  const addRecipe = async (recipeData) => {
+    const slug = recipeData.slug || recipeData.title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-');
+    const newRecipe = {
+      ...recipeData,
+      id: `recipe-${Date.now()}`,
+      slug,
+      status: recipeData.status || 'ACTIVE',
+      isFeatured: recipeData.isFeatured !== undefined ? Boolean(recipeData.isFeatured) : true,
+      createdAt: new Date().toISOString()
+    };
+
+    setRecipes(prev => [newRecipe, ...prev]);
+
+    // Also persist to backend if admin token available
+    try {
+      const res = await adminRecipeApi.create(newRecipe);
+      if (res?.data?.recipe) {
+        const savedRecipe = { ...res.data.recipe, id: res.data.recipe._id || newRecipe.id };
+        setRecipes(prev => prev.map(r => r.id === newRecipe.id ? savedRecipe : r));
+        return { success: true, recipe: savedRecipe };
+      }
+    } catch (err) {
+      console.warn('[AdminContext] Backend addRecipe note:', err.message);
+    }
+    return { success: true, recipe: newRecipe };
+  };
+
+  const updateRecipe = async (id, updatedData) => {
+    setRecipes(prev => prev.map(r => (r.id === id || r._id === id) ? { ...r, ...updatedData } : r));
+
+    try {
+      await adminRecipeApi.update(id, updatedData);
+    } catch (err) {
+      console.warn('[AdminContext] Backend updateRecipe note:', err.message);
+    }
+    return { success: true };
+  };
+
+  const deleteRecipe = async (id) => {
+    setRecipes(prev => prev.filter(r => r.id !== id && r._id !== id));
+
+    try {
+      await adminRecipeApi.delete(id);
+    } catch (err) {
+      console.warn('[AdminContext] Backend deleteRecipe note:', err.message);
+    }
+    return { success: true };
+  };
+
+  const toggleRecipeFeatured = async (id) => {
+    const target = recipes.find(r => r.id === id || r._id === id);
+    if (!target) return;
+    const newFeatured = !target.isFeatured;
+    updateRecipe(id, { isFeatured: newFeatured });
+  };
+
+  const toggleRecipeStatus = async (id) => {
+    const target = recipes.find(r => r.id === id || r._id === id);
+    if (!target) return;
+    const newStatus = target.status === 'ACTIVE' ? 'DRAFT' : 'ACTIVE';
+    updateRecipe(id, { status: newStatus });
+  };
+
   return (
     <AdminContext.Provider value={{
       isAdminAuthenticated,
@@ -1040,7 +1151,14 @@ export function AdminProvider({ children }) {
       togglePromotionStatus,
       // Settings Actions
       updateSettings,
-      refreshSettings
+      refreshSettings,
+      // Recipe Actions
+      recipes,
+      addRecipe,
+      updateRecipe,
+      deleteRecipe,
+      toggleRecipeFeatured,
+      toggleRecipeStatus
     }}>
       {children}
     </AdminContext.Provider>

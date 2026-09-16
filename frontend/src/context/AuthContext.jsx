@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { INITIAL_ORDERS } from '../data/adminData';
 import { userAuthApi, addressApi, orderApi } from '../utils/api';
 import confetti from 'canvas-confetti';
+import pushNotificationService from '../services/pushNotificationService';
 
 const AuthContext = createContext();
 
@@ -11,7 +12,7 @@ const INITIAL_CUSTOMERS = [
     name: "Vini Sharma",
     email: "vini.sharma@gmail.com",
     phone: "+91 9876543210",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    avatar: "",
     rewardsPoints: 2450,
     tier: "Gold Wellness Member",
     memberSince: "Jan 2024",
@@ -26,7 +27,7 @@ const INITIAL_CUSTOMERS = [
     name: "Rahul Verma",
     email: "rahul.v@outlook.com",
     phone: "+91 9822334455",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+    avatar: "",
     rewardsPoints: 1200,
     tier: "Silver Member",
     memberSince: "Mar 2024",
@@ -135,7 +136,14 @@ export function AuthProvider({ children }) {
     try {
       const saved = localStorage.getItem('auriva_user');
       if (saved === 'null') return null;
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.avatar && (parsed.avatar.includes('images.unsplash.com/photo-1534528741775') || parsed.avatar.includes('images.unsplash.com/photo-1507003211169'))) {
+          parsed.avatar = '';
+          localStorage.setItem('auriva_user', JSON.stringify(parsed));
+        }
+        return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -163,7 +171,26 @@ export function AuthProvider({ children }) {
   const [customers, setCustomers] = useState(() => {
     try {
       const saved = localStorage.getItem('auriva_registered_customers');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map(c => ({
+            ...c,
+            totalOrders: typeof c?.totalOrders === 'number' ? c.totalOrders : (Number(c?.totalOrders) || 0),
+            totalSpent: typeof c?.totalSpent === 'number' ? c.totalSpent : (Number(c?.totalSpent) || 0),
+            rewardsPoints: typeof c?.rewardsPoints === 'number' ? c.rewardsPoints : (Number(c?.rewardsPoints) || 0),
+            tier: c?.tier || "Gold Wellness Member",
+            memberSince: c?.memberSince || "Member",
+            city: c?.city || "Indore",
+            state: c?.state || "Madhya Pradesh",
+            status: c?.status || "Active",
+            name: c?.name || "Customer",
+            email: c?.email || "",
+            phone: c?.phone || "",
+            avatar: c?.avatar || ""
+          }));
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -300,10 +327,14 @@ export function AuthProvider({ children }) {
           name: receivedUser.name || `User ${receivedUser.phone?.slice(-4) || ''}`,
           email: receivedUser.email || '',
           phone: receivedUser.phone ? `+91 ${receivedUser.phone}` : phoneNumber,
-          avatar: receivedUser.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-          rewardsPoints: 500,
-          tier: "Gold Wellness Member",
-          memberSince: "Member",
+          avatar: receivedUser.avatar || "",
+          rewardsPoints: Number(receivedUser.rewardsPoints) || 500,
+          tier: receivedUser.tier || "Gold Wellness Member",
+          memberSince: receivedUser.memberSince || "Member",
+          totalOrders: Number(receivedUser.totalOrders) || 0,
+          totalSpent: Number(receivedUser.totalSpent) || 0,
+          city: receivedUser.city || "Indore",
+          state: receivedUser.state || "Madhya Pradesh",
           role: receivedUser.role || 'USER',
           status: receivedUser.status || 'ACTIVE'
         };
@@ -350,7 +381,7 @@ export function AuthProvider({ children }) {
       name: `Member ${digitsOnly.slice(-4)}`,
       email: `user.${digitsOnly}@aurivafoods.com`,
       phone: `+91 ${digitsOnly}`,
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      avatar: "",
       rewardsPoints: 500,
       tier: "Gold Wellness Member",
       memberSince: "Just now",
@@ -376,6 +407,9 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    // Unregister FCM device token from backend per Push Notification SOP
+    pushNotificationService.unregisterFCMToken().catch(() => {});
+
     setUser(null);
     setToken(null);
     try {
@@ -685,8 +719,30 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const updateProfile = (data) => {
-    setUser(prev => prev ? ({ ...prev, ...data }) : null);
+  const updateProfile = async (data) => {
+    setUser(prev => {
+      const updated = prev ? ({ ...prev, ...data }) : null;
+      if (updated) {
+        try {
+          localStorage.setItem('auriva_user', JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
+
+    if (token) {
+      try {
+        const res = await userAuthApi.updateProfile(data);
+        if (res?.data?.user) {
+          setUser(prev => ({
+            ...prev,
+            ...res.data.user
+          }));
+        }
+      } catch (err) {
+        console.warn('[AuthContext] Backend updateProfile note:', err.message);
+      }
+    }
   };
 
   const updateCustomer = (id, data) => {

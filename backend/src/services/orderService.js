@@ -8,6 +8,7 @@ import Coupon from '../models/Coupon.js';
 import PaymentService from './paymentService.js';
 import settingsService from './settingsService.js';
 import couponService from './couponService.js';
+import notificationService from './notificationService.js';
 
 /**
  * Generate a customer-facing human-readable order number
@@ -342,6 +343,13 @@ export const placeOrder = async (userId, payload) => {
       if (freshProd && freshProd.stockCount <= 0) {
         await Product.updateOne({ _id: item.product }, { $set: { inStock: false } });
       }
+
+      // Check low stock threshold dynamically
+      if (freshProd) {
+        notificationService.checkAndNotifyLowStock(freshProd).catch((e) => {
+          console.warn('[Notification Note] Low stock alert check:', e.message);
+        });
+      }
     }
 
     // Atomically claim coupon slot if applicable
@@ -415,6 +423,44 @@ export const placeOrder = async (userId, payload) => {
     });
 
     const savedOrder = await order.save();
+
+    // Trigger In-App Notifications for Order Placement
+    try {
+      // 1. Admin Notification (New Order Received)
+      await notificationService.createNotification({
+        recipientRole: 'ADMIN',
+        title: `New Order #${savedOrder.orderNumber}`,
+        message: `Order placed by ${addressSnapshot.fullName} (₹${savedOrder.pricing.total}) via ${savedOrder.delivery.type}.`,
+        type: 'ORDER_PLACED',
+        relatedId: savedOrder._id.toString(),
+        link: '/admin/orders',
+        metadata: {
+          orderId: savedOrder._id.toString(),
+          orderNumber: savedOrder.orderNumber,
+          total: savedOrder.pricing.total,
+          customerName: addressSnapshot.fullName,
+          paymentMethod: savedOrder.payment.method
+        }
+      });
+
+      // 2. Customer Notification (Order Confirmed)
+      await notificationService.createNotification({
+        recipient: userId,
+        recipientRole: 'USER',
+        title: 'Order Placed Successfully',
+        message: `Your order #${savedOrder.orderNumber} for ₹${savedOrder.pricing.total} has been confirmed.`,
+        type: 'ORDER_CONFIRMED',
+        relatedId: savedOrder._id.toString(),
+        link: `/orders/${savedOrder.orderNumber}`,
+        metadata: {
+          orderId: savedOrder._id.toString(),
+          orderNumber: savedOrder.orderNumber,
+          total: savedOrder.pricing.total
+        }
+      });
+    } catch (notifErr) {
+      console.warn('[Notification Note] Order placement notifications error:', notifErr.message);
+    }
 
     // Record COD in payment ledger
     if (normalizedPaymentMethod === 'COD') {
@@ -733,7 +779,60 @@ export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy 
   }
 
   updateOrderTimeline(order, newStatus, updatedBy, note);
-  return await order.save();
+  const updatedOrder = await order.save();
+
+  // Trigger Notifications for Order Status Transition
+  try {
+    let userTitle = `Order Status: ${newStatus}`;
+    let userMessage = `Your order #${order.orderNumber} status has been updated to ${newStatus}.`;
+    let notifType = 'SYSTEM';
+
+    if (newStatus === 'PACKED') {
+      userTitle = 'Order Packed!';
+      userMessage = `Your order #${order.orderNumber} has been packed and is ready for dispatch.`;
+      notifType = 'ORDER_PACKED';
+    } else if (newStatus === 'SHIPPED') {
+      userTitle = 'Order Shipped!';
+      userMessage = `Your order #${order.orderNumber} is on the way${order.courierName ? ` via ${order.courierName}` : ''}${order.awbNumber ? ` (Tracking: ${order.awbNumber})` : ''}.`;
+      notifType = 'ORDER_SHIPPED';
+    } else if (newStatus === 'OUT_FOR_DELIVERY') {
+      userTitle = 'Out for Delivery!';
+      userMessage = `Your order #${order.orderNumber} is out for delivery with our delivery partner.`;
+      notifType = 'ORDER_OUT_FOR_DELIVERY';
+    } else if (newStatus === 'DELIVERED') {
+      userTitle = 'Order Delivered!';
+      userMessage = `Your order #${order.orderNumber} was delivered successfully. Enjoy your Aurivá snacks!`;
+      notifType = 'ORDER_DELIVERED';
+
+      // Notify Admin as well on delivery completion
+      await notificationService.createNotification({
+        recipientRole: 'ADMIN',
+        title: `Order #${order.orderNumber} Delivered`,
+        message: `Order #${order.orderNumber} was successfully delivered.`,
+        type: 'ORDER_DELIVERED',
+        relatedId: order._id.toString(),
+        link: '/admin/orders',
+        metadata: { orderId: order._id.toString(), orderNumber: order.orderNumber }
+      });
+    }
+
+    if (order.user) {
+      await notificationService.createNotification({
+        recipient: order.user,
+        recipientRole: 'USER',
+        title: userTitle,
+        message: userMessage,
+        type: notifType,
+        relatedId: order._id.toString(),
+        link: `/orders/${order.orderNumber}`,
+        metadata: { orderId: order._id.toString(), orderNumber: order.orderNumber, status: newStatus }
+      });
+    }
+  } catch (notifErr) {
+    console.warn('[Notification Note] Order status update notification error:', notifErr.message);
+  }
+
+  return updatedOrder;
 };
 
 /**
@@ -800,7 +899,31 @@ export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
   const noteMsg = `Dispatched via ${order.courierName || 'Standard Express'}${order.awbNumber ? ` (AWB: ${order.awbNumber})` : ''}`;
   updateOrderTimeline(order, 'SHIPPED', hubName, noteMsg);
 
-  return await order.save();
+  const savedOrder = await order.save();
+
+  try {
+    if (savedOrder.user) {
+      await notificationService.createNotification({
+        recipient: savedOrder.user,
+        recipientRole: 'USER',
+        title: 'Shipment Dispatched!',
+        message: `Your order #${savedOrder.orderNumber} has been dispatched${savedOrder.courierName ? ` via ${savedOrder.courierName}` : ''}${savedOrder.awbNumber ? ` (AWB: ${savedOrder.awbNumber})` : ''}.`,
+        type: 'ORDER_SHIPPED',
+        relatedId: savedOrder._id.toString(),
+        link: `/orders/${savedOrder.orderNumber}`,
+        metadata: {
+          orderId: savedOrder._id.toString(),
+          orderNumber: savedOrder.orderNumber,
+          courierName: savedOrder.courierName,
+          awbNumber: savedOrder.awbNumber
+        }
+      });
+    }
+  } catch (notifErr) {
+    console.warn('[Notification Note] Dispatch notification error:', notifErr.message);
+  }
+
+  return savedOrder;
 };
 
 /**
@@ -907,6 +1030,51 @@ export const cancelOrder = async (orderId, options = {}) => {
   );
 
   await lockedOrder.save();
+
+  // Trigger Notifications for Order Cancellation
+  try {
+    const isCustomerCancel = lockedOrder.cancelledBy === 'CUSTOMER';
+
+    // 1. Notify Admin
+    await notificationService.createNotification({
+      recipientRole: 'ADMIN',
+      title: `Order #${lockedOrder.orderNumber} Cancelled`,
+      message: `Order #${lockedOrder.orderNumber} was cancelled by ${lockedOrder.cancelledBy || 'User'}. Reason: ${lockedOrder.cancelReason || 'None provided'}`,
+      type: 'ORDER_CANCELLED',
+      relatedId: lockedOrder._id.toString(),
+      link: '/admin/orders',
+      metadata: {
+        orderId: lockedOrder._id.toString(),
+        orderNumber: lockedOrder.orderNumber,
+        cancelledBy: lockedOrder.cancelledBy,
+        cancelReason: lockedOrder.cancelReason
+      }
+    });
+
+    // 2. Notify Customer
+    if (lockedOrder.user) {
+      await notificationService.createNotification({
+        recipient: lockedOrder.user,
+        recipientRole: 'USER',
+        title: 'Order Cancelled',
+        message: isCustomerCancel
+          ? `Your order #${lockedOrder.orderNumber} has been cancelled successfully. Any deducted payment will be refunded.`
+          : `Your order #${lockedOrder.orderNumber} was cancelled by store administration. Reason: ${lockedOrder.cancelReason || 'Support action'}.`,
+        type: 'ORDER_CANCELLED',
+        relatedId: lockedOrder._id.toString(),
+        link: `/orders/${lockedOrder.orderNumber}`,
+        metadata: {
+          orderId: lockedOrder._id.toString(),
+          orderNumber: lockedOrder.orderNumber,
+          cancelledBy: lockedOrder.cancelledBy,
+          cancelReason: lockedOrder.cancelReason
+        }
+      });
+    }
+  } catch (notifErr) {
+    console.warn('[Notification Note] Cancellation notification error:', notifErr.message);
+  }
+
   return lockedOrder;
 };
 

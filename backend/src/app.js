@@ -28,6 +28,11 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import adminPaymentRoutes from './routes/adminPaymentRoutes.js';
 import couponRoutes from './routes/couponRoutes.js';
 import adminCouponRoutes from './routes/adminCouponRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import adminNotificationRoutes from './routes/adminNotificationRoutes.js';
+import recipeRoutes from './routes/recipeRoutes.js';
+import adminRecipeRoutes from './routes/adminRecipeRoutes.js';
+import fcmTokenRoutes from './routes/fcmTokenRoutes.js';
 import { notFoundHandler, errorMiddleware } from './middleware/errorMiddleware.js';
 import { sendSuccess } from './utils/response.js';
 
@@ -118,6 +123,16 @@ app.use('/api/v1/coupons', couponRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/v1/admin/coupons', adminCouponRoutes);
 app.use('/api/admin/coupons', adminCouponRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/v1/admin/notifications', adminNotificationRoutes);
+app.use('/api/admin/notifications', adminNotificationRoutes);
+app.use('/api/v1/recipes', recipeRoutes);
+app.use('/api/recipes', recipeRoutes);
+app.use('/api/v1/admin/recipes', adminRecipeRoutes);
+app.use('/api/admin/recipes', adminRecipeRoutes);
+app.use('/api/v1/fcm-tokens', fcmTokenRoutes);
+app.use('/api/fcm-tokens', fcmTokenRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
 // 404 Route Not Found Handler

@@ -11,6 +11,7 @@ import AccountPage from '../pages/AccountPage';
 import LoginPage from '../pages/LoginPage';
 import AboutPage from '../pages/AboutPage';
 import ContactPage from '../pages/ContactPage';
+import RecipesPage from '../pages/RecipesPage';
 import MobileBottomNav from '../components/MobileBottomNav';
 
 export default function UserRoutes() {
@@ -23,6 +24,7 @@ export default function UserRoutes() {
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
+        <Route path="/recipes" element={<RecipesPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/order-tracking" element={<OrderTrackingPage />} />

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 import Bestseller from '../models/Bestseller.js';
+import notificationService from './notificationService.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
 export const INITIAL_PRODUCTS_SEED = [
@@ -444,6 +445,10 @@ class ProductService {
     Object.assign(product, updateData);
     await product.save();
 
+    if (updateData.stockCount !== undefined) {
+      notificationService.checkAndNotifyLowStock(product).catch(() => {});
+    }
+
     // Sync Bestseller status
     if (updateData.isBestseller !== undefined) {
       if (updateData.isBestseller) {
@@ -540,6 +545,9 @@ class ProductService {
       product.status = 'ACTIVE';
     }
     await product.save();
+
+    // Check and trigger Admin low-stock notification if below threshold
+    notificationService.checkAndNotifyLowStock(product).catch(() => {});
 
     return product;
   }

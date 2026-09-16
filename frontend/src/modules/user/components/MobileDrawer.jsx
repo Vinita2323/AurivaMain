@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { 
   X, ChevronRight, Home, ShoppingBag, Heart, MapPin, 
-  Gift, LayoutDashboard, Sparkles, Tag, Layers, Nut, Flower2 
+  Gift, LayoutDashboard, Sparkles, Tag, Layers, Nut, Flower2, ChefHat 
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -31,6 +31,7 @@ export default function MobileDrawer({ isOpen, onClose }) {
     { name: 'Home', path: '/', icon: Home },
     { name: 'Shop All Snacks', path: '/shop', icon: ShoppingBag },
     { name: 'Roasted Makhana', path: '/shop?category=makhana', icon: Flower2 },
+    { name: 'Healthy Recipes', path: '/recipes', icon: ChefHat, badge: 'New' },
     { name: 'Dry Fruits & Nuts', path: '/shop?category=dry-fruits', icon: Nut },
     { name: 'Gourmet Seeds', path: '/shop?category=seeds', icon: Sparkles },
     { name: 'Gifting Combos', path: '/shop?filter=combos', icon: Layers, badge: 'Popular' },
@@ -69,11 +70,17 @@ export default function MobileDrawer({ isOpen, onClose }) {
                 onClick={onClose}
                 className="flex items-center gap-3 group"
               >
-                <img
-                  src={user.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
-                  alt={user.name}
-                  className="w-10 h-10 rounded-full border border-[#D4AF37] object-cover"
-                />
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-10 h-10 rounded-full border border-[#D4AF37] object-cover"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full border border-[#D4AF37]/40 bg-white/10 flex items-center justify-center text-[#D4AF37]">
+                    <User className="w-5 h-5" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-wider">Welcome back</p>
                   <h4 className="text-sm font-semibold truncate group-hover:text-[#D4AF37] transition-colors">{user.name}</h4>

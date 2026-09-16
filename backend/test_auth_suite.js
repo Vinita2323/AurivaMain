@@ -30,7 +30,7 @@ const runTestSuite = async () => {
     const testPhone = '9876500112';
 
     // Clean test records before testing
-    await User.deleteMany({ phone: testPhone });
+    await User.deleteMany({ $or: [{ phone: testPhone }, { email: 'testcustomer@aurivafoods.com' }] });
     await Otp.deleteMany({ phone: testPhone });
 
     console.log('✓ Database connected and test records cleaned.');

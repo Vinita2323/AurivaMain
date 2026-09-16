@@ -3,7 +3,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, ShoppingCart, Package, Flame, FolderTree, 
   Boxes, Users, Tag, Star, Megaphone, Bell, 
-  BarChart3, Settings, ExternalLink, X 
+  BarChart3, Settings, ExternalLink, X, ChefHat
 } from 'lucide-react';
 import Logo from '../../user/components/Logo';
 
@@ -18,6 +18,7 @@ export default function AdminSidebar({ isOpen, onClose }) {
     { name: 'Coupons', path: '/admin/coupons', icon: Tag, badge: '5' },
     { name: 'Reviews', path: '/admin/reviews', icon: Star },
     { name: 'Promotions', path: '/admin/promotions', icon: Megaphone },
+    { name: 'Recipes', path: '/admin/recipes', icon: ChefHat },
     { name: 'Notifications', path: '/admin/notifications', icon: Bell, badge: '3' },
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
     { name: 'Settings', path: '/admin/settings', icon: Settings },

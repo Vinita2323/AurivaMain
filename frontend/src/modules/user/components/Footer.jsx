@@ -122,7 +122,7 @@ export default function Footer() {
             <ul className="space-y-3">
               <li><Link to="/about" className="text-xs hover:text-[#F7F3E9] transition-colors">Our Story</Link></li>
               <li><Link to="/about" className="text-xs hover:text-[#F7F3E9] transition-colors">Benefits</Link></li>
-              <li><Link to="/about" className="text-xs hover:text-[#F7F3E9] transition-colors">Recipes</Link></li>
+              <li><Link to="/recipes" className="text-xs hover:text-[#F7F3E9] transition-colors">Recipes</Link></li>
               <li><Link to="/about" className="text-xs hover:text-[#F7F3E9] transition-colors">Blog</Link></li>
               <li><Link to="/contact" className="text-xs hover:text-[#F7F3E9] transition-colors">Contact Us</Link></li>
             </ul>

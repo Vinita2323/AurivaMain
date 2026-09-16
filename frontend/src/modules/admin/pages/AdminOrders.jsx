@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Search, Eye, Edit3, Truck, UserCheck, Package, 
-  X, CheckCircle, ChevronLeft, ChevronRight, Ban, RefreshCw 
+  X, CheckCircle, ChevronLeft, ChevronRight, Ban, RefreshCw, Download, FileText 
 } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
 import OrderStatusModal from '../components/OrderStatusModal';
+import InvoicePreviewModal from '../../user/components/InvoicePreviewModal';
 import { useAuth, formatOrder } from '../../../context/AuthContext';
 import { adminOrderApi } from '../../../utils/api';
 
@@ -33,6 +34,7 @@ export default function AdminOrders() {
 
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState(null);
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState(null);
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
 
   // Lock background scrolling when either modal is open
   useEffect(() => {
@@ -363,6 +365,15 @@ export default function AdminOrders() {
                               <Eye className="w-4 h-4" />
                             </button>
 
+                            {/* Download / Preview Invoice PDF */}
+                            <button
+                              onClick={() => setSelectedInvoiceOrder(ord)}
+                              className="p-2 text-stone-600 hover:text-[#D4AF37] hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
+                              title="Preview & Download Tax Invoice PDF"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+
                             {/* Admin Order Cancel Button */}
                             {ord.status !== 'Delivered' && ord.status !== 'Cancelled' && (
                               <button
@@ -564,17 +575,35 @@ export default function AdminOrders() {
                 </button>
               ) : <div />}
 
-              <button
-                onClick={() => setSelectedOrderForDetail(null)}
-                className="px-5 py-2 rounded-lg border border-stone-300 text-xs font-semibold uppercase tracking-wider text-stone-700 hover:bg-stone-100 transition-colors"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedInvoiceOrder(selectedOrderForDetail)}
+                  className="px-4 py-2 rounded-lg bg-[#0E2A1B] text-[#D4AF37] hover:bg-[#1B3B29] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Invoice Preview</span>
+                </button>
+
+                <button
+                  onClick={() => setSelectedOrderForDetail(null)}
+                  className="px-5 py-2 rounded-lg border border-stone-300 text-xs font-semibold uppercase tracking-wider text-stone-700 hover:bg-stone-100 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
           </div>
         </div>
       )}
+
+      {/* Invoice Preview Modal */}
+      <InvoicePreviewModal
+        isOpen={Boolean(selectedInvoiceOrder)}
+        onClose={() => setSelectedInvoiceOrder(null)}
+        order={selectedInvoiceOrder}
+        isAdmin={true}
+      />
 
     </div>
   );

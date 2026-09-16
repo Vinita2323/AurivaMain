@@ -13,10 +13,11 @@ export default function AdminCustomers() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   // Compute CRM Metrics
-  const totalSpendAll = customers.reduce((acc, c) => acc + (c.totalSpent || 0), 0);
-  const totalOrdersAll = customers.reduce((acc, c) => acc + (c.totalOrders || 0), 0);
-  const repeatCustomerCount = customers.filter(c => (c.totalOrders || 0) > 1).length;
-  const repeatRate = Math.round((repeatCustomerCount / (customers.length || 1)) * 100);
+  const customerList = Array.isArray(customers) ? customers : [];
+  const totalSpendAll = customerList.reduce((acc, c) => acc + (Number(c?.totalSpent) || 0), 0);
+  const totalOrdersAll = customerList.reduce((acc, c) => acc + (Number(c?.totalOrders) || 0), 0);
+  const repeatCustomerCount = customerList.filter(c => (Number(c?.totalOrders) || 0) > 1).length;
+  const repeatRate = Math.round((repeatCustomerCount / (customerList.length || 1)) * 100);
 
   useEffect(() => {
     if (selectedCustomer) {
@@ -29,17 +30,23 @@ export default function AdminCustomers() {
     };
   }, [selectedCustomer]);
 
-  const filteredCustomers = customers.filter(c => {
+  const filteredCustomers = customerList.filter(c => {
+    if (!c) return false;
+    const tier = (c.tier || '').toLowerCase();
     if (tierFilter !== 'All') {
-      if (!c.tier.toLowerCase().includes(tierFilter.toLowerCase())) return false;
+      if (!tier.includes(tierFilter.toLowerCase())) return false;
     }
     if (search) {
       const q = search.toLowerCase();
+      const name = (c.name || '').toLowerCase();
+      const email = (c.email || '').toLowerCase();
+      const phone = (c.phone || '');
+      const city = (c.city || '').toLowerCase();
       return (
-        c.name.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        c.phone.includes(q) ||
-        c.city.toLowerCase().includes(q)
+        name.includes(q) ||
+        email.includes(q) ||
+        phone.includes(q) ||
+        city.includes(q)
       );
     }
     return true;
@@ -47,7 +54,7 @@ export default function AdminCustomers() {
 
   // Get orders of selected customer
   const customerOrders = selectedCustomer
-    ? orders.filter(o => o.email === selectedCustomer.email || o.customer === selectedCustomer.name)
+    ? (orders || []).filter(o => o.email === selectedCustomer.email || o.customer === selectedCustomer.name)
     : [];
 
   return (
@@ -66,7 +73,7 @@ export default function AdminCustomers() {
                 <span>Total Customers</span>
                 <Users className="w-4 h-4 text-[#0E2A1B]" />
               </div>
-              <h2 className="font-sans text-2xl sm:text-3xl font-extrabold text-[#0E2A1B]">{customers.length.toLocaleString('en-IN')}</h2>
+              <h2 className="font-sans text-2xl sm:text-3xl font-extrabold text-[#0E2A1B]">{customerList.length.toLocaleString('en-IN')}</h2>
               <p className="text-xs text-stone-500 font-medium">Registered member profiles</p>
             </div>
 
@@ -93,7 +100,7 @@ export default function AdminCustomers() {
                 <span>Cumulative LTV</span>
                 <Award className="w-4 h-4 text-[#D4AF37]" />
               </div>
-              <h2 className="font-sans text-2xl sm:text-3xl font-extrabold text-[#0E2A1B]">₹{totalSpendAll.toLocaleString('en-IN')}</h2>
+              <h2 className="font-sans text-2xl sm:text-3xl font-extrabold text-[#0E2A1B]">₹{(Number(totalSpendAll) || 0).toLocaleString('en-IN')}</h2>
               <p className="text-xs text-stone-500 font-medium">Total customer lifetime revenue</p>
             </div>
           </div>
@@ -146,61 +153,77 @@ export default function AdminCustomers() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 font-medium">
-                  {filteredCustomers.map(c => (
-                    <tr key={c.id} className="hover:bg-stone-50 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3.5">
-                          <img
-                            src={c.avatar}
-                            alt=""
-                            className="w-11 h-11 rounded-full object-cover border border-stone-200 bg-[#FAF7F2] shrink-0"
-                          />
-                          <div>
-                            <div className="font-sans font-bold text-sm sm:text-[15px] text-[#0E2A1B]">{c.name}</div>
-                            <div className="text-xs sm:text-[12px] text-stone-500 font-medium">{c.email} • {c.phone}</div>
+                  {filteredCustomers.map(c => {
+                    const tierName = c.tier || 'Gold Wellness Member';
+                    const isPlatinum = tierName.includes('Platinum');
+                    const isGold = tierName.includes('Gold');
+                    const spentNum = Number(c.totalSpent) || 0;
+                    const ordersNum = Number(c.totalOrders) || 0;
+                    const pointsNum = Number(c.rewardsPoints) || 0;
+                    const initial = (c.name || 'C').charAt(0).toUpperCase();
+
+                    return (
+                      <tr key={c.id || c._id} className="hover:bg-stone-50 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3.5">
+                            {c.avatar ? (
+                              <img
+                                src={c.avatar}
+                                alt=""
+                                className="w-11 h-11 rounded-full object-cover border border-stone-200 bg-[#FAF7F2] shrink-0"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-full border border-[#D4AF37]/40 bg-[#FAF7F2] text-[#0E2A1B] font-bold text-sm flex items-center justify-center shrink-0">
+                                {initial}
+                              </div>
+                            )}
+                            <div>
+                              <div className="font-sans font-bold text-sm sm:text-[15px] text-[#0E2A1B]">{c.name || 'Customer'}</div>
+                              <div className="text-xs sm:text-[12px] text-stone-500 font-medium">{c.email || 'No email'} • {c.phone || 'No phone'}</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="py-3 px-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                          c.tier.includes('Platinum')
-                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                            : c.tier.includes('Gold')
-                            ? 'bg-[#D4AF37]/20 text-[#0E2A1B] border border-[#D4AF37]/40'
-                            : 'bg-stone-100 text-stone-700 border border-stone-200'
-                        }`}>
-                          {c.tier}
-                        </span>
-                      </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                            isPlatinum
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : isGold
+                              ? 'bg-[#D4AF37]/20 text-[#0E2A1B] border border-[#D4AF37]/40'
+                              : 'bg-stone-100 text-stone-700 border border-stone-200'
+                          }`}>
+                            {tierName}
+                          </span>
+                        </td>
 
-                      <td className="py-3 px-4 text-stone-700 text-xs sm:text-sm font-medium">
-                        {c.city}, {c.state}
-                      </td>
+                        <td className="py-3 px-4 text-stone-700 text-xs sm:text-sm font-medium">
+                          {c.city || 'Indore'}{c.state ? `, ${c.state}` : ''}
+                        </td>
 
-                      <td className="py-3 px-4 font-bold text-amber-800 text-xs sm:text-sm">
-                        ✨ {c.rewardsPoints} pts
-                      </td>
+                        <td className="py-3 px-4 font-bold text-amber-800 text-xs sm:text-sm">
+                          ✨ {pointsNum} pts
+                        </td>
 
-                      <td className="py-3 px-4 font-semibold text-stone-900 text-xs sm:text-sm">
-                        {c.totalOrders} orders
-                      </td>
+                        <td className="py-3 px-4 font-semibold text-stone-900 text-xs sm:text-sm">
+                          {ordersNum} orders
+                        </td>
 
-                      <td className="py-3 px-4 font-bold text-[#0E2A1B] text-sm sm:text-base">
-                        ₹{c.totalSpent.toLocaleString('en-IN')}
-                      </td>
+                        <td className="py-3 px-4 font-bold text-[#0E2A1B] text-sm sm:text-base">
+                          ₹{spentNum.toLocaleString('en-IN')}
+                        </td>
 
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => setSelectedCustomer(c)}
-                          className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#0E2A1B] hover:text-[#D4AF37] px-3.5 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 transition-colors shadow-2xs"
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span>Profile</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => setSelectedCustomer(c)}
+                            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#0E2A1B] hover:text-[#D4AF37] px-3.5 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 transition-colors shadow-2xs"
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span>Profile</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -231,11 +254,17 @@ export default function AdminCustomers() {
             {/* Header */}
             <div className="p-4 sm:p-5 bg-[#0E2A1B] text-white flex items-center justify-between border-b border-[#D4AF37]/30 shrink-0">
               <div className="flex items-center gap-3.5">
-                <img src={selectedCustomer.avatar} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-[#D4AF37]" />
+                {selectedCustomer.avatar ? (
+                  <img src={selectedCustomer.avatar} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-[#D4AF37]" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full border-2 border-[#D4AF37] bg-[#FAF7F2] text-[#0E2A1B] font-bold text-lg flex items-center justify-center">
+                    {(selectedCustomer.name || 'C').charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#D4AF37]">{selectedCustomer.tier}</span>
-                  <h3 className="font-sans text-base sm:text-xl font-bold mt-0.5">{selectedCustomer.name}</h3>
-                  <p className="text-xs text-stone-300">Customer since {selectedCustomer.memberSince}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#D4AF37]">{selectedCustomer.tier || 'Member'}</span>
+                  <h3 className="font-sans text-base sm:text-xl font-bold mt-0.5">{selectedCustomer.name || 'Customer'}</h3>
+                  <p className="text-xs text-stone-300">Customer since {selectedCustomer.memberSince || 'Member'}</p>
                 </div>
               </div>
               <button onClick={() => setSelectedCustomer(null)} className="p-1 rounded-lg text-stone-400 hover:text-white transition-colors">
@@ -248,19 +277,19 @@ export default function AdminCustomers() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] text-xs sm:text-sm">
                 <div>
                   <span className="text-stone-500 block text-[11px] font-bold uppercase">Phone</span>
-                  <strong className="text-stone-800 font-semibold">{selectedCustomer.phone}</strong>
+                  <strong className="text-stone-800 font-semibold">{selectedCustomer.phone || 'N/A'}</strong>
                 </div>
                 <div>
                   <span className="text-stone-500 block text-[11px] font-bold uppercase">Email</span>
-                  <strong className="text-stone-800 font-semibold truncate block">{selectedCustomer.email}</strong>
+                  <strong className="text-stone-800 font-semibold truncate block">{selectedCustomer.email || 'N/A'}</strong>
                 </div>
                 <div>
                   <span className="text-stone-500 block text-[11px] font-bold uppercase">Reward Balance</span>
-                  <strong className="text-amber-800 font-bold">{selectedCustomer.rewardsPoints} Points</strong>
+                  <strong className="text-amber-800 font-bold">{Number(selectedCustomer.rewardsPoints) || 0} Points</strong>
                 </div>
                 <div>
                   <span className="text-stone-500 block text-[11px] font-bold uppercase">Lifetime Spend</span>
-                  <strong className="text-[#0E2A1B] font-bold">₹{selectedCustomer.totalSpent}</strong>
+                  <strong className="text-[#0E2A1B] font-bold">₹{(Number(selectedCustomer.totalSpent) || 0).toLocaleString('en-IN')}</strong>
                 </div>
               </div>
 

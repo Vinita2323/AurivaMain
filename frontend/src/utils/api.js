@@ -20,8 +20,10 @@ export async function apiRequest(endpoint, options = {}) {
   if (!headers.Authorization) {
     let adminToken = localStorage.getItem('auriva_admin_token');
     const userToken = localStorage.getItem('auriva_user_token');
+    const isAdminContext = endpoint.includes('/admin') || 
+      (typeof window !== 'undefined' && window.location.pathname.includes('/admin'));
 
-    if (endpoint.includes('/admin')) {
+    if (isAdminContext || (endpoint.includes('/fcm-tokens') && !userToken)) {
       if (!adminToken && !endpoint.includes('/auth/admin/login')) {
         try {
           const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
@@ -41,9 +43,13 @@ export async function apiRequest(endpoint, options = {}) {
       }
       if (adminToken) {
         headers.Authorization = `Bearer ${adminToken}`;
+      } else if (userToken) {
+        headers.Authorization = `Bearer ${userToken}`;
       }
     } else if (userToken) {
       headers.Authorization = `Bearer ${userToken}`;
+    } else if (adminToken) {
+      headers.Authorization = `Bearer ${adminToken}`;
     }
   }
 
@@ -56,8 +62,10 @@ export async function apiRequest(endpoint, options = {}) {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      // Auto-retry once on 401 Unauthorized for admin endpoints (except login)
-      if (response.status === 401 && endpoint.includes('/admin') && !options._retried && !endpoint.includes('/auth/admin/login')) {
+      // Auto-retry once on 401 Unauthorized for admin endpoints
+      const isAdminRetry = endpoint.includes('/admin') || 
+        (typeof window !== 'undefined' && window.location.pathname.includes('/admin'));
+      if (response.status === 401 && isAdminRetry && !options._retried && !endpoint.includes('/auth/admin/login')) {
         try {
           const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
             method: 'POST',
@@ -395,6 +403,45 @@ export const addressApi = {
   })
 };
 
+/**
+ * Helper to download authenticated binary PDF files as a file download
+ */
+export async function fetchPdfBlob(url) {
+  const adminToken = localStorage.getItem('auriva_admin_token');
+  const userToken = localStorage.getItem('auriva_user_token');
+  const token = url.includes('/admin') ? (adminToken || userToken) : (userToken || adminToken);
+
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    const errorJson = await response.json().catch(() => ({}));
+    throw new Error(errorJson.message || `Failed to load invoice (HTTP ${response.status})`);
+  }
+
+  return await response.blob();
+}
+
+export function downloadBlobFile(blob, filename = 'Invoice.pdf') {
+  const blobUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+}
+
+export async function downloadPdfBlob(url, fallbackFilename = 'Invoice.pdf') {
+  const blob = await fetchPdfBlob(url);
+  downloadBlobFile(blob, fallbackFilename);
+  return true;
+}
+
 // Order Management API (Customer)
 export const orderApi = {
   placeOrder: (orderPayload) => apiRequest('/orders', {
@@ -406,7 +453,15 @@ export const orderApi = {
   cancelOrder: (id, reason = '') => apiRequest(`/orders/${id}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason })
-  })
+  }),
+  getInvoiceBlob: (id) => {
+    const url = `${API_BASE}/orders/${id}/invoice`;
+    return fetchPdfBlob(url);
+  },
+  downloadInvoice: (id, options = { download: true }) => {
+    const url = `${API_BASE}/orders/${id}/invoice${options.download ? '?download=1' : ''}`;
+    return downloadPdfBlob(url, `Invoice-${id}.pdf`);
+  }
 };
 
 // Admin Order Management API
@@ -435,7 +490,15 @@ export const adminOrderApi = {
   cancelOrder: (id, reason = '') => apiRequest(`/admin/orders/${id}/cancel`, {
     method: 'PATCH',
     body: JSON.stringify({ reason })
-  })
+  }),
+  getInvoiceBlob: (id) => {
+    const url = `${API_BASE}/admin/orders/${id}/invoice`;
+    return fetchPdfBlob(url);
+  },
+  downloadInvoice: (id, options = { download: true }) => {
+    const url = `${API_BASE}/admin/orders/${id}/invoice${options.download ? '?download=1' : ''}`;
+    return downloadPdfBlob(url, `Invoice-${id}.pdf`);
+  }
 };
 
 // Checkout API
@@ -582,6 +645,112 @@ export const adminCouponApi = {
     apiRequest(`/admin/coupons/${id}`, { method: 'DELETE' })
 };
 
+// Admin Notifications API
+export const adminNotificationApi = {
+  getNotifications: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.status && params.status !== 'all') query.append('status', params.status);
+    if (params.type) query.append('type', params.type);
+    const qs = query.toString();
+    return apiRequest(`/admin/notifications${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  getUnreadCount: () =>
+    apiRequest('/admin/notifications/unread-count', { method: 'GET' }),
+  markAsRead: (id) =>
+    apiRequest(`/admin/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllAsRead: () =>
+    apiRequest('/admin/notifications/read-all', { method: 'PATCH' }),
+  deleteNotification: (id) =>
+    apiRequest(`/admin/notifications/${id}`, { method: 'DELETE' })
+};
+
+// Customer Notifications API
+export const notificationApi = {
+  getNotifications: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.status && params.status !== 'all') query.append('status', params.status);
+    if (params.type) query.append('type', params.type);
+    const qs = query.toString();
+    return apiRequest(`/notifications${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  getUnreadCount: () =>
+    apiRequest('/notifications/unread-count', { method: 'GET' }),
+  markAsRead: (id) =>
+    apiRequest(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllAsRead: () =>
+    apiRequest('/notifications/read-all', { method: 'PATCH' }),
+  deleteNotification: (id) =>
+    apiRequest(`/notifications/${id}`, { method: 'DELETE' })
+};
+
+// Public Recipes API
+export const recipeApi = {
+  getRecipes: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.category && params.category !== 'All') query.append('category', params.category);
+    if (params.featured) query.append('featured', '1');
+    if (params.search) query.append('search', params.search);
+    const qs = query.toString();
+    return apiRequest(`/recipes${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  getRecipe: (idOrSlug) =>
+    apiRequest(`/recipes/${idOrSlug}`, { method: 'GET' })
+};
+
+// Admin Recipe Management API
+export const adminRecipeApi = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.category && params.category !== 'All') query.append('category', params.category);
+    if (params.status && params.status !== 'All') query.append('status', params.status);
+    if (params.search) query.append('search', params.search);
+    const qs = query.toString();
+    return apiRequest(`/admin/recipes${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+  create: (data) =>
+    apiRequest('/admin/recipes', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  update: (id, data) =>
+    apiRequest(`/admin/recipes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+  delete: (id) =>
+    apiRequest(`/admin/recipes/${id}`, { method: 'DELETE' })
+};
+
+// FCM Push Notification Token API (SOP implementation)
+export const fcmApi = {
+  saveToken: (token, platform = 'web') =>
+    apiRequest('/fcm-tokens/save', {
+      method: 'POST',
+      body: JSON.stringify({ token, platform })
+    }),
+  saveMobileToken: (token) =>
+    apiRequest('/fcm-tokens/mobile/save', {
+      method: 'POST',
+      body: JSON.stringify({ token, platform: 'mobile' })
+    }),
+  removeToken: (token, platform = 'web') =>
+    apiRequest('/fcm-tokens/remove', {
+      method: 'DELETE',
+      body: JSON.stringify({ token, platform })
+    }),
+  sendTestNotification: (payload = {}) =>
+    apiRequest('/fcm-tokens/test', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  getStatus: () =>
+    apiRequest('/fcm-tokens/status', { method: 'GET' })
+};
+
 export default {
   apiRequest,
   userAuthApi,
@@ -603,7 +772,13 @@ export default {
   paymentApi,
   adminPaymentApi,
   couponApi,
-  adminCouponApi
+  adminCouponApi,
+  adminNotificationApi,
+  notificationApi,
+  recipeApi,
+  adminRecipeApi,
+  fcmApi
 };
+
 
 

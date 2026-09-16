@@ -58,6 +58,15 @@ const userSchema = new mongoose.Schema(
       default: ''
     },
     addresses: [addressSchema],
+    // FCM Push Notification Tokens (Web & Mobile)
+    fcmTokens: {
+      type: [String],
+      default: []
+    },
+    fcmTokenMobile: {
+      type: [String],
+      default: []
+    },
     lastLoginAt: {
       type: Date,
       default: Date.now

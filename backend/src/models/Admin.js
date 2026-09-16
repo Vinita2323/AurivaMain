@@ -42,6 +42,15 @@ const adminSchema = new mongoose.Schema(
       type: [String],
       default: ['SUPER_ADMIN']
     },
+    // FCM Push Notification Tokens (Web & Mobile)
+    fcmTokens: {
+      type: [String],
+      default: []
+    },
+    fcmTokenMobile: {
+      type: [String],
+      default: []
+    },
     lastLoginAt: {
       type: Date,
       default: null

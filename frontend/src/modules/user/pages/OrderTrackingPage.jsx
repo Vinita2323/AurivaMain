@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   CheckCircle2, Clock, Phone, MapPin, 
-  ChevronRight, Navigation, MessageSquare 
+  ChevronRight, Navigation, MessageSquare, FileText, Wifi
 } from 'lucide-react';
+
+const ORDER_POLL_INTERVAL_MS = 15_000; // Re-fetch order status every 15 seconds
 
 import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
 import { useAuth, formatOrder } from '../../../context/AuthContext';
 import { orderApi } from '../../../utils/api';
@@ -17,19 +20,36 @@ export default function OrderTrackingPage() {
   const { orderId } = useParams();
   const { orders, cancelOrder } = useAuth();
   const [liveOrder, setLiveOrder] = useState(null);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [isInvoicePreviewOpen, setIsInvoicePreviewOpen] = useState(false);
+  const pollRef = useRef(null);
+
+  // Fetch once on mount, then poll every 15s for status updates
+  const fetchOrder = async (id) => {
+    try {
+      const res = await orderApi.getOrderById(id);
+      if (res?.data?.order) {
+        setLiveOrder(formatOrder(res.data.order));
+        setIsLiveConnected(true);
+      }
+    } catch (err) {
+      console.warn('[OrderTrackingPage] Backend order fetch note:', err.message);
+      setIsLiveConnected(false);
+    }
+  };
 
   useEffect(() => {
-    if (orderId) {
-      orderApi.getOrderById(orderId)
-        .then(res => {
-          if (res?.data?.order) {
-            setLiveOrder(formatOrder(res.data.order));
-          }
-        })
-        .catch(err => {
-          console.warn('[OrderTrackingPage] Backend order fetch note:', err.message);
-        });
-    }
+    if (!orderId) return;
+
+    // Initial fetch
+    fetchOrder(orderId);
+
+    // Start polling for live status updates
+    pollRef.current = setInterval(() => fetchOrder(orderId), ORDER_POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [orderId]);
 
   // Find target order: live from API, from context, or fallback
@@ -82,9 +102,23 @@ export default function OrderTrackingPage() {
                 <h1 className="font-serif text-lg sm:text-2xl lg:text-3xl font-bold text-[#0E2A1B]">
                   Order #{order.id}
                 </h1>
-                <span className="bg-amber-100 text-amber-800 text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                <span className={`text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                  order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800'
+                  : order.status === 'Cancelled' ? 'bg-rose-100 text-rose-800'
+                  : order.status === 'Out for Delivery' ? 'bg-blue-100 text-blue-800'
+                  : order.status === 'Packed' ? 'bg-cyan-100 text-cyan-800'
+                  : order.status === 'Ready for Dispatch' ? 'bg-purple-100 text-purple-800'
+                  : 'bg-amber-100 text-amber-800'
+                }`}>
                   {order.status}
                 </span>
+                {/* Live polling indicator */}
+                {isLiveConnected && (
+                  <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    <Wifi className="w-2.5 h-2.5 animate-pulse" />
+                    Live
+                  </span>
+                )}
               </div>
               <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5 sm:mt-1">
                 Placed on {order.date} • Expected delivery today by 03:15 PM
@@ -113,9 +147,19 @@ export default function OrderTrackingPage() {
               )}
             </div>
 
-            <div className="text-left sm:text-right pt-1 sm:pt-0 border-t sm:border-t-0 border-stone-100">
-              <span className="text-[10.5px] sm:text-xs text-stone-500 block">Total Paid Amount</span>
-              <p className="font-sans text-base sm:text-xl font-bold text-[#0E2A1B]">₹{order.total}</p>
+            <div className="text-left sm:text-right pt-1 sm:pt-0 border-t sm:border-t-0 border-stone-100 flex flex-col sm:items-end gap-1.5">
+              <div>
+                <span className="text-[10.5px] sm:text-xs text-stone-500 block">Total Paid Amount</span>
+                <p className="font-sans text-base sm:text-xl font-bold text-[#0E2A1B]">₹{order.total}</p>
+              </div>
+              <button
+                onClick={() => setIsInvoicePreviewOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:text-[#0E2A1B] hover:bg-stone-50 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+                title="Preview and download official tax invoice"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>Invoice Preview</span>
+              </button>
             </div>
           </div>
 
@@ -301,6 +345,13 @@ export default function OrderTrackingPage() {
         </div>
 
       </main>
+
+      {/* Invoice Preview & Download Modal */}
+      <InvoicePreviewModal
+        isOpen={isInvoicePreviewOpen}
+        onClose={() => setIsInvoicePreviewOpen(false)}
+        order={order}
+      />
 
       <Footer />
     </div>

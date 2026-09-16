@@ -14,6 +14,7 @@ import AdminPromotions from '../pages/AdminPromotions';
 import AdminAnalytics from '../pages/AdminAnalytics';
 import AdminNotifications from '../pages/AdminNotifications';
 import AdminSettings from '../pages/AdminSettings';
+import AdminRecipes from '../pages/AdminRecipes';
 import AdminLogin from '../pages/AdminLogin';
 
 function ProtectedAdminRoute({ children }) {
@@ -44,6 +45,7 @@ export default function AdminRoutes() {
       <Route path="/coupons" element={<ProtectedAdminRoute><AdminCoupons /></ProtectedAdminRoute>} />
       <Route path="/reviews" element={<ProtectedAdminRoute><AdminReviews /></ProtectedAdminRoute>} />
       <Route path="/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} />
+      <Route path="/recipes" element={<ProtectedAdminRoute><AdminRecipes /></ProtectedAdminRoute>} />
       <Route path="/notifications" element={<ProtectedAdminRoute><AdminNotifications /></ProtectedAdminRoute>} />
       <Route path="/analytics" element={<ProtectedAdminRoute><AdminAnalytics /></ProtectedAdminRoute>} />
       <Route path="/settings" element={<ProtectedAdminRoute><AdminSettings /></ProtectedAdminRoute>} />
