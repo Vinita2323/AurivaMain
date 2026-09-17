@@ -97,7 +97,7 @@ async function runTests() {
       stockCount: 100,
       rating: 0,
       reviewsCount: 0,
-      image: '/src/assets/user/Types/PeriPeri.jpeg',
+      image: '/assets/user/Types/PeriPeri.jpeg',
       status: 'ACTIVE'
     });
 
@@ -347,7 +347,7 @@ async function runTests() {
       price: 199,
       category: 'flavoured-makhana',
       stockCount: 50,
-      image: '/src/assets/user/Types/PeriPeri.jpeg',
+      image: '/assets/user/Types/PeriPeri.jpeg',
       status: 'ACTIVE'
     });
     const order3 = await Order.create({

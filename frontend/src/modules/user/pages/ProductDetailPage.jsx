@@ -144,7 +144,12 @@ export default function ProductDetailPage() {
   const resolvedMainImage = resolveProductImage(product);
 
   const galleryList = useMemo(() => {
-    const cleanImg = (img) => (typeof img === 'string' && !img.includes('1599488615731') ? img : resolvedMainImage);
+    const cleanImg = (img) => {
+      if (!img || (typeof img === 'string' && img.includes('1599488615731'))) {
+        return resolvedMainImage;
+      }
+      return resolveProductImage(img);
+    };
     const raw = Array.isArray(product.gallery) && product.gallery.length > 0
       ? product.gallery.map(cleanImg)
       : [resolvedMainImage];

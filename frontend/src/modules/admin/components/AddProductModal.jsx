@@ -4,6 +4,7 @@ import { X, Check, UploadCloud, Image as ImageIcon, Trash2, Plus, RefreshCw, Sta
 import { CATEGORIES } from '../../../data/categories';
 import { useAdmin } from '../../../context/AdminContext';
 import { uploadApi } from '../../../utils/api';
+import { resolveProductImage } from '../../../utils/productImage';
 
 const EMPTY_PRODUCT = {
   name: '',
@@ -276,7 +277,7 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
     try {
       const { subcategory, ...cleanFormData } = formData;
       const rawGallery = Array.isArray(formData.gallery) ? formData.gallery : [];
-      const primaryImg = formData.image || rawGallery[0] || '/src/assets/user/Types/PeriPeri.jpeg';
+      const primaryImg = formData.image || rawGallery[0] || resolveProductImage();
       const finalGallery = rawGallery.length > 0
         ? (rawGallery.includes(primaryImg) ? rawGallery : [primaryImg, ...rawGallery])
         : [primaryImg];
@@ -578,7 +579,7 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                           }`}
                         >
                           <img
-                            src={imgUrl}
+                            src={resolveProductImage(imgUrl)}
                             alt={`Gallery ${idx + 1}`}
                             className="w-full h-full object-cover"
                           />

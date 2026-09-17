@@ -7,6 +7,7 @@ import { BANNERS_DATA } from '../data/adminData';
 import { INITIAL_RECIPES } from '../data/recipes';
 import { recipeApi, adminRecipeApi } from '../utils/api';
 import pushNotificationService from '../services/pushNotificationService';
+import { resolveProductImage } from '../utils/productImage';
 
 const AdminContext = createContext();
 
@@ -504,10 +505,10 @@ export function AdminProvider({ children }) {
       stockCount: stockCount,
       isBestseller: isBestseller,
       badge: productData.badge || (isBestseller ? "BESTSELLER" : "New"),
-      image: productData.image || productData.gallery?.[0] || "/src/assets/user/Types/PeriPeri.jpeg",
+      image: productData.image || productData.gallery?.[0] || resolveProductImage(),
       gallery: Array.isArray(productData.gallery) && productData.gallery.length > 0
         ? productData.gallery
-        : (productData.image ? [productData.image] : ["/src/assets/user/Types/PeriPeri.jpeg"]),
+        : (productData.image ? [productData.image] : [resolveProductImage()]),
       weight: productData.weight || '150g',
       inStock: productData.inStock !== false,
       rating: Number(productData.rating || 4.8),

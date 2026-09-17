@@ -120,7 +120,7 @@ class CartService {
         id: prodId ? prodId.toString() : item._id?.toString(),
         productId: prodId ? prodId.toString() : undefined,
         name: item.name || item.product?.name || 'Snack Product',
-        image: item.image || item.product?.image || '/src/assets/user/Types/PeriPeri.jpeg',
+        image: item.image || item.product?.image || '/assets/user/Types/PeriPeri.jpeg',
         weight: item.weight || '150g',
         price: Number(item.price || item.product?.price || 0),
         oldPrice: Number(item.oldPrice || item.product?.oldPrice || 0),
