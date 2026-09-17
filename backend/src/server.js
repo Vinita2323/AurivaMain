@@ -37,6 +37,7 @@ const startServer = async () => {
       console.log('====================================================');
       console.log(`🚀 Auriva Backend Server running in [${env.NODE_ENV}] mode`);
       console.log(`🌐 Server URL: http://localhost:${env.PORT}`);
+      console.log(`💻 Frontend App: http://localhost:${env.PORT}`);
       console.log(`📡 API Endpoints: http://localhost:${env.PORT}/api/v1`);
       console.log('====================================================');
     });

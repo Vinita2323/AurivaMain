@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 import env from './config/env.js';
 import authRoutes from './routes/authRoutes.js';
@@ -63,19 +64,27 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Frontend build directory
+const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
+
 // Static directory for file uploads
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
-// Root & Health Check Endpoint
-app.get('/', (req, res) => {
-  return sendSuccess(res, 'Auriva API is running', {
-    version: '1.0.0',
-    environment: env.NODE_ENV,
+// Serve frontend static build files (JS, CSS, images, etc.)
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+}
+
+// Health Check Endpoints
+app.get('/api/v1/health', (req, res) => {
+  return sendSuccess(res, 'Server health check passed', {
+    status: 'healthy',
+    uptime: process.uptime(),
     timestamp: new Date().toISOString()
   });
 });
 
-app.get('/api/v1/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   return sendSuccess(res, 'Server health check passed', {
     status: 'healthy',
     uptime: process.uptime(),
@@ -134,6 +143,20 @@ app.use('/api/admin/recipes', adminRecipeRoutes);
 app.use('/api/v1/fcm-tokens', fcmTokenRoutes);
 app.use('/api/fcm-tokens', fcmTokenRoutes);
 app.use('/api/v1/admin', adminRoutes);
+
+// SPA Fallback: Serve frontend index.html for all client-side navigation (non-API & non-uploads)
+app.get('*', (req, res, next) => {
+  if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/uploads')) {
+    return next();
+  }
+
+  const indexPath = path.resolve(frontendDistPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+
+  return next();
+});
 
 // 404 Route Not Found Handler
 app.use(notFoundHandler);
