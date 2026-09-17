@@ -64,8 +64,31 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Frontend build directory
-const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
+// Resolve frontend static files directory across local dev & production environments
+const resolveFrontendDistPath = () => {
+  const candidates = [
+    process.env.FRONTEND_DIST_PATH,
+    path.resolve(__dirname, '../public'),             // backend/public (Production Git commit)
+    path.resolve(__dirname, '../../frontend/dist'),   // frontend/dist (Local monorepo dev)
+    path.resolve(process.cwd(), 'public'),           // Current working directory / public
+    path.resolve(process.cwd(), 'dist'),             // Current working directory / dist
+    path.resolve(__dirname, '../dist'),               // backend/dist
+    path.resolve(__dirname, '../../public_html'),     // Hostinger root public_html
+  ].filter(Boolean);
+
+  for (const dir of candidates) {
+    if (fs.existsSync(path.resolve(dir, 'index.html'))) {
+      console.log(`[Frontend] Serving static files from: ${dir}`);
+      return dir;
+    }
+  }
+
+  // Fallback default
+  console.warn(`[Frontend] Warning: index.html not found in candidate paths. Defaulting to backend/public.`);
+  return path.resolve(__dirname, '../public');
+};
+
+const frontendDistPath = resolveFrontendDistPath();
 
 // Static directory for file uploads
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
@@ -155,7 +178,38 @@ app.get('*', (req, res, next) => {
     return res.sendFile(indexPath);
   }
 
-  return next();
+  // Diagnostic fallback for production troubleshooting instead of silent 404 crash
+  console.error(`[Frontend Error] index.html not found at ${indexPath} for requested route ${req.originalUrl}`);
+  return res.status(503).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Auriva - Frontend Build Not Found</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; background: #0E2A1B; color: #F7F3E9; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+          .card { background: #182019; border: 1px solid #D4AF37; border-radius: 12px; max-width: 600px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+          h1 { color: #D4AF37; margin-top: 0; font-size: 24px; }
+          code { background: #242E25; padding: 3px 8px; border-radius: 4px; color: #86EFAC; font-size: 14px; word-break: break-all; }
+          ul { padding-left: 20px; }
+          li { margin: 8px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>⚠️ Frontend Build Not Found</h1>
+          <p>The Auriva Backend Server is running, but <code>index.html</code> was not found on the server.</p>
+          <p><strong>Attempted path:</strong><br /><code>${indexPath}</code></p>
+          <p><strong>Quick Fix:</strong></p>
+          <ul>
+            <li>Run <code>npm run build:frontend</code> in your backend directory.</li>
+            <li>Commit the <code>backend/public</code> folder to Git and push to your repository.</li>
+            <li>Hostinger will automatically pull the built files and render the UI.</li>
+          </ul>
+        </div>
+      </body>
+    </html>
+  `);
 });
 
 // 404 Route Not Found Handler
