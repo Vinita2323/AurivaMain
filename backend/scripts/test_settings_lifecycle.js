@@ -90,7 +90,7 @@ async function runTests() {
       oldPrice: 250,
       category: 'flavoured-makhana',
       stockCount: 100,
-      image: '/src/assets/user/Types/PeriPeri.jpeg',
+      image: '/assets/user/Types/PeriPeri.jpeg',
       status: 'ACTIVE'
     });
 
@@ -272,7 +272,7 @@ async function runTests() {
       slug: `low-stock-prod-${timestamp}`,
       price: 150,
       stockCount: 40,
-      image: '/src/assets/user/Types/PeriPeri.jpeg',
+      image: '/assets/user/Types/PeriPeri.jpeg',
       status: 'ACTIVE'
     });
     const isLow = lowStockProd.stockCount <= currentSettings.lowStockThreshold;
