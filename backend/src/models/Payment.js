@@ -54,7 +54,8 @@ const paymentSchema = new mongoose.Schema(
     order: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Order',
-      required: [true, 'Order reference is required'],
+      required: false,
+      default: null,
       index: true
     },
     user: {

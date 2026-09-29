@@ -147,15 +147,23 @@ export default function AdminOrders() {
       else if (action === 'awb') res = await adminOrderApi.shiprocketAwb(orderId);
       else if (action === 'pickup') res = await adminOrderApi.shiprocketPickup(orderId);
       else if (action === 'label') res = await adminOrderApi.shiprocketLabel(orderId);
+      else if (action === 'invoice') res = await adminOrderApi.shiprocketInvoice(orderId);
+      else if (action === 'manifest') res = await adminOrderApi.shiprocketManifest(orderId);
       else if (action === 'track') res = await adminOrderApi.shiprocketTrack(orderId);
-      else if (action === 'cancel') res = await adminOrderApi.shiprocketCancel(orderId);
+      else if (action === 'cancel') res = await adminOrderApi.shiprocketCancel(orderId, false);
 
       const msg = res?.message || 'Shiprocket action completed.';
       if (action === 'serviceability') {
         const n = res?.data?.couriers?.length ?? 0;
         setShiprocketMsg(`${msg} ${n} courier(s) available.`);
       } else if (action === 'track') {
-        setShiprocketMsg(`${msg} Status: ${res?.data?.status || '—'}`);
+        setShiprocketMsg(
+          `${msg} SR: ${res?.data?.status || '—'} → Order: ${res?.data?.orderStatus || '—'}`
+        );
+      } else if (action === 'fulfill' && res?.data?.errors?.length) {
+        setShiprocketMsg(
+          `${msg} Partial: ${res.data.errors.map((e) => e.step).join(', ')} failed.`
+        );
       } else {
         setShiprocketMsg(msg);
       }
@@ -617,6 +625,25 @@ export default function AdminOrders() {
                           </a>
                         </span>
                       )}
+                      {sr.invoiceUrl && (
+                        <span className="sm:col-span-2">
+                          Invoice:{' '}
+                          <a href={sr.invoiceUrl} target="_blank" rel="noreferrer" className="text-[#0E2A1B] font-semibold underline">
+                            Download
+                          </a>
+                        </span>
+                      )}
+                      {sr.manifestUrl && (
+                        <span className="sm:col-span-2">
+                          Manifest:{' '}
+                          <a href={sr.manifestUrl} target="_blank" rel="noreferrer" className="text-[#0E2A1B] font-semibold underline">
+                            Download
+                          </a>
+                        </span>
+                      )}
+                      {sr.isRto && (
+                        <span className="sm:col-span-2 text-amber-800 font-semibold">RTO / return in progress or completed</span>
+                      )}
                       {sr.errorMessage && (
                         <span className="sm:col-span-2 text-rose-700">{sr.errorMessage}</span>
                       )}
@@ -628,9 +655,18 @@ export default function AdminOrders() {
                         {btn('awb', 'Generate AWB', hasShipment && !hasAwb)}
                         {btn('pickup', 'Schedule Pickup', hasAwb && !sr.pickupScheduled)}
                         {btn('label', 'Generate Label', hasAwb)}
-                        {btn('track', 'Track', hasAwb)}
+                        {btn('invoice', 'Invoice', hasShipment)}
+                        {btn('manifest', 'Manifest', hasAwb)}
+                        {btn('track', 'Sync Status', hasShipment)}
                         {btn('fulfill', 'Full Fulfill', !hasAwb)}
                         {btn('cancel', 'Cancel Shipment', hasShipment && !isTerminal)}
+                      </div>
+                    )}
+                    {isTerminal && hasShipment && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {btn('track', 'Sync Status', true)}
+                        {sr.labelUrl ? null : btn('label', 'Generate Label', hasAwb)}
+                        {sr.invoiceUrl ? null : btn('invoice', 'Invoice', hasShipment)}
                       </div>
                     )}
                     {shiprocketMsg && (

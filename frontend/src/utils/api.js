@@ -1,4 +1,58 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const LOCAL_API_BASE = 'http://localhost:5000/api/v1';
+
+function resolveApiBase() {
+  // Vite/local dev: prefer .env, else localhost
+  if (import.meta.env.DEV) {
+    const devUrl = import.meta.env.VITE_API_URL;
+    return String(devUrl || LOCAL_API_BASE).replace(/\/$/, '');
+  }
+
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return String(envUrl).replace(/\/$/, '');
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `${window.location.origin}/api/v1`;
+    }
+  }
+
+  return LOCAL_API_BASE;
+}
+
+const API_BASE = resolveApiBase();
+
+/** Decode JWT payload without verifying signature (client-side expiry check only). */
+export function decodeJwtPayload(token) {
+  try {
+    if (!token || typeof token !== 'string') return null;
+    const part = token.split('.')[1];
+    if (!part) return null;
+    const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+export function isJwtExpired(token) {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return !payload;
+  return payload.exp * 1000 <= Date.now();
+}
+
+function clearExpiredUserSession() {
+  try {
+    localStorage.removeItem('auriva_user_token');
+    localStorage.removeItem('auriva_user');
+  } catch {
+    // ignore
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('auriva:auth-expired'));
+  }
+}
 
 /**
  * Universal API Request Helper
@@ -20,9 +74,15 @@ export async function apiRequest(endpoint, options = {}) {
   // Attach appropriate Token if available
   if (!headers.Authorization) {
     let adminToken = localStorage.getItem('auriva_admin_token');
-    const userToken = localStorage.getItem('auriva_user_token');
+    let userToken = localStorage.getItem('auriva_user_token');
     const isAdminContext = endpoint.includes('/admin') || 
       (typeof window !== 'undefined' && window.location.pathname.includes('/admin'));
+
+    // Drop stale user JWTs before they spam 401s on checkout / orders
+    if (userToken && isJwtExpired(userToken)) {
+      clearExpiredUserSession();
+      userToken = null;
+    }
 
     if (isAdminContext || (endpoint.includes('/fcm-tokens') && !userToken)) {
       if (!adminToken && !endpoint.includes('/auth/admin/login')) {
@@ -97,6 +157,17 @@ export async function apiRequest(endpoint, options = {}) {
         } catch (retryErr) {
           console.warn('Admin token refresh failed:', retryErr.message);
         }
+      }
+
+      // User session expired / invalid — clear so checkout can prompt login
+      const isUserAuthEndpoint = endpoint.includes('/auth/user');
+      if (
+        response.status === 401 &&
+        !isAdminRetry &&
+        !isUserAuthEndpoint &&
+        localStorage.getItem('auriva_user_token')
+      ) {
+        clearExpiredUserSession();
       }
 
       let errorMsg = data?.message || data?.error?.message;
@@ -465,10 +536,16 @@ export async function downloadPdfBlob(url, fallbackFilename = 'Invoice.pdf') {
 
 // Order Management API (Customer)
 export const orderApi = {
-  placeOrder: (orderPayload) => apiRequest('/orders', {
-    method: 'POST',
-    body: JSON.stringify(orderPayload)
-  }),
+  placeOrder: (orderPayload) => {
+    const guestId =
+      orderPayload?.guestId ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('auriva_guest_id') : null);
+    return apiRequest('/orders', {
+      method: 'POST',
+      body: JSON.stringify(orderPayload),
+      headers: guestId ? { 'x-guest-id': guestId } : {}
+    });
+  },
   getUserOrders: () => apiRequest('/orders', { method: 'GET' }),
   getOrderById: (id) => apiRequest(`/orders/${id}`, { method: 'GET' }),
   cancelOrder: (id, reason = '') => apiRequest(`/orders/${id}/cancel`, {
@@ -536,13 +613,22 @@ export const adminOrderApi = {
     method: 'POST',
     body: JSON.stringify({})
   }),
-  shiprocketTrack: (id) => apiRequest(`/admin/orders/${id}/shiprocket/track`, {
-    method: 'GET'
-  }),
-  shiprocketCancel: (id) => apiRequest(`/admin/orders/${id}/shiprocket/cancel`, {
+  shiprocketInvoice: (id) => apiRequest(`/admin/orders/${id}/shiprocket/invoice`, {
     method: 'POST',
     body: JSON.stringify({})
   }),
+  shiprocketManifest: (id) => apiRequest(`/admin/orders/${id}/shiprocket/manifest`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  }),
+  shiprocketTrack: (id) => apiRequest(`/admin/orders/${id}/shiprocket/track`, {
+    method: 'GET'
+  }),
+  shiprocketCancel: (id, cancelOrder = false) => apiRequest(`/admin/orders/${id}/shiprocket/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ cancelOrder: Boolean(cancelOrder) })
+  }),
+  shiprocketStatus: () => apiRequest('/admin/shiprocket/status', { method: 'GET' }),
   getInvoiceBlob: (id) => {
     const url = `${API_BASE}/admin/orders/${id}/invoice`;
     return fetchPdfBlob(url);
@@ -556,6 +642,18 @@ export const adminOrderApi = {
 // Checkout API
 export const checkoutApi = {
   getSummary: () => apiRequest('/checkout/summary', { method: 'GET' })
+};
+
+// Shipping quote (DB fee vs Shiprocket live rates)
+export const shippingApi = {
+  getQuote: ({ pincode, paymentMethod, subtotal, weightKg }) => {
+    const query = new URLSearchParams();
+    if (pincode) query.set('pincode', pincode);
+    if (paymentMethod) query.set('paymentMethod', paymentMethod);
+    if (subtotal != null) query.set('subtotal', String(subtotal));
+    if (weightKg != null) query.set('weightKg', String(weightKg));
+    return apiRequest(`/shipping/quote?${query.toString()}`, { method: 'GET' });
+  }
 };
 
 // Store Settings & Business Rules API (Admin + Public)
@@ -627,6 +725,12 @@ export const adminReviewApi = {
 export const paymentApi = {
   getConfig: () =>
     apiRequest('/payments/config'),
+  /** Prepaid: open Razorpay without creating Auriva order yet */
+  createCheckoutSession: (payload) =>
+    apiRequest('/payments/checkout-session', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
   createOrder: (payload) =>
     apiRequest('/payments/create-order', {
       method: 'POST',
@@ -817,6 +921,7 @@ export default {
   orderApi,
   adminOrderApi,
   checkoutApi,
+  shippingApi,
   adminSettingsApi,
   settingsApi,
   reviewApi,

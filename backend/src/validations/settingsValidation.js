@@ -7,6 +7,7 @@ const pincodeRegex = /^[1-9][0-9]{5}$/;
 export const ALLOWED_SETTINGS_FIELDS = [
   'gstRate',
   'standardDeliveryFee',
+  'codDeliveryFee',
   'freeDeliveryThreshold',
   'lowStockThreshold',
   'warehouseName',
@@ -67,6 +68,13 @@ export const validateUpdateSettings = (req, res, next) => {
     const fee = Number(body.standardDeliveryFee);
     if (isNaN(fee) || fee < 0) {
       errors.push({ field: 'standardDeliveryFee', message: 'Standard delivery fee must be a non-negative number' });
+    }
+  }
+
+  if (body.codDeliveryFee !== undefined) {
+    const fee = Number(body.codDeliveryFee);
+    if (isNaN(fee) || fee < 0) {
+      errors.push({ field: 'codDeliveryFee', message: 'COD delivery fee must be a non-negative number' });
     }
   }
 

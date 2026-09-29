@@ -16,6 +16,7 @@ const INITIAL_SETTINGS = {
   supportPhone: "+91 9876543210",
   freeDeliveryThreshold: 499,
   standardDeliveryFee: 40,
+  codDeliveryFee: 60,
   gstRate: 5,
   hubAddress: "AURIVÁ Central Fulfillment Hub, Plot 14, Sanwer Road Industrial Area, Indore, MP - 452015",
   lowStockThreshold: 30,

@@ -13,14 +13,18 @@ class CartService {
 
     if (userId) {
       cart = await Cart.findOne({ user: userId });
-      if (!cart && guestId) {
-        // Check if there was a guest cart that should be claimed
+      if (guestId) {
         const guestCart = await Cart.findOne({ guestId });
-        if (guestCart) {
-          guestCart.user = userId;
-          guestCart.guestId = null;
-          await guestCart.save();
-          return guestCart;
+        if (guestCart && Array.isArray(guestCart.items) && guestCart.items.length > 0) {
+          if (!cart) {
+            guestCart.user = userId;
+            guestCart.guestId = null;
+            await guestCart.save();
+            return guestCart;
+          }
+          // User cart exists — merge guest items into it
+          await this.syncCart(userId, guestId, []);
+          return Cart.findOne({ user: userId });
         }
       }
       if (!cart) {
@@ -164,7 +168,8 @@ class CartService {
   }
 
   /**
-   * Get Cart for current user or guest
+   * Get Cart for current user or guest.
+   * When both user + guest are present, merge guest items into the user cart first.
    */
   async getCart(userId, guestId) {
     if (mongoose.connection.readyState !== 1) {
@@ -176,6 +181,13 @@ class CartService {
         discount: 0,
         finalSubtotal: 0
       };
+    }
+
+    if (userId && guestId) {
+      const guestCart = await Cart.findOne({ guestId });
+      if (guestCart && Array.isArray(guestCart.items) && guestCart.items.length > 0) {
+        await this.syncCart(userId, guestId, []);
+      }
     }
 
     const query = userId ? { user: userId } : guestId ? { guestId } : null;

@@ -9,6 +9,8 @@ import PaymentService from './paymentService.js';
 import settingsService from './settingsService.js';
 import couponService from './couponService.js';
 import notificationService from './notificationService.js';
+import { calculateOrderTotals } from '../utils/pricing.js';
+import { resolveShiprocketDeliveryFee } from './shippingQuoteService.js';
 
 /**
  * Generate a customer-facing human-readable order number
@@ -135,32 +137,45 @@ export const getCheckoutSummary = async (userId) => {
   }
 
   const settings = await settingsService.getSettings();
-  const taxableAmount = Math.max(0, subtotal - discount);
-  const freeThreshold = typeof settings.freeDeliveryThreshold === 'number' ? settings.freeDeliveryThreshold : 499;
-  const standardFee = typeof settings.standardDeliveryFee === 'number' ? settings.standardDeliveryFee : 40;
-  const gstRate = typeof settings.gstRate === 'number' ? settings.gstRate : 5;
-
-  const deliveryFee = subtotal === 0 || subtotal >= freeThreshold ? 0 : standardFee;
-  const tax = Math.round((taxableAmount * gstRate) / 100);
-  const total = taxableAmount + deliveryFee + tax;
-
-  // 4. Fetch user's saved addresses
   const addresses = await Address.find({ user: userId }).sort({ isDefault: -1, createdAt: -1 });
   const defaultAddressId = addresses.find(a => a.isDefault)?._id || addresses[0]?._id || null;
+  const defaultAddress = addresses.find((a) => String(a._id) === String(defaultAddressId)) || addresses[0];
+
+  let shippingQuote = null;
+  if (defaultAddress?.postalCode) {
+    shippingQuote = await resolveShiprocketDeliveryFee({
+      pincode: defaultAddress.postalCode,
+      paymentMethod: 'UPI',
+      subtotal,
+      items: validatedItems.map((i) => ({ weight: i.weight, qty: i.qty, product: i.productId }))
+    });
+  }
+
+  const pricingPreview = calculateOrderTotals({
+    subtotal,
+    discount,
+    paymentMethod: 'UPI',
+    settings,
+    deliveryFee: shippingQuote?.prepaid?.fee ?? 0
+  });
 
   return {
     items: validatedItems,
     subtotal,
     discount,
-    deliveryFee,
-    tax,
-    total,
+    deliveryFee: pricingPreview.deliveryFee,
+    codDeliveryFee: shippingQuote?.cod?.fee ?? 0,
+    onlineDeliveryFee: shippingQuote?.prepaid?.fee ?? 0,
+    shippingSource: 'shiprocket',
+    shippingQuote,
+    tax: pricingPreview.tax,
+    total: pricingPreview.total,
     appliedCoupon: appliedCouponData,
     stockWarnings,
     savedAddresses: addresses,
     defaultAddressId,
     deliverySlots: [
-      { id: 'standard', label: 'Standard Express Courier (1-3 Days)', fee: deliveryFee }
+      { id: 'standard', label: 'Standard Express Courier (1-3 Days)', fee: pricingPreview.deliveryFee }
     ]
   };
 };
@@ -175,7 +190,10 @@ export const placeOrder = async (userId, payload) => {
     paymentDetails = {},
     deliverySlot = {},
     couponCode = null,
-    idempotencyKey = null
+    idempotencyKey = null,
+    guestId = null,
+    items: clientItems = null,
+    paymentStatus = null
   } = payload;
 
   // 1. Idempotency Check
@@ -200,8 +218,22 @@ export const placeOrder = async (userId, payload) => {
     throw err;
   }
 
-  // 3. Fetch user's cart
-  const cart = await Cart.findOne({ user: userId });
+  // 3. Fetch user's cart — merge guest / local items first so COD/online both work after login
+  let cart = await Cart.findOne({ user: userId });
+  const cartEmpty = !cart || !Array.isArray(cart.items) || cart.items.length === 0;
+  if (cartEmpty) {
+    try {
+      const cartService = (await import('./cartService.js')).default;
+      const mergeItems = Array.isArray(clientItems) ? clientItems : [];
+      if (guestId || mergeItems.length > 0) {
+        await cartService.syncCart(userId, guestId, mergeItems);
+        cart = await Cart.findOne({ user: userId });
+      }
+    } catch (mergeErr) {
+      console.warn('[placeOrder] Cart merge note:', mergeErr.message);
+    }
+  }
+
   if (!cart || !cart.items || cart.items.length === 0) {
     const err = new Error('Your cart is empty. Please add items before placing an order.');
     err.statusCode = 400;
@@ -288,14 +320,32 @@ export const placeOrder = async (userId, payload) => {
   }
 
   const settings = await settingsService.getSettings();
-  const taxableAmount = Math.max(0, subtotal - discount);
-  const freeThreshold = typeof settings.freeDeliveryThreshold === 'number' ? settings.freeDeliveryThreshold : 499;
-  const standardFee = typeof settings.standardDeliveryFee === 'number' ? settings.standardDeliveryFee : 40;
-  const gstRate = typeof settings.gstRate === 'number' ? settings.gstRate : 5;
+  const normalizedPaymentMethod = ['UPI', 'CARD', 'NETBANKING'].includes(String(paymentMethod).toUpperCase())
+    ? String(paymentMethod).toUpperCase()
+    : 'COD';
 
-  const deliveryFee = subtotal === 0 || subtotal >= freeThreshold ? 0 : standardFee;
-  const tax = Math.round((taxableAmount * gstRate) / 100);
-  const total = taxableAmount + deliveryFee + tax;
+  const shipQuote = await resolveShiprocketDeliveryFee({
+    pincode: selectedAddress.postalCode,
+    paymentMethod: normalizedPaymentMethod,
+    subtotal,
+    items: orderItems,
+    productMap
+  });
+
+  if (shipQuote.error && !shipQuote.freeDeliveryApplied && shipQuote.deliveryFee === 0) {
+    const err = new Error(shipQuote.error);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const pricing = calculateOrderTotals({
+    subtotal,
+    discount,
+    paymentMethod: normalizedPaymentMethod,
+    settings,
+    deliveryFee: shipQuote.deliveryFee
+  });
+  const { deliveryFee, tax, total } = pricing;
 
   // 6. Address Snapshot
   const addressSnapshot = {
@@ -364,11 +414,8 @@ export const placeOrder = async (userId, payload) => {
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-    const normalizedPaymentMethod = ['UPI', 'CARD', 'NETBANKING'].includes(String(paymentMethod).toUpperCase())
-      ? String(paymentMethod).toUpperCase()
-      : 'COD';
-
-    const initialPaymentStatus = 'PENDING';
+    const initialPaymentStatus =
+      String(paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'PENDING';
 
     const timeline = [
       { status: 'Order Received', time: `${timeStr}, ${dateStr}`, done: true, current: false },
@@ -462,16 +509,37 @@ export const placeOrder = async (userId, payload) => {
       console.warn('[Notification Note] Order placement notifications error:', notifErr.message);
     }
 
-    // Record COD in payment ledger
+    // Record COD in payment ledger + push to Shiprocket (await so Hostinger doesn't drop the job)
     if (normalizedPaymentMethod === 'COD') {
       await PaymentService.recordCodPayment(savedOrder, userId).catch(err => {
         console.warn('Could not record COD payment in ledger:', err.message);
       });
 
-      // Auto-create Shiprocket shipment for COD after order is confirmed (non-blocking)
-      import('./shiprocketFulfillmentService.js')
-        .then(({ default: sr }) => sr.tryAutoCreate(savedOrder._id))
-        .catch((e) => console.warn('[Shiprocket] COD auto-create note:', e.message));
+      try {
+        const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
+        const srResult = await shiprocketFulfillmentService.tryAutoCreate(savedOrder._id);
+        if (srResult?.error) {
+          console.warn(`[Shiprocket] COD order ${savedOrder.orderNumber} not pushed:`, srResult.error);
+        } else if (srResult?.shiprocket?.orderId) {
+          // Attach fresh Shiprocket fields onto the response document
+          savedOrder.shiprocket = srResult.shiprocket;
+        }
+      } catch (e) {
+        console.warn('[Shiprocket] COD auto-create note:', e.message);
+      }
+    } else if (initialPaymentStatus === 'PAID') {
+      // Prepaid order created only after payment success — push to Shiprocket now
+      try {
+        const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
+        const srResult = await shiprocketFulfillmentService.tryAutoCreate(savedOrder._id);
+        if (srResult?.error) {
+          console.warn(`[Shiprocket] Prepaid order ${savedOrder.orderNumber} not pushed:`, srResult.error);
+        } else if (srResult?.shiprocket?.orderId) {
+          savedOrder.shiprocket = srResult.shiprocket;
+        }
+      } catch (e) {
+        console.warn('[Shiprocket] Prepaid auto-create note:', e.message);
+      }
     }
 
     // 9. Clear purchased items from Cart in DB
@@ -1035,6 +1103,13 @@ export const cancelOrder = async (orderId, options = {}) => {
   );
 
   await lockedOrder.save();
+
+  // Best-effort: cancel matching Shiprocket shipment/AWB so dashboard stays in sync
+  if (lockedOrder.shiprocket?.orderId || lockedOrder.shiprocket?.awbCode) {
+    import('./shiprocketFulfillmentService.js')
+      .then(({ default: sr }) => sr.tryCancelForOrder(lockedOrder._id))
+      .catch((e) => console.warn('[Shiprocket] Cancel-on-order-cancel note:', e.message));
+  }
 
   // Trigger Notifications for Order Cancellation
   try {

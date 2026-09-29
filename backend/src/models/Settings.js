@@ -20,8 +20,13 @@ const settingsSchema = new mongoose.Schema(
     // 2. Delivery Configuration
     standardDeliveryFee: {
       type: Number,
-      default: 40, // Standard ₹40 delivery fee
+      default: 40, // Online / prepaid delivery fee
       min: [0, 'Standard delivery fee cannot be negative']
+    },
+    codDeliveryFee: {
+      type: Number,
+      default: 60, // COD delivery fee (usually higher than prepaid)
+      min: [0, 'COD delivery fee cannot be negative']
     },
     freeDeliveryThreshold: {
       type: Number,

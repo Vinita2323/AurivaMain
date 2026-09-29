@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS = {
   configKey: 'default_store_settings',
   gstRate: 5,
   standardDeliveryFee: 40,
+  codDeliveryFee: 60,
   freeDeliveryThreshold: 499,
   lowStockThreshold: 30,
   warehouseName: 'AURIVÁ Warehouse — Sonipat',
@@ -110,6 +111,7 @@ class SettingsService {
       timezone: settings.timezone || DEFAULT_SETTINGS.timezone,
       gstRate: typeof settings.gstRate === 'number' ? settings.gstRate : DEFAULT_SETTINGS.gstRate,
       standardDeliveryFee: typeof settings.standardDeliveryFee === 'number' ? settings.standardDeliveryFee : DEFAULT_SETTINGS.standardDeliveryFee,
+      codDeliveryFee: typeof settings.codDeliveryFee === 'number' ? settings.codDeliveryFee : DEFAULT_SETTINGS.codDeliveryFee,
       freeDeliveryThreshold: typeof settings.freeDeliveryThreshold === 'number' ? settings.freeDeliveryThreshold : DEFAULT_SETTINGS.freeDeliveryThreshold
     };
   }
@@ -129,7 +131,7 @@ class SettingsService {
     const sanitized = {};
     for (const key of ALLOWED_SETTINGS_FIELDS) {
       if (updateData[key] !== undefined) {
-        if (['gstRate', 'standardDeliveryFee', 'freeDeliveryThreshold', 'lowStockThreshold'].includes(key)) {
+        if (['gstRate', 'standardDeliveryFee', 'codDeliveryFee', 'freeDeliveryThreshold', 'lowStockThreshold'].includes(key)) {
           sanitized[key] = Number(updateData[key]);
         } else if (typeof updateData[key] === 'string') {
           sanitized[key] = updateData[key].trim();

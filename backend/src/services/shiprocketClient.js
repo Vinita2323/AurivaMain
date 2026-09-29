@@ -2,8 +2,13 @@ import axios from 'axios';
 import env from '../config/env.js';
 
 /**
- * Low-level Shiprocket HTTP client with in-memory token cache.
+ * Low-level Shiprocket HTTP client (https://apidocs.shiprocket.in/)
  * Credentials stay server-side only — never log password or tokens.
+ *
+ * Canonical flow:
+ *  auth/login → orders/create/adhoc → courier/assign/awb
+ *  → courier/generate/pickup → courier/generate/label
+ *  → courier/generate/invoice → track / webhooks → cancel
  */
 class ShiprocketClient {
   constructor() {
@@ -25,9 +30,6 @@ class ShiprocketClient {
     }
   }
 
-  /**
-   * Authenticate and cache token (Shiprocket tokens typically last ~10 days).
-   */
   async authenticate(force = false) {
     this._assertConfigured();
 
@@ -55,7 +57,6 @@ class ShiprocketClient {
       }
 
       this._token = data.token;
-      // Refresh after 9 days by default
       this._tokenExpiresAt = now + 9 * 24 * 60 * 60 * 1000;
       console.log('[Shiprocket] Authentication successful.');
       return this._token;
@@ -80,13 +81,12 @@ class ShiprocketClient {
     }
   }
 
-  /**
-   * Authenticated request helper with one-time re-auth on 401.
-   */
   async request(method, path, { params, data, retry = true } = {}) {
     this._assertConfigured();
     const token = await this.authenticate();
-    const url = path.startsWith('http') ? path : `${env.SHIPROCKET.BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+    const url = path.startsWith('http')
+      ? path
+      : `${env.SHIPROCKET.BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
     try {
       console.log(`[Shiprocket] ${method.toUpperCase()} ${path}`);
@@ -113,6 +113,13 @@ class ShiprocketClient {
         return this.request(method, path, { params, data, retry: false });
       }
 
+      // Rate limit — one soft retry
+      if (status === 429 && retry) {
+        console.warn('[Shiprocket] Rate limited — retrying once after 1.5s');
+        await new Promise((r) => setTimeout(r, 1500));
+        return this.request(method, path, { params, data, retry: false });
+      }
+
       console.error('[Shiprocket] API error:', method.toUpperCase(), path, status || '', msg);
       const err = new Error(typeof msg === 'string' ? msg : 'Shiprocket API request failed');
       err.statusCode = status && status >= 400 && status < 600 ? status : 502;
@@ -121,11 +128,24 @@ class ShiprocketClient {
     }
   }
 
-  // ── Public API wrappers ──────────────────────────────────────────────
+  // ── Orders ───────────────────────────────────────────────────────────
 
   createAdhocOrder(payload) {
     return this.request('post', '/orders/create/adhoc', { data: payload });
   }
+
+  getOrderDetails(shiprocketOrderId) {
+    return this.request('get', `/orders/show/${shiprocketOrderId}`);
+  }
+
+  cancelOrderByIds(ids) {
+    const list = Array.isArray(ids) ? ids : [ids];
+    return this.request('post', '/orders/cancel', {
+      data: { ids: list.map((id) => Number(id)) }
+    });
+  }
+
+  // ── Couriers / AWB / Pickup / Docs ───────────────────────────────────
 
   checkServiceability({ pickupPostcode, deliveryPostcode, weight, cod = 0 }) {
     return this.request('get', '/courier/serviceability', {
@@ -138,11 +158,12 @@ class ShiprocketClient {
     });
   }
 
-  assignAwb({ shipmentId, courierId }) {
+  assignAwb({ shipmentId, courierId, isReturn = false }) {
     const data = { shipment_id: Number(shipmentId) };
     if (courierId !== undefined && courierId !== null && courierId !== '') {
       data.courier_id = Number(courierId);
     }
+    if (isReturn) data.is_return = 1;
     return this.request('post', '/courier/assign/awb', { data });
   }
 
@@ -160,8 +181,35 @@ class ShiprocketClient {
     });
   }
 
+  generateInvoice(shipmentIds) {
+    const ids = Array.isArray(shipmentIds) ? shipmentIds : [shipmentIds];
+    return this.request('post', '/orders/print/invoice', {
+      data: { ids: ids.map((id) => Number(id)) }
+    });
+  }
+
+  generateManifest(shipmentIds) {
+    const ids = Array.isArray(shipmentIds) ? shipmentIds : [shipmentIds];
+    return this.request('post', '/manifests/generate', {
+      data: { shipment_id: ids.map((id) => Number(id)) }
+    });
+  }
+
+  // ── Tracking ─────────────────────────────────────────────────────────
+
   trackByAwb(awbCode) {
     return this.request('get', `/courier/track/awb/${encodeURIComponent(awbCode)}`);
+  }
+
+  trackByShipmentId(shipmentId) {
+    return this.request('get', `/courier/track/shipment/${encodeURIComponent(shipmentId)}`);
+  }
+
+  trackByOrderIds(orderIds) {
+    const ids = Array.isArray(orderIds) ? orderIds : [orderIds];
+    return this.request('get', '/courier/track', {
+      params: { order_id: ids.map(String).join(',') }
+    });
   }
 
   cancelShipment(ids) {
@@ -171,15 +219,10 @@ class ShiprocketClient {
     });
   }
 
-  cancelOrderByIds(ids) {
-    const list = Array.isArray(ids) ? ids : [ids];
-    return this.request('post', '/orders/cancel', {
-      data: { ids: list.map((id) => Number(id)) }
-    });
-  }
+  // ── Account helpers ──────────────────────────────────────────────────
 
-  getOrderDetails(shiprocketOrderId) {
-    return this.request('get', `/orders/show/${shiprocketOrderId}`);
+  listPickupLocations() {
+    return this.request('get', '/settings/company/pickup');
   }
 }
 

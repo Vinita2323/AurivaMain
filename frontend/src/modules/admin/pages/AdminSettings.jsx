@@ -63,8 +63,8 @@ export default function AdminSettings() {
                 </div>
               </div>
 
-              {/* Delivery Threshold, Fee & GST */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8E2D5]">
+              {/* Delivery & GST — shipping rates come from Shiprocket at checkout */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8E2D5]">
                 <div>
                   <label className="block text-xs font-bold text-stone-800 mb-1">Free Delivery Minimum (₹)</label>
                   <input
@@ -73,17 +73,7 @@ export default function AdminSettings() {
                     onChange={e => setFormData({ ...formData, freeDeliveryThreshold: Number(e.target.value) })}
                     className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-stone-300 bg-white"
                   />
-                  <span className="text-[10px] text-stone-400 mt-0.5 block">Applied live at checkout</span>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-stone-800 mb-1">Standard Delivery Fee (₹)</label>
-                  <input
-                    type="number"
-                    value={formData.standardDeliveryFee ?? 40}
-                    onChange={e => setFormData({ ...formData, standardDeliveryFee: Number(e.target.value) })}
-                    className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-stone-300 bg-white"
-                  />
-                  <span className="text-[10px] text-stone-400 mt-0.5 block">For orders under threshold</span>
+                  <span className="text-[10px] text-stone-400 mt-0.5 block">Waives Shiprocket shipping above this cart value</span>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-stone-800 mb-1">GST Tax Rate (%)</label>
@@ -96,6 +86,13 @@ export default function AdminSettings() {
                   <span className="text-[10px] text-stone-400 mt-0.5 block">Calculated in cart breakdown</span>
                 </div>
               </div>
+              <p className="text-[11px] text-stone-500 flex items-start gap-2 p-3 rounded-xl bg-white border border-stone-200">
+                <Truck className="w-4 h-4 text-[#C89038] shrink-0 mt-0.5" />
+                <span>
+                  Shipping charges are fetched live from Shiprocket at checkout for both prepaid and COD orders.
+                  No fixed delivery fee is configured here.
+                </span>
+              </p>
 
               {/* Central Hub Address */}
               <div>

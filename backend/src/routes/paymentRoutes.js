@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 import { requireUser } from '../middleware/roleMiddleware.js';
 import {
   validateCreatePaymentOrder,
+  validateCreateCheckoutSession,
   validateVerifyPayment
 } from '../validations/paymentValidation.js';
 
@@ -18,7 +19,15 @@ router.post('/webhook', paymentController.handleWebhook);
 // Protected Customer Routes
 router.use(authMiddleware);
 
-// POST /api/v1/payments/create-order - Create Razorpay order for an order
+// POST /api/v1/payments/checkout-session — Razorpay first, Auriva order after pay (prepaid only)
+router.post(
+  '/checkout-session',
+  requireUser,
+  validateCreateCheckoutSession,
+  paymentController.createCheckoutSession
+);
+
+// POST /api/v1/payments/create-order - Create Razorpay order for an EXISTING order (retry unpaid)
 router.post(
   '/create-order',
   requireUser,

@@ -22,12 +22,45 @@ export const validateCreatePaymentOrder = (req, res, next) => {
   next();
 };
 
+export const validateCreateCheckoutSession = (req, res, next) => {
+  const { addressId, paymentMethod } = req.body;
+  const errors = [];
+
+  if (!addressId) {
+    errors.push({ field: 'addressId', message: 'Delivery address ID is required' });
+  } else if (!mongoose.Types.ObjectId.isValid(addressId)) {
+    errors.push({ field: 'addressId', message: 'Invalid delivery address ID format' });
+  }
+
+  if (paymentMethod !== undefined) {
+    const normalized = String(paymentMethod).toUpperCase().trim();
+    if (normalized === 'COD' || normalized.includes('CASH')) {
+      errors.push({
+        field: 'paymentMethod',
+        message: 'Checkout session is for online/prepaid payment only'
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    return sendError(
+      res,
+      'Validation failed for checkout session',
+      { errors },
+      HTTP_STATUS.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  next();
+};
+
 export const validateVerifyPayment = (req, res, next) => {
   const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
   const errors = [];
 
-  if (!orderId) {
-    errors.push({ field: 'orderId', message: 'Order ID is required' });
+  // orderId optional when verifying prepaid-before-order sessions
+  if (orderId != null && orderId !== '' && typeof orderId !== 'string' && typeof orderId !== 'object') {
+    errors.push({ field: 'orderId', message: 'Order ID must be a string when provided' });
   }
 
   if (!razorpayOrderId || typeof razorpayOrderId !== 'string' || !razorpayOrderId.trim()) {

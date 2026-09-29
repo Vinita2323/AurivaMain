@@ -4,7 +4,15 @@ import { HTTP_STATUS } from '../constants/status.js';
 
 export const placeOrder = async (req, res, next) => {
   try {
-    const order = await orderService.placeOrder(req.user._id, req.body);
+    const guestId =
+      req.body?.guestId ||
+      req.headers['x-guest-id'] ||
+      req.headers['X-Guest-Id'] ||
+      null;
+    const order = await orderService.placeOrder(req.user._id, {
+      ...req.body,
+      guestId: guestId || req.body?.guestId || null
+    });
     return sendSuccess(
       res,
       'Order placed successfully',

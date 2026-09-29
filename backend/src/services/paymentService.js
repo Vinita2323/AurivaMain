@@ -151,6 +151,332 @@ class PaymentService {
   }
 
   /**
+   * Prepaid checkout: create Razorpay session WITHOUT placing an Auriva order.
+   * Order is created only after payment verification succeeds.
+   */
+  static async createCheckoutSession(userId, payload = {}) {
+    const {
+      addressId,
+      paymentMethod = 'UPI',
+      couponCode = null,
+      guestId = null,
+      items: clientItems = null
+    } = payload;
+
+    if (!addressId) {
+      const err = new Error('Delivery address is required to start online payment.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const normalizedPaymentMethod = ['UPI', 'CARD', 'NETBANKING'].includes(
+      String(paymentMethod).toUpperCase()
+    )
+      ? String(paymentMethod).toUpperCase()
+      : 'UPI';
+
+    if (normalizedPaymentMethod === 'COD') {
+      const err = new Error('Use place-order for Cash on Delivery. This endpoint is for prepaid only.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (!isRazorpayConfigured()) {
+      const err = new Error(
+        'Online payment gateway is not configured. Please choose Cash on Delivery (COD) or contact store support.'
+      );
+      err.statusCode = 503;
+      err.code = 'GATEWAY_NOT_CONFIGURED';
+      throw err;
+    }
+
+    const razorpay = getRazorpayInstance();
+    if (!razorpay) {
+      const err = new Error('Payment gateway client failed to initialize.');
+      err.statusCode = 503;
+      throw err;
+    }
+
+    // Merge guest cart then validate like placeOrder (without creating order)
+    const Address = (await import('../models/Address.js')).default;
+    const Product = (await import('../models/Product.js')).default;
+    const settingsService = (await import('./settingsService.js')).default;
+    const couponService = (await import('./couponService.js')).default;
+    const { calculateOrderTotals } = await import('../utils/pricing.js');
+    const { resolveShiprocketDeliveryFee } = await import('./shippingQuoteService.js');
+    const cartService = (await import('./cartService.js')).default;
+
+    const selectedAddress = await Address.findOne({ _id: addressId, user: userId });
+    if (!selectedAddress) {
+      const err = new Error('Selected delivery address was not found or does not belong to your account');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    let cart = await Cart.findOne({ user: userId });
+    const cartEmpty = !cart || !Array.isArray(cart.items) || cart.items.length === 0;
+    if (cartEmpty) {
+      const mergeItems = Array.isArray(clientItems) ? clientItems : [];
+      if (guestId || mergeItems.length > 0) {
+        await cartService.syncCart(userId, guestId, mergeItems);
+        cart = await Cart.findOne({ user: userId });
+      }
+    }
+
+    if (!cart || !cart.items || cart.items.length === 0) {
+      const err = new Error('Your cart is empty. Please add items before paying.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const productIds = cart.items.map((item) => item.product);
+    const products = await Product.find({ _id: { $in: productIds } });
+    const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+
+    let subtotal = 0;
+    const draftItems = [];
+    for (const item of cart.items) {
+      const liveProduct = productMap.get(item.product.toString());
+      if (!liveProduct || liveProduct.status !== 'ACTIVE') {
+        const err = new Error(`Product "${item.name || 'item'}" is unavailable.`);
+        err.statusCode = 400;
+        throw err;
+      }
+      if (!liveProduct.inStock || (liveProduct.stockCount !== undefined && liveProduct.stockCount < item.qty)) {
+        const err = new Error(
+          `Insufficient stock for "${liveProduct.name}". Available: ${liveProduct.stockCount ?? 0}`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+
+      let unitPrice = liveProduct.price;
+      if (liveProduct.weightOptions?.length) {
+        const matched = liveProduct.weightOptions.find((o) => o.weight === item.weight);
+        if (matched) unitPrice = matched.price;
+      }
+      subtotal += unitPrice * item.qty;
+      draftItems.push({
+        productId: liveProduct._id.toString(),
+        weight: item.weight,
+        qty: item.qty,
+        price: unitPrice,
+        name: liveProduct.name
+      });
+    }
+
+    let discount = 0;
+    const rawCouponCode = couponCode || cart.appliedCoupon?.code;
+    const activeCouponCode = rawCouponCode ? String(rawCouponCode).trim().toUpperCase() : null;
+    if (activeCouponCode) {
+      const validation = await couponService.validateCoupon({ code: activeCouponCode, subtotal });
+      discount = validation.discount;
+    }
+
+    const settings = await settingsService.getSettings();
+    const shipQuote = await resolveShiprocketDeliveryFee({
+      pincode: selectedAddress.postalCode,
+      paymentMethod: normalizedPaymentMethod,
+      subtotal,
+      items: draftItems,
+      productMap
+    });
+
+    if (shipQuote.error && !shipQuote.freeDeliveryApplied && shipQuote.deliveryFee === 0) {
+      const err = new Error(shipQuote.error);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const pricing = calculateOrderTotals({
+      subtotal,
+      discount,
+      paymentMethod: normalizedPaymentMethod,
+      settings,
+      deliveryFee: shipQuote.deliveryFee
+    });
+
+    const amountInPaise = Math.round(pricing.total * 100);
+    if (amountInPaise <= 0) {
+      const err = new Error('Invalid checkout total amount.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const receipt = `CHK_${Date.now().toString(36)}_${userId.toString().slice(-4)}`.slice(0, 40);
+    let razorpayOrder;
+    try {
+      razorpayOrder = await razorpay.orders.create({
+        amount: amountInPaise,
+        currency: 'INR',
+        receipt,
+        notes: {
+          userId: userId.toString(),
+          addressId: addressId.toString(),
+          paymentMethod: normalizedPaymentMethod,
+          checkout: 'prepaid_before_order'
+        }
+      });
+    } catch (gatewayErr) {
+      const err = new Error(
+        `Payment gateway error: ${gatewayErr.error?.description || gatewayErr.message}`
+      );
+      err.statusCode = 502;
+      throw err;
+    }
+
+    const payment = new Payment({
+      order: null,
+      user: userId,
+      gateway: 'RAZORPAY',
+      gatewayOrderId: razorpayOrder.id,
+      amount: pricing.total,
+      currency: 'INR',
+      paymentMethod: normalizedPaymentMethod,
+      status: 'PENDING',
+      financialBreakdown: {
+        subtotal: pricing.subtotal,
+        tax: pricing.tax,
+        deliveryFee: pricing.deliveryFee,
+        discount: pricing.discount,
+        total: pricing.total
+      },
+      metadata: {
+        checkoutIntent: {
+          addressId: addressId.toString(),
+          paymentMethod: normalizedPaymentMethod,
+          couponCode: activeCouponCode,
+          guestId: guestId || null,
+          items: draftItems,
+          expectedTotal: pricing.total,
+          deliveryFee: pricing.deliveryFee
+        }
+      }
+    });
+    await payment.save();
+
+    return {
+      success: true,
+      keyId: env.RAZORPAY.KEY_ID,
+      razorpayOrderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      payableTotal: pricing.total,
+      deliveryFee: pricing.deliveryFee,
+      paymentId: payment._id,
+      customer: {
+        name: selectedAddress.fullName || '',
+        phone: selectedAddress.phoneNumber || ''
+      }
+    };
+  }
+
+  /**
+   * After Razorpay success: verify signature, THEN create Auriva order (prepaid only).
+   */
+  static async verifyAndPlacePrepaidOrder(
+    userId,
+    { razorpayOrderId, razorpayPaymentId, razorpaySignature }
+  ) {
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      const err = new Error('Missing Razorpay payment details for verification.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (!env.RAZORPAY.KEY_SECRET) {
+      const err = new Error('Payment verification unavailable: Gateway secret not configured.');
+      err.statusCode = 503;
+      throw err;
+    }
+
+    const payment = await Payment.findOne({
+      gatewayOrderId: razorpayOrderId,
+      user: userId
+    });
+
+    if (!payment) {
+      const err = new Error('Payment session not found. Please restart checkout.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // Idempotent: already placed + paid
+    if (payment.status === 'PAID' && payment.order) {
+      const order = await Order.findById(payment.order);
+      return {
+        success: true,
+        alreadyProcessed: true,
+        message: 'Payment already verified and order created.',
+        order,
+        payment
+      };
+    }
+
+    const isValidSignature = verifyPaymentSignature({
+      orderId: razorpayOrderId,
+      paymentId: razorpayPaymentId,
+      signature: razorpaySignature
+    });
+
+    if (!isValidSignature) {
+      payment.status = 'FAILED';
+      payment.gatewayPaymentId = razorpayPaymentId;
+      payment.gatewaySignature = razorpaySignature;
+      payment.failureReason = 'Cryptographic signature verification failed';
+      await payment.save();
+      const err = new Error('Invalid payment signature. Payment verification failed.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const intent = payment.metadata?.checkoutIntent;
+    if (!intent?.addressId) {
+      const err = new Error('Checkout session is incomplete. Please restart payment.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const { placeOrder } = await import('./orderService.js');
+    const order = await placeOrder(userId, {
+      addressId: intent.addressId,
+      paymentMethod: intent.paymentMethod || payment.paymentMethod || 'UPI',
+      paymentStatus: 'PAID',
+      paymentDetails: {
+        transactionId: razorpayPaymentId,
+        upiApp: ''
+      },
+      couponCode: intent.couponCode || null,
+      guestId: intent.guestId || null,
+      items: intent.items || null,
+      idempotencyKey: `paid_${razorpayPaymentId}`
+    });
+
+    payment.order = order._id;
+    payment.status = 'PAID';
+    payment.gatewayPaymentId = razorpayPaymentId;
+    payment.gatewaySignature = razorpaySignature;
+    payment.transactionId = razorpayPaymentId;
+    payment.paidAt = new Date();
+    payment.failureReason = '';
+    await payment.save();
+
+    // Ensure order payment fields are paid (placeOrder may have set them)
+    if (order.payment?.status !== 'PAID') {
+      order.payment.status = 'PAID';
+      order.payment.transactionId = razorpayPaymentId;
+      await order.save();
+    }
+
+    return {
+      success: true,
+      message: 'Payment verified and order placed successfully',
+      order,
+      payment
+    };
+  }
+
+  /**
    * Verify Razorpay Payment Signature and finalize order payment.
    * Guaranteed idempotent.
    */
@@ -253,10 +579,18 @@ class PaymentService {
     }
     await order.save();
 
-    // Auto-create Shiprocket shipment after prepaid payment is confirmed (non-blocking)
-    import('./shiprocketFulfillmentService.js')
-      .then(({ default: sr }) => sr.tryAutoCreate(order._id))
-      .catch((e) => console.warn('[Shiprocket] Prepaid auto-create note:', e.message));
+    // Push prepaid order to Shiprocket (await so hosting doesn't drop the job)
+    try {
+      const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
+      const srResult = await shiprocketFulfillmentService.tryAutoCreate(order._id);
+      if (srResult?.error) {
+        console.warn(`[Shiprocket] Prepaid order ${order.orderNumber} not pushed:`, srResult.error);
+      } else if (srResult?.shiprocket?.orderId) {
+        order.shiprocket = srResult.shiprocket;
+      }
+    } catch (e) {
+      console.warn('[Shiprocket] Prepaid auto-create note:', e.message);
+    }
 
     // 9. Clear customer's cart
     await Cart.findOneAndUpdate(
@@ -332,9 +666,12 @@ class PaymentService {
             }
           });
 
-          import('./shiprocketFulfillmentService.js')
-            .then(({ default: sr }) => sr.tryAutoCreate(payment.order))
-            .catch((e) => console.warn('[Shiprocket] Webhook auto-create note:', e.message));
+          try {
+            const { default: sr } = await import('./shiprocketFulfillmentService.js');
+            await sr.tryAutoCreate(payment.order);
+          } catch (e) {
+            console.warn('[Shiprocket] Webhook auto-create note:', e.message);
+          }
         }
         break;
       }

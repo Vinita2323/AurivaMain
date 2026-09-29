@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
-  Check, CreditCard, ShieldCheck, Smartphone, Building2, 
+  Check, CreditCard, ShieldCheck, 
   Wallet, Plus, ArrowRight, Truck, Sparkles, ShoppingBag, 
   Lock, ArrowLeft, ChevronRight, CheckCircle2, Clock, 
   Tag, Gift, AlertCircle, Percent, Flame, Pencil, Trash2
@@ -14,7 +14,12 @@ import Footer from '../components/Footer';
 import { useCart } from '../../../context/CartContext';
 import { useAuth } from '../../../context/AuthContext';
 import { resolveProductImage } from '../../../utils/productImage';
-import { paymentApi } from '../../../utils/api';
+import { paymentApi, shippingApi, addressApi, cartApi } from '../../../utils/api';
+import {
+  calculateCheckoutTotals,
+  checkoutPaymentMethodKey,
+  estimateCartWeightKg
+} from '../../../utils/checkoutPricing';
 
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -36,18 +41,19 @@ export default function CheckoutPage() {
     cartItems, 
     subtotal, 
     discountAmount, 
-    deliveryFee, 
-    tax, 
-    total, 
     appliedCoupon, 
     applyCoupon,
     removeCoupon,
     clearCart,
-    updateQty
+    updateQty,
+    shippingSettings,
+    freeShippingMin
   } = useCart();
   
   const { 
-    user, 
+    user,
+    token,
+    isAuthenticated,
     addresses, 
     selectedAddressId, 
     setSelectedAddressId, 
@@ -64,13 +70,14 @@ export default function CheckoutPage() {
   const [email, setEmail] = useState(user?.email || 'vini.sharma@gmail.com');
 
   const [deliveryMethod, setDeliveryMethod] = useState('standard');
-  const [paymentMethod, setPaymentMethod] = useState('upi'); // 'upi', 'card', 'netbanking', 'cod'
-  const [selectedUpiApp, setSelectedUpiApp] = useState('gpay');
-  const [selectedBank, setSelectedBank] = useState('HDFC');
+  const [paymentMethod, setPaymentMethod] = useState('cod'); // 'online' | 'cod'
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const [orderError, setOrderError] = useState('');
   const [isOrderPlacing, setIsOrderPlacing] = useState(false);
+  const [shippingQuote, setShippingQuote] = useState(null);
+  const [shippingQuoteLoading, setShippingQuoteLoading] = useState(false);
+  const lastShippingKeyRef = useRef('');
   const [gatewayConfig, setGatewayConfig] = useState({ 
     isConfigured: true, 
     keyId: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TRZdg2aAOYv4KK' 
@@ -85,6 +92,43 @@ export default function CheckoutPage() {
       })
       .catch(() => {});
   }, []);
+
+  const selectedAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0];
+  const deliveryPincode = String(
+    selectedAddress?.pincode || selectedAddress?.postalCode || ''
+  ).replace(/\D/g, '').slice(0, 6);
+
+  const cartWeightKg = useMemo(() => estimateCartWeightKg(cartItems), [cartItems]);
+  const isCodPayment = paymentMethod === 'cod';
+  const pinReady = deliveryPincode.length === 6;
+
+  // One API call returns both prepaid + COD — pick fee locally when payment changes
+  const shiprocketDeliveryFee = !pinReady
+    ? 0
+    : shippingQuoteLoading
+    ? undefined
+    : isCodPayment
+    ? shippingQuote?.cod?.fee
+    : shippingQuote?.prepaid?.fee;
+
+  const checkoutPricing = useMemo(() => {
+    return calculateCheckoutTotals({
+      subtotal,
+      discountAmount,
+      paymentMethod: checkoutPaymentMethodKey(paymentMethod),
+      settings: shippingSettings || {},
+      deliveryFee: shiprocketDeliveryFee ?? 0
+    });
+  }, [subtotal, discountAmount, paymentMethod, shippingSettings, shiprocketDeliveryFee]);
+
+  const { deliveryFee, tax, total } = checkoutPricing;
+  const shippingReady = !pinReady || (!shippingQuoteLoading && shippingQuote && !shippingQuote.error);
+  const shippingLabel =
+    deliveryFee === 0 && shippingQuote?.freeDeliveryApplied
+      ? 'Shipping / Delivery'
+      : isCodPayment
+      ? 'Shiprocket Shipping (COD)'
+      : 'Shiprocket Shipping (Prepaid)';
 
   // Address Modal State
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -101,11 +145,53 @@ export default function CheckoutPage() {
   const [addrIsDefault, setAddrIsDefault] = useState(false);
   const [addressModalError, setAddressModalError] = useState('');
 
-  const selectedAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0];
-
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentStep]);
+
+  // Fetch Shiprocket rates only when pincode / weight / subtotal change (not on payment toggle)
+  useEffect(() => {
+    if (deliveryPincode.length !== 6 || subtotal <= 0) {
+      setShippingQuote(null);
+      lastShippingKeyRef.current = '';
+      return;
+    }
+
+    const key = `${deliveryPincode}|${cartWeightKg}|${Math.round(subtotal)}`;
+    if (key === lastShippingKeyRef.current && shippingQuote) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+      setShippingQuoteLoading(true);
+      try {
+        const res = await shippingApi.getQuote({
+          pincode: deliveryPincode,
+          paymentMethod: 'COD',
+          subtotal,
+          weightKg: cartWeightKg
+        });
+        if (cancelled) return;
+        lastShippingKeyRef.current = key;
+        setShippingQuote(res?.data?.quote || res?.quote || null);
+      } catch {
+        if (!cancelled) {
+          lastShippingKeyRef.current = '';
+          setShippingQuote(null);
+        }
+      } finally {
+        if (!cancelled) setShippingQuoteLoading(false);
+      }
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shippingQuote intentionally omitted to avoid loop
+  }, [deliveryPincode, cartWeightKg, subtotal]);
 
   // Block background scroll when address modal is open
   useEffect(() => {
@@ -230,9 +316,34 @@ export default function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
+    if (!isAuthenticated || !token) {
+      setOrderError('Please log in to place your order.');
+      navigate('/login', { state: { from: { pathname: '/checkout' } } });
+      return;
+    }
+
     if (!selectedAddress) {
       setOrderError('Please select or add a delivery address to proceed.');
       setCurrentStep(1);
+      return;
+    }
+
+    const pin = String(
+      selectedAddress.pincode || selectedAddress.postalCode || ''
+    ).replace(/\D/g, '');
+    if (pin.length !== 6) {
+      setOrderError('Please enter a valid 6-digit delivery pincode.');
+      setCurrentStep(1);
+      return;
+    }
+
+    if (shippingQuoteLoading) {
+      setOrderError('Please wait while Shiprocket shipping rates load.');
+      return;
+    }
+
+    if (shippingQuote?.error) {
+      setOrderError(shippingQuote.error);
       return;
     }
 
@@ -240,55 +351,76 @@ export default function CheckoutPage() {
     setIsOrderPlacing(true);
 
     try {
-      const isOnline = paymentMethod === 'upi' || paymentMethod === 'card' || paymentMethod === 'netbanking';
+      const isOnline = paymentMethod === 'online';
 
-      const orderPayload = {
-        items: cartItems,
-        subtotal,
-        discount: discountAmount,
-        couponApplied: appliedCoupon?.code,
-        deliveryFee,
-        tax,
-        total,
-        paymentMethod: paymentMethod === 'upi' 
-          ? `UPI (${selectedUpiApp.toUpperCase()})` 
-          : paymentMethod === 'card' 
-          ? 'Credit/Debit Card' 
-          : paymentMethod === 'netbanking'
-          ? `Net Banking (${selectedBank.toUpperCase()})`
-          : 'Cash on Delivery',
-        selectedUpiApp,
-        selectedBank,
-        deliveryType: 'Standard Express Courier',
-        address: selectedAddress
-      };
-
-      const newOrderId = await placeOrder(orderPayload);
-
-      // Cash on Delivery proceeds directly to tracking
+      // COD: create order immediately (unchanged)
       if (!isOnline) {
+        const orderPayload = {
+          items: cartItems,
+          subtotal,
+          discount: discountAmount,
+          couponApplied: appliedCoupon?.code,
+          deliveryFee,
+          tax,
+          total,
+          paymentMethod: 'COD',
+          deliveryType: 'Standard Express Courier',
+          address: selectedAddress
+        };
+        const newOrderId = await placeOrder(orderPayload);
         clearCart();
         setIsOrderPlacing(false);
         navigate(`/order-tracking/${newOrderId}`);
         return;
       }
 
-      // Online payment flow with Razorpay Gateway
-      let razorpayOrderId = null;
-      let keyId = gatewayConfig.keyId || 'rzp_test_TRZdg2aAOYv4KK';
-      let amount = Math.round(total * 100);
-      let currency = 'INR';
-
-      try {
-        const orderSession = await paymentApi.createOrder({ orderId: newOrderId });
-        if (orderSession?.data?.razorpayOrderId) {
-          razorpayOrderId = orderSession.data.razorpayOrderId;
-          keyId = orderSession.data.keyId || keyId;
-          amount = orderSession.data.amount || amount;
-          currency = orderSession.data.currency || currency;
+      // Prepaid: Razorpay first — Auriva order only after payment success
+      let addressId = selectedAddress?._id || selectedAddress?.id;
+      if (!addressId || !/^[0-9a-fA-F]{24}$/.test(String(addressId))) {
+        const addrPayload = {
+          fullName: selectedAddress.name || selectedAddress.fullName || user?.name || 'Customer',
+          phoneNumber: selectedAddress.phone || selectedAddress.phoneNumber || user?.phone || '',
+          addressLine1: selectedAddress.street || selectedAddress.addressLine1 || '',
+          addressLine2: selectedAddress.addressLine2 || '',
+          landmark: selectedAddress.landmark || '',
+          city: selectedAddress.city || 'Indore',
+          state: selectedAddress.state || 'Madhya Pradesh',
+          postalCode: selectedAddress.pincode || selectedAddress.postalCode || '',
+          addressType: (selectedAddress.type || 'home').toLowerCase()
+        };
+        const newAddrRes = await addressApi.addAddress(addrPayload);
+        addressId = newAddrRes?.data?.address?._id;
+        if (!addressId) {
+          throw new Error('Could not save delivery address. Please try again.');
         }
-      } catch (sessionErr) {
-        console.warn('[Checkout] Backend paymentApi.createOrder note:', sessionErr.message);
+      }
+
+      let guestId = null;
+      try {
+        guestId = localStorage.getItem('auriva_guest_id');
+        if (Array.isArray(cartItems) && cartItems.length > 0) {
+          await cartApi.syncCart(cartItems, guestId);
+        }
+      } catch (syncErr) {
+        console.warn('[Checkout] Cart sync note:', syncErr.message);
+      }
+
+      const session = await paymentApi.createCheckoutSession({
+        addressId: String(addressId),
+        paymentMethod: 'UPI',
+        couponCode: appliedCoupon?.code || undefined,
+        guestId: guestId || undefined,
+        items: cartItems
+      });
+
+      const sessionData = session?.data || session;
+      let razorpayOrderId = sessionData?.razorpayOrderId;
+      let keyId = sessionData?.keyId || gatewayConfig.keyId || 'rzp_test_TRZdg2aAOYv4KK';
+      let amount = sessionData?.amount || Math.round(total * 100);
+      let currency = sessionData?.currency || 'INR';
+
+      if (!razorpayOrderId) {
+        throw new Error(session?.message || 'Could not start online payment. Please try again.');
       }
 
       const scriptLoaded = await loadRazorpayScript();
@@ -301,28 +433,36 @@ export default function CheckoutPage() {
         amount,
         currency,
         name: 'AURIVÁ Foods',
-        description: `Order #${newOrderId}`,
-        order_id: razorpayOrderId || undefined,
+        description: 'Online payment',
+        order_id: razorpayOrderId,
         prefill: {
           name: selectedAddress?.name || user?.name || '',
           contact: selectedAddress?.phone || user?.phone || '',
-          email: selectedAddress?.email || user?.email || '',
-          method: paymentMethod === 'netbanking' ? 'netbanking' : paymentMethod === 'card' ? 'card' : 'upi'
+          email: selectedAddress?.email || user?.email || ''
         },
         theme: {
           color: '#0E2A1B'
         },
         handler: async (response) => {
           try {
-            await paymentApi.verifyPayment({
-              orderId: newOrderId,
+            const verified = await paymentApi.verifyPayment({
               razorpayOrderId: response.razorpay_order_id,
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature
             });
+            const createdOrder = verified?.data?.order || verified?.order;
+            const trackId =
+              createdOrder?.orderNumber ||
+              createdOrder?._id ||
+              createdOrder?.id;
             clearCart();
             setIsOrderPlacing(false);
-            navigate(`/order-tracking/${newOrderId}`);
+            if (!trackId) {
+              setOrderError('Payment received but order id missing. Check My Orders.');
+              navigate('/account');
+              return;
+            }
+            navigate(`/order-tracking/${trackId}`);
           } catch (verifyErr) {
             setIsOrderPlacing(false);
             setOrderError(verifyErr.message || 'Payment verification failed. Please contact support.');
@@ -331,7 +471,9 @@ export default function CheckoutPage() {
         modal: {
           ondismiss: () => {
             setIsOrderPlacing(false);
-            setOrderError('Payment process was closed before completion. You can retry payment or choose Cash on Delivery.');
+            setOrderError(
+              'Payment was not completed — no order was created. You can retry Online Payment or choose Cash on Delivery.'
+            );
           }
         }
       };
@@ -339,12 +481,18 @@ export default function CheckoutPage() {
       const rzp = new window.Razorpay(rzpOptions);
       rzp.on('payment.failed', (resp) => {
         setIsOrderPlacing(false);
-        setOrderError(`Payment failed: ${resp.error?.description || 'Transaction declined'}`);
+        setOrderError(
+          `Payment failed: ${resp.error?.description || 'Transaction declined'}. No order was created.`
+        );
       });
       rzp.open();
     } catch (err) {
       setIsOrderPlacing(false);
-      setOrderError(err.message || 'Unable to place order. Please verify item stock or address details.');
+      const msg = err.message || 'Unable to place order. Please verify item stock or address details.';
+      setOrderError(msg);
+      if (err.status === 401 || /log in again|session has expired/i.test(msg)) {
+        navigate('/login', { state: { from: { pathname: '/checkout' } } });
+      }
     }
   };
 
@@ -707,149 +855,51 @@ export default function CheckoutPage() {
               {currentStep === 2 ? (
                 <div className="space-y-3 sm:space-y-6 animate-fadeIn">
                   
-                  {/* Payment Options List */}
+                  {/* Payment Options — Online (Prepaid) vs COD */}
                   <div className="space-y-2 sm:space-y-3">
-                    
-                    {/* UPI Option */}
-                    <div 
-                      onClick={() => setPaymentMethod('upi')}
+                    <div
+                      onClick={() => setPaymentMethod('online')}
                       className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                        paymentMethod === 'upi' ? 'border-[#0E2A1B] bg-[#FAF7F2] shadow-xs' : 'border-stone-200 hover:border-stone-400'
+                        paymentMethod === 'online'
+                          ? 'border-[#0E2A1B] bg-[#FAF7F2] shadow-xs'
+                          : 'border-stone-200 hover:border-stone-400'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 sm:gap-3.5">
                           <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                            <Smartphone className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                            <CreditCard className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                           </div>
                           <div>
-                            <div className="flex items-center">
-                              <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">UPI Instant Payment</span>
-                            </div>
-                            <p className="text-[9.5px] sm:text-[11px] text-stone-500">Google Pay, PhonePe, Paytm, BHIM</p>
+                            <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Online Payment</span>
+                            <p className="text-[9.5px] sm:text-[11px] text-stone-500">
+                              UPI, Cards & Net Banking · Prepaid shipping
+                              {shippingQuote?.prepaid?.fee != null
+                                ? ` · ₹${shippingQuote.prepaid.fee}`
+                                : ''}
+                            </p>
                           </div>
                         </div>
-                        <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                          paymentMethod === 'upi' ? 'border-[#0E2A1B] bg-[#0E2A1B]' : 'border-stone-300'
-                        }`}>
-                          {paymentMethod === 'upi' && <Check className="w-2.5 h-2.5 text-[#D4AF37] stroke-[3]" />}
-                        </div>
-                      </div>
-
-                      {paymentMethod === 'upi' && (
-                        <div className="mt-2.5 pt-2 border-t border-stone-200 flex flex-wrap gap-1.5 sm:gap-2 animate-fadeIn">
-                          {[
-                            { id: 'gpay', name: 'Google Pay' },
-                            { id: 'phonepe', name: 'PhonePe' },
-                            { id: 'paytm', name: 'Paytm' },
-                            { id: 'bhim', name: 'BHIM UPI' }
-                          ].map(app => (
-                            <button
-                              key={app.id}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedUpiApp(app.id);
-                              }}
-                              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold border transition-all ${
-                                selectedUpiApp === app.id
-                                  ? 'bg-[#0E2A1B] text-[#D4AF37] border-[#0E2A1B] shadow-xs'
-                                  : 'bg-white border-stone-200 text-stone-700 hover:border-stone-400'
-                              }`}
-                            >
-                              {app.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Credit / Debit Card Option */}
-                    <div 
-                      onClick={() => setPaymentMethod('card')}
-                      className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                        paymentMethod === 'card' ? 'border-[#0E2A1B] bg-[#FAF7F2] shadow-xs' : 'border-stone-200 hover:border-stone-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 sm:gap-3.5">
-                          <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-amber-100 text-[#0E2A1B] flex items-center justify-center shrink-0">
-                            <CreditCard className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-[#C89038]" />
-                          </div>
-                          <div>
-                            <div className="flex items-center">
-                              <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Credit / Debit Card</span>
-                            </div>
-                            <p className="text-[9.5px] sm:text-[11px] text-stone-500">Visa, Mastercard, RuPay, Amex</p>
-                          </div>
-                        </div>
-                        <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                          paymentMethod === 'card' ? 'border-[#0E2A1B] bg-[#0E2A1B]' : 'border-stone-300'
-                        }`}>
-                          {paymentMethod === 'card' && <Check className="w-2.5 h-2.5 text-[#D4AF37] stroke-[3]" />}
+                        <div
+                          className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                            paymentMethod === 'online'
+                              ? 'border-[#0E2A1B] bg-[#0E2A1B]'
+                              : 'border-stone-300'
+                          }`}
+                        >
+                          {paymentMethod === 'online' && (
+                            <Check className="w-2.5 h-2.5 text-[#D4AF37] stroke-[3]" />
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Online Net Banking Option */}
-                    <div 
-                      onClick={() => setPaymentMethod('netbanking')}
-                      className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                        paymentMethod === 'netbanking' ? 'border-[#0E2A1B] bg-[#FAF7F2] shadow-xs' : 'border-stone-200 hover:border-stone-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 sm:gap-3.5">
-                          <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-blue-50 text-blue-800 flex items-center justify-center shrink-0">
-                            <Building2 className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-blue-700" />
-                          </div>
-                          <div>
-                            <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Online Net Banking</span>
-                            <p className="text-[9.5px] sm:text-[11px] text-stone-500">SBI, HDFC, ICICI, Axis, Kotak & 50+ Banks</p>
-                          </div>
-                        </div>
-                        <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                          paymentMethod === 'netbanking' ? 'border-[#0E2A1B] bg-[#0E2A1B]' : 'border-stone-300'
-                        }`}>
-                          {paymentMethod === 'netbanking' && <Check className="w-2.5 h-2.5 text-[#D4AF37] stroke-[3]" />}
-                        </div>
-                      </div>
-
-                      {paymentMethod === 'netbanking' && (
-                        <div className="mt-2.5 pt-2 border-t border-stone-200 flex flex-wrap gap-1.5 sm:gap-2 animate-fadeIn">
-                          {[
-                            { id: 'HDFC', name: 'HDFC Bank' },
-                            { id: 'SBIN', name: 'SBI' },
-                            { id: 'ICIC', name: 'ICICI' },
-                            { id: 'UTIB', name: 'Axis' },
-                            { id: 'KKBK', name: 'Kotak' },
-                            { id: 'ALL', name: 'Other Banks' }
-                          ].map(bank => (
-                            <button
-                              key={bank.id}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedBank(bank.id);
-                              }}
-                              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold border transition-all ${
-                                selectedBank === bank.id
-                                  ? 'bg-[#0E2A1B] text-[#D4AF37] border-[#0E2A1B] shadow-xs'
-                                  : 'bg-white border-stone-200 text-stone-700 hover:border-stone-400'
-                              }`}
-                            >
-                              {bank.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Cash on Delivery */}
-                    <div 
+                    <div
                       onClick={() => setPaymentMethod('cod')}
                       className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                        paymentMethod === 'cod' ? 'border-[#0E2A1B] bg-[#FAF7F2] shadow-xs' : 'border-stone-200 hover:border-stone-400'
+                        paymentMethod === 'cod'
+                          ? 'border-[#0E2A1B] bg-[#FAF7F2] shadow-xs'
+                          : 'border-stone-200 hover:border-stone-400'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -858,18 +908,26 @@ export default function CheckoutPage() {
                             <Wallet className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                           </div>
                           <div>
-                            <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Cash / UPI on Delivery</span>
-                            <p className="text-[9.5px] sm:text-[11px] text-stone-500">Pay at doorstep via Cash or QR</p>
+                            <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Cash on Delivery</span>
+                            <p className="text-[9.5px] sm:text-[11px] text-stone-500">
+                              Pay at doorstep · COD shipping
+                              {shippingQuote?.cod?.fee != null ? ` · ₹${shippingQuote.cod.fee}` : ''}
+                            </p>
                           </div>
                         </div>
-                        <div className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                          paymentMethod === 'cod' ? 'border-[#0E2A1B] bg-[#0E2A1B]' : 'border-stone-300'
-                        }`}>
-                          {paymentMethod === 'cod' && <Check className="w-2.5 h-2.5 text-[#D4AF37] stroke-[3]" />}
+                        <div
+                          className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                            paymentMethod === 'cod'
+                              ? 'border-[#0E2A1B] bg-[#0E2A1B]'
+                              : 'border-stone-300'
+                          }`}
+                        >
+                          {paymentMethod === 'cod' && (
+                            <Check className="w-2.5 h-2.5 text-[#D4AF37] stroke-[3]" />
+                          )}
                         </div>
                       </div>
                     </div>
-
                   </div>
 
                   {/* Order Error Alert */}
@@ -892,7 +950,7 @@ export default function CheckoutPage() {
 
                     <button
                       type="button"
-                      disabled={isOrderPlacing}
+                      disabled={isOrderPlacing || !shippingReady}
                       onClick={handlePlaceOrder}
                       className="w-full sm:w-auto px-6 py-3 sm:px-8 sm:py-3.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#E5C358] to-[#C89038] text-[#0E2A1B] font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 min-h-[42px] sm:min-h-[44px]"
                     >
@@ -1009,9 +1067,59 @@ export default function CheckoutPage() {
                 )}
 
                 <div className="flex justify-between text-stone-600">
-                  <span>Shipping / Delivery</span>
-                  <span className="font-sans">{deliveryFee === 0 ? <strong className="text-emerald-700">FREE</strong> : `₹${deliveryFee}`}</span>
+                  <span>{shippingLabel}</span>
+                  <span className="font-sans">
+                    {shippingQuoteLoading && pinReady ? (
+                      'Loading…'
+                    ) : deliveryFee === 0 ? (
+                      <strong className="text-emerald-700">FREE</strong>
+                    ) : (
+                      `₹${deliveryFee}`
+                    )}
+                  </span>
                 </div>
+                {deliveryPincode?.replace(/\D/g, '').length === 6 && (
+                  <div className="rounded-lg border border-stone-100 bg-stone-50/80 px-2.5 py-2 text-[10px] sm:text-[11px] text-stone-600 space-y-1">
+                    <div className="flex items-center gap-1.5 font-semibold text-[#0E2A1B]">
+                      <Truck className="w-3.5 h-3.5 text-[#C89038] shrink-0" />
+                      <span>Live Shiprocket rates</span>
+                    </div>
+                    {shippingQuoteLoading ? (
+                      <p className="text-stone-500">Fetching courier rates for your pincode…</p>
+                    ) : shippingQuote?.error ? (
+                      <p className="text-rose-600">{shippingQuote.error}</p>
+                    ) : (
+                      <>
+                        <div className="flex justify-between gap-2">
+                          <span>Prepaid (UPI / Card / Net Banking)</span>
+                          <span className="font-sans font-bold text-[#0E2A1B]">
+                            {shippingQuote?.prepaid?.fee === 0
+                              ? 'FREE'
+                              : `₹${shippingQuote?.prepaid?.fee ?? '—'}`}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <span>COD</span>
+                          <span className="font-sans font-bold text-[#0E2A1B]">
+                            {shippingQuote?.cod?.fee === 0 ? 'FREE' : `₹${shippingQuote?.cod?.fee ?? '—'}`}
+                          </span>
+                        </div>
+                        {((isCodPayment ? shippingQuote?.cod : shippingQuote?.prepaid)?.courier) && (
+                          <p className="text-stone-500">
+                            Selected:{' '}
+                            {(isCodPayment ? shippingQuote.cod : shippingQuote.prepaid).courier}
+                            {(isCodPayment ? shippingQuote.cod : shippingQuote.prepaid).etd
+                              ? ` · ${(isCodPayment ? shippingQuote.cod : shippingQuote.prepaid).etd} days`
+                              : ''}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+                {deliveryPincode?.replace(/\D/g, '').length !== 6 && (
+                  <p className="text-[10px] text-stone-500">Add a delivery address to see Shiprocket shipping rates</p>
+                )}
 
                 <div className="flex justify-between text-stone-600">
                   <span>Estimated Taxes (5%)</span>

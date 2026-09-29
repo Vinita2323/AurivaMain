@@ -36,6 +36,7 @@ import adminRecipeRoutes from './routes/adminRecipeRoutes.js';
 import fcmTokenRoutes from './routes/fcmTokenRoutes.js';
 import adminShiprocketRoutes from './routes/adminShiprocketRoutes.js';
 import webhookRoutes from './routes/webhookRoutes.js';
+import shippingRoutes from './routes/shippingRoutes.js';
 import shiprocketController from './controllers/shiprocketController.js';
 import { authMiddleware } from './middleware/authMiddleware.js';
 import { requireAdmin } from './middleware/roleMiddleware.js';
@@ -49,13 +50,43 @@ const __dirname = path.dirname(__filename);
 // Initialize Express
 const app = express();
 
-// Enable CORS
+// Enable CORS — allow production storefront + local Vite ports
+const configuredOrigins = String(env.CLIENT_URL || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'https://aurivabites.in',
+  'https://www.aurivabites.in'
+];
+const allowAllOrigins = env.CLIENT_URL === '*';
+const allowedOrigins = allowAllOrigins
+  ? null
+  : [...new Set([...configuredOrigins, ...defaultOrigins])];
+
 app.use(
   cors({
-    origin: env.CLIENT_URL === '*' ? '*' : [env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:3000',"http://localhost:5174","http://localhost:5175"],
+    origin: (origin, callback) => {
+      // Same-origin / server-to-server / mobile webviews may omit Origin
+      if (!origin || allowAllOrigins) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-guest-id', 'X-Guest-Id', 'Accept', 'x-razorpay-signature']
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-guest-id',
+      'X-Guest-Id',
+      'Accept',
+      'x-razorpay-signature',
+      'x-api-key'
+    ]
   })
 );
 
@@ -152,6 +183,8 @@ const mountOrderShiprocket = (basePath) => {
   app.post(`${basePath}/:id/shiprocket/awb`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.assignAwb);
   app.post(`${basePath}/:id/shiprocket/pickup`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.schedulePickup);
   app.post(`${basePath}/:id/shiprocket/label`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.generateLabel);
+  app.post(`${basePath}/:id/shiprocket/invoice`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.generateInvoice);
+  app.post(`${basePath}/:id/shiprocket/manifest`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.generateManifest);
   app.get(`${basePath}/:id/shiprocket/track`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.track);
   app.post(`${basePath}/:id/shiprocket/cancel`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.cancelShipment);
 };
@@ -164,6 +197,8 @@ app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/v1/checkout', checkoutRoutes);
 app.use('/api/checkout', checkoutRoutes);
+app.use('/api/v1/shipping', shippingRoutes);
+app.use('/api/shipping', shippingRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/v1/admin/settings', adminSettingsRoutes);

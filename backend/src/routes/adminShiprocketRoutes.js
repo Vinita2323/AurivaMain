@@ -25,6 +25,8 @@ router.get('/orders/:id/serviceability', validateOrderId, shiprocketController.s
 router.post('/orders/:id/awb', validateOrderId, shiprocketController.assignAwb);
 router.post('/orders/:id/pickup', validateOrderId, shiprocketController.schedulePickup);
 router.post('/orders/:id/label', validateOrderId, shiprocketController.generateLabel);
+router.post('/orders/:id/invoice', validateOrderId, shiprocketController.generateInvoice);
+router.post('/orders/:id/manifest', validateOrderId, shiprocketController.generateManifest);
 router.get('/orders/:id/track', validateOrderId, shiprocketController.track);
 router.post('/orders/:id/cancel', validateOrderId, shiprocketController.cancelShipment);
 

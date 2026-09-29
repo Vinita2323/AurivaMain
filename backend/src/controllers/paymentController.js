@@ -39,7 +39,17 @@ export const createPaymentOrder = async (req, res, next) => {
  */
 export const verifyPayment = async (req, res, next) => {
   try {
-    const result = await PaymentService.verifyPayment(req.user._id, req.body);
+    // Prepaid-before-order flow: no Auriva orderId yet
+    const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const result =
+      !orderId && razorpayOrderId
+        ? await PaymentService.verifyAndPlacePrepaidOrder(req.user._id, {
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature
+          })
+        : await PaymentService.verifyPayment(req.user._id, req.body);
+
     return sendSuccess(
       res,
       result.message || 'Payment verified successfully',
@@ -49,6 +59,26 @@ export const verifyPayment = async (req, res, next) => {
   } catch (error) {
     if (error.statusCode) {
       return sendError(res, error.message, null, error.statusCode);
+    }
+    next(error);
+  }
+};
+
+/**
+ * Customer: Start prepaid checkout (Razorpay only — order created after pay)
+ */
+export const createCheckoutSession = async (req, res, next) => {
+  try {
+    const result = await PaymentService.createCheckoutSession(req.user._id, req.body);
+    return sendSuccess(
+      res,
+      'Checkout payment session created',
+      result,
+      HTTP_STATUS.CREATED
+    );
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, { code: error.code, isConfigured: error.isConfigured }, error.statusCode);
     }
     next(error);
   }

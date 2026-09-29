@@ -325,12 +325,8 @@ export default function CartPage() {
 
                   <div className="flex justify-between text-stone-600">
                     <span>Delivery Charges</span>
-                    <span className="font-sans">
-                      {deliveryFee === 0 ? (
-                        <strong className="text-emerald-700 font-bold uppercase">FREE</strong>
-                      ) : (
-                        `₹${deliveryFee}`
-                      )}
+                    <span className="font-sans text-stone-500 text-[11px] sm:text-xs">
+                      Calculated at checkout via Shiprocket
                     </span>
                   </div>
 

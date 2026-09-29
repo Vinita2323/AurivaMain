@@ -155,7 +155,7 @@ export default function CartDrawer() {
                 )}
                 <div className="flex justify-between text-stone-600">
                   <span>Delivery Charges</span>
-                  <span>{deliveryFee === 0 ? <strong className="text-emerald-600">FREE</strong> : `₹${deliveryFee}`}</span>
+                  <span className="text-stone-500 text-[11px]">At checkout (Shiprocket)</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-[#0E2A1B] pt-2 border-t border-dashed border-stone-200">
                   <span>Total Amount</span>

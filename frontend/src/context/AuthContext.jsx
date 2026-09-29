@@ -1,8 +1,32 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { INITIAL_ORDERS } from '../data/adminData';
-import { userAuthApi, addressApi, orderApi } from '../utils/api';
+import { userAuthApi, addressApi, orderApi, cartApi, isJwtExpired } from '../utils/api';
 import confetti from 'canvas-confetti';
 import pushNotificationService from '../services/pushNotificationService';
+
+const readStoredUserSession = () => {
+  try {
+    const token = localStorage.getItem('auriva_user_token') || null;
+    if (!token || isJwtExpired(token)) {
+      localStorage.removeItem('auriva_user_token');
+      localStorage.removeItem('auriva_user');
+      return { token: null, user: null };
+    }
+
+    const saved = localStorage.getItem('auriva_user');
+    if (!saved || saved === 'null') return { token, user: null };
+
+    const parsed = JSON.parse(saved);
+    if (parsed.avatar && (parsed.avatar.includes('images.unsplash.com/photo-1534528741775') || parsed.avatar.includes('images.unsplash.com/photo-1507003211169'))) {
+      parsed.avatar = '';
+      localStorage.setItem('auriva_user', JSON.stringify(parsed));
+    }
+    return { token, user: parsed };
+  } catch (e) {
+    console.error(e);
+    return { token: null, user: null };
+  }
+};
 
 const AuthContext = createContext();
 
@@ -134,31 +158,8 @@ export const formatOrder = (o) => {
 };
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('auriva_user');
-      if (saved === 'null') return null;
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.avatar && (parsed.avatar.includes('images.unsplash.com/photo-1534528741775') || parsed.avatar.includes('images.unsplash.com/photo-1507003211169'))) {
-          parsed.avatar = '';
-          localStorage.setItem('auriva_user', JSON.stringify(parsed));
-        }
-        return parsed;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return INITIAL_CUSTOMERS[0];
-  });
-
-  const [token, setToken] = useState(() => {
-    try {
-      return localStorage.getItem('auriva_user_token') || null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(() => readStoredUserSession().user);
+  const [token, setToken] = useState(() => readStoredUserSession().token);
 
   const [orders, setOrders] = useState(() => {
     try {
@@ -268,30 +269,66 @@ export function AuthProvider({ children }) {
     }
   }, [customers]);
 
+  // Clear React auth state when API detects an expired/invalid user JWT
+  useEffect(() => {
+    const onExpired = () => {
+      setToken(null);
+      setUser(null);
+    };
+    window.addEventListener('auriva:auth-expired', onExpired);
+    return () => window.removeEventListener('auriva:auth-expired', onExpired);
+  }, []);
+
   // Synchronize addresses and orders with backend whenever user is authenticated
   useEffect(() => {
-    if (token) {
-      addressApi.getAddresses()
-        .then(res => {
-          if (res?.data?.addresses && res.data.addresses.length > 0) {
-            const formatted = res.data.addresses.map(formatAddress);
-            setAddresses(formatted);
-            const def = formatted.find(a => a.isDefault);
-            if (def) setSelectedAddressId(def.id);
-            else setSelectedAddressId(formatted[0].id);
-          }
-        })
-        .catch(err => console.warn('[AuthContext] Backend addresses load note:', err.message));
-
-      orderApi.getUserOrders()
-        .then(res => {
-          if (res?.data?.orders && res.data.orders.length > 0) {
-            const formatted = res.data.orders.map(formatOrder);
-            setOrders(formatted);
-          }
-        })
-        .catch(err => console.warn('[AuthContext] Backend orders load note:', err.message));
+    if (!token || isJwtExpired(token)) {
+      if (token && isJwtExpired(token)) {
+        setToken(null);
+        setUser(null);
+        try {
+          localStorage.removeItem('auriva_user_token');
+          localStorage.removeItem('auriva_user');
+        } catch {
+          // ignore
+        }
+      }
+      return;
     }
+
+    addressApi.getAddresses()
+      .then(res => {
+        if (res?.data?.addresses && res.data.addresses.length > 0) {
+          const formatted = res.data.addresses.map(formatAddress);
+          setAddresses(formatted);
+          const def = formatted.find(a => a.isDefault);
+          if (def) setSelectedAddressId(def.id);
+          else setSelectedAddressId(formatted[0].id);
+        }
+      })
+      .catch(err => {
+        if (err?.status === 401) {
+          setToken(null);
+          setUser(null);
+        } else {
+          console.warn('[AuthContext] Backend addresses load note:', err.message);
+        }
+      });
+
+    orderApi.getUserOrders()
+      .then(res => {
+        if (res?.data?.orders && res.data.orders.length > 0) {
+          const formatted = res.data.orders.map(formatOrder);
+          setOrders(formatted);
+        }
+      })
+      .catch(err => {
+        if (err?.status === 401) {
+          setToken(null);
+          setUser(null);
+        } else {
+          console.warn('[AuthContext] Backend orders load note:', err.message);
+        }
+      });
   }, [token]);
 
   /**
@@ -528,7 +565,19 @@ export function AuthProvider({ children }) {
   };
 
   const placeOrder = async (orderPayload) => {
-    // If authenticated, place real order via backend API
+    if (!token || isJwtExpired(token)) {
+      setToken(null);
+      setUser(null);
+      try {
+        localStorage.removeItem('auriva_user_token');
+        localStorage.removeItem('auriva_user');
+      } catch {
+        // ignore
+      }
+      throw new Error('Your session has expired. Please log in again to place your order.');
+    }
+
+    // Authenticated — place real order via backend API
     if (token) {
       const targetAddress = orderPayload.address || addresses.find(a => a.id === selectedAddressId) || addresses[0];
       let addressId = targetAddress?._id;
@@ -563,10 +612,32 @@ export function AuthProvider({ children }) {
       }
 
       let normalizedPayment = 'COD';
-      const rawPayment = orderPayload.paymentMethod || '';
-      if (rawPayment.includes('UPI')) normalizedPayment = 'UPI';
-      else if (rawPayment.includes('Card')) normalizedPayment = 'CARD';
-      else if (rawPayment.includes('Net')) normalizedPayment = 'NETBANKING';
+      const rawPayment = String(orderPayload.paymentMethod || '');
+      const rawUpper = rawPayment.toUpperCase();
+      // Check COD / cash-on-delivery BEFORE UPI so "Cash / UPI on Delivery" stays COD
+      if (rawUpper.includes('COD') || rawUpper.includes('CASH') || rawUpper.includes('ON DELIVERY') || rawUpper.includes('DOORSTEP')) {
+        normalizedPayment = 'COD';
+      } else if (rawUpper.includes('UPI') || rawUpper.includes('GPAY') || rawUpper.includes('PHONEPE')) {
+        normalizedPayment = 'UPI';
+      } else if (rawUpper.includes('CARD') || rawUpper.includes('CREDIT') || rawUpper.includes('DEBIT')) {
+        normalizedPayment = 'CARD';
+      } else if (rawUpper.includes('NET') || rawUpper.includes('BANK')) {
+        normalizedPayment = 'NETBANKING';
+      }
+
+      // Ensure guest/local cart items are on the authenticated user cart before placing
+      let guestId = null;
+      let localCartItems = [];
+      try {
+        guestId = localStorage.getItem('auriva_guest_id');
+        const savedCart = localStorage.getItem('auriva_cart');
+        localCartItems = savedCart ? JSON.parse(savedCart) : [];
+        if (Array.isArray(localCartItems) && localCartItems.length > 0) {
+          await cartApi.syncCart(localCartItems, guestId);
+        }
+      } catch (syncErr) {
+        console.warn('[AuthContext] Pre-order cart sync note:', syncErr.message);
+      }
 
       const payload = {
         addressId,
@@ -576,7 +647,11 @@ export function AuthProvider({ children }) {
           upiApp: orderPayload.selectedUpiApp || ''
         },
         couponCode: orderPayload.couponApplied || undefined,
-        idempotencyKey: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+        idempotencyKey: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        guestId: guestId || undefined,
+        items: Array.isArray(localCartItems) && localCartItems.length > 0
+          ? localCartItems
+          : (orderPayload.items || undefined)
       };
 
       const res = await orderApi.placeOrder(payload);
@@ -755,7 +830,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user,
       token,
-      isAuthenticated: Boolean(user),
+      isAuthenticated: Boolean(token && user),
       orders,
       customers,
       addresses,

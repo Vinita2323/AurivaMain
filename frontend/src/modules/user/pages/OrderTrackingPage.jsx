@@ -261,6 +261,9 @@ export default function OrderTrackingPage() {
                         Track package
                       </a>
                     )}
+                    {order.shiprocket?.isRto && (
+                      <p className="text-amber-800 font-semibold mt-1">Return to origin (RTO) update received</p>
+                    )}
                     {order.estimatedDelivery && (
                       <p className="text-stone-500 mt-1">
                         Est. delivery: {new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAdmin } from './AdminContext';
+import { useAuth } from './AuthContext';
 import { cartApi, settingsApi } from '../utils/api';
 import { resolveProductImage } from '../utils/productImage';
 
@@ -20,6 +21,7 @@ const getOrCreateGuestId = () => {
 
 export function CartProvider({ children }) {
   const { coupons, settings } = useAdmin();
+  const { token, isAuthenticated } = useAuth();
   const [liveSettings, setLiveSettings] = useState(null);
   const [guestId] = useState(getOrCreateGuestId);
 
@@ -85,7 +87,7 @@ export function CartProvider({ children }) {
     }
   }, [appliedCoupon]);
 
-  // Fetch or sync authoritative cart from backend MongoDB on mount
+  // Fetch or sync authoritative cart from backend MongoDB on mount / login
   const refreshCartFromBackend = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -103,10 +105,14 @@ export function CartProvider({ children }) {
           if (localSaved) {
             const parsed = JSON.parse(localSaved);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              const syncRes = await cartApi.syncCart(parsed, guestId);
-              if (syncRes?.data?.cart?.items) {
-                setCartItems(syncRes.data.cart.items);
+              if (isAuthenticated) {
+                const syncRes = await cartApi.syncCart(parsed, guestId);
+                if (syncRes?.data?.cart?.items) {
+                  setCartItems(syncRes.data.cart.items);
+                  return;
+                }
               }
+              setCartItems(parsed);
             }
           }
         }
@@ -116,11 +122,39 @@ export function CartProvider({ children }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [guestId]);
+  }, [guestId, isAuthenticated]);
 
   useEffect(() => {
     refreshCartFromBackend();
   }, [refreshCartFromBackend]);
+
+  // After login, merge guest / local cart into the authenticated user cart
+  useEffect(() => {
+    if (!token || !isAuthenticated) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        let localItems = cartItems;
+        if (!localItems?.length) {
+          const saved = localStorage.getItem('auriva_cart');
+          localItems = saved ? JSON.parse(saved) : [];
+        }
+        if (Array.isArray(localItems) && localItems.length > 0) {
+          await cartApi.syncCart(localItems, guestId);
+        } else {
+          await cartApi.getCart(guestId);
+        }
+        if (!cancelled) await refreshCartFromBackend();
+      } catch (err) {
+        console.warn('[CartContext] Login cart merge note:', err.message);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // Only re-run when auth token appears / changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, isAuthenticated, guestId]);
 
   const hideCartToast = () => {
     setCartToast(null);
@@ -355,13 +389,13 @@ export function CartProvider({ children }) {
 
   const effectiveSettings = liveSettings || settings;
   const freeShippingMin = effectiveSettings?.freeDeliveryThreshold ?? 499;
-  const standardFee = effectiveSettings?.standardDeliveryFee ?? 40;
   const gstRate = (effectiveSettings?.gstRate ?? 5) / 100;
 
-  const deliveryFee = subtotal >= freeShippingMin || subtotal === 0 ? 0 : standardFee;
+  // Shipping is calculated live from Shiprocket at checkout (pincode + payment method)
+  const deliveryFee = null;
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const tax = Math.round(taxableAmount * gstRate);
-  const total = Math.max(0, taxableAmount + deliveryFee + tax);
+  const total = Math.max(0, taxableAmount + tax);
 
   return (
     <CartContext.Provider value={{
@@ -386,7 +420,7 @@ export function CartProvider({ children }) {
       applyCoupon,
       removeCoupon,
       freeShippingMin,
-      standardFee,
+      shippingSettings: effectiveSettings,
       isSyncing,
       refreshCartFromBackend
     }}>
