@@ -5,6 +5,7 @@ import { CATEGORIES } from '../../../data/categories';
 import { useAdmin } from '../../../context/AdminContext';
 import { uploadApi } from '../../../utils/api';
 import { resolveProductImage } from '../../../utils/productImage';
+import { compressImageFile } from '../../../utils/compressImage';
 
 const EMPTY_PRODUCT = {
   name: '',
@@ -43,6 +44,7 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
       : CATEGORIES;
 
   const [formData, setFormData] = useState(EMPTY_PRODUCT);
+  const editingId = initialData?._id || initialData?.id || null;
 
   useEffect(() => {
     if (isOpen) {
@@ -51,27 +53,60 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
       }
       if (initialData) {
         const rawGallery = Array.isArray(initialData.gallery) && initialData.gallery.length > 0
-          ? initialData.gallery
+          ? initialData.gallery.filter((img) => typeof img === 'string' && img.trim())
           : (initialData.image ? [initialData.image] : []);
-        const mainImg = initialData.image || rawGallery[0] || '';
+        const mainImg = (typeof initialData.image === 'string' && initialData.image) || rawGallery[0] || '';
         const resolvedGallery = rawGallery.includes(mainImg)
           ? rawGallery
           : (mainImg ? [mainImg, ...rawGallery] : rawGallery);
 
+        const mappedVariants = Array.isArray(initialData.variants) && initialData.variants.length > 0
+          ? initialData.variants.map((v, idx) => ({
+              id: v.id || `v_${idx + 1}`,
+              name: v.name || `Pack ${idx + 1}`,
+              weight: v.weight || '150g',
+              price: Number(v.price ?? initialData.price ?? 249),
+              oldPrice: Number(v.oldPrice ?? initialData.oldPrice ?? 299),
+              stock: Number(v.stock ?? initialData.stockCount ?? 150)
+            }))
+          : Array.isArray(initialData.weightOptions) && initialData.weightOptions.length > 0
+            ? initialData.weightOptions.map((w, idx) => ({
+                id: `v_${idx + 1}`,
+                name: w.isDefault ? 'Standard Pack' : `Pack ${idx + 1}`,
+                weight: w.weight || '150g',
+                price: Number(w.price ?? initialData.price ?? 249),
+                oldPrice: Number(w.oldPrice ?? initialData.oldPrice ?? 299),
+                stock: Number(initialData.stockCount ?? 150)
+              }))
+            : [
+                {
+                  id: 'v1',
+                  name: 'Standard Pack',
+                  weight: initialData.weight || '150g',
+                  price: initialData.price || 249,
+                  oldPrice: initialData.oldPrice || 299,
+                  stock: initialData.stockCount || 150
+                }
+              ];
+
         setFormData({
-          ...initialData,
-          image: mainImg,
-          gallery: resolvedGallery,
+          name: initialData.name || '',
+          tagline: initialData.tagline || initialData.subtitle || '',
+          category: initialData.category || 'flavoured-makhana',
+          isBestseller: initialData.isBestseller !== undefined ? Boolean(initialData.isBestseller) : true,
           price: initialData.price !== undefined ? initialData.price : 249,
           oldPrice: initialData.oldPrice !== undefined ? initialData.oldPrice : 299,
+          discountPercent: initialData.discountPercent || 0,
           stockCount: initialData.stockCount !== undefined ? initialData.stockCount : 150,
-          isBestseller: initialData.isBestseller !== undefined ? Boolean(initialData.isBestseller) : true,
+          badge: initialData.badge || '',
+          image: mainImg,
+          gallery: resolvedGallery,
           description: initialData.description || '',
           details: initialData.details || initialData.productDetails || '',
           productDetails: initialData.productDetails || initialData.details || '',
-          variants: initialData.variants || [
-            { id: 'v1', name: 'Standard Pack', weight: initialData.weight || '150g', price: initialData.price || 249, oldPrice: initialData.oldPrice || 299, stock: initialData.stockCount || 150 }
-          ]
+          flavor: initialData.flavor || '',
+          weight: initialData.weight || '150g',
+          variants: mappedVariants
         });
       } else {
         const defaultCat = (allCategories && allCategories.length > 0)
@@ -95,7 +130,9 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, initialData]);
+    // Re-init only when modal opens or the edited product identity changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editingId]);
 
   if (!isOpen) return null;
 
@@ -110,27 +147,19 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
     const remainingSlots = maxImages - currentGallery.length;
 
     if (remainingSlots <= 0) {
-      alert("You can select up to 4 gallery photos. Please remove an existing photo first.");
+      alert('You can select up to 4 gallery photos. Please remove an existing photo first.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     const filesToProcess = files.slice(0, remainingSlots);
 
-    // 1. Instant local base64 previews for rapid UI response
-    const previewPromises = filesToProcess.map(file => {
-      return new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    });
+    // Instant blob previews (no heavy base64 encode before upload)
+    const previewUrls = filesToProcess.map((file) => URL.createObjectURL(file));
 
-    const newPreviews = await Promise.all(previewPromises);
-
-    setFormData(prev => {
+    setFormData((prev) => {
       const existing = Array.isArray(prev.gallery) ? prev.gallery : [];
-      const updated = [...existing, ...newPreviews].slice(0, maxImages);
+      const updated = [...existing, ...previewUrls].slice(0, maxImages);
       return {
         ...prev,
         gallery: updated,
@@ -138,44 +167,81 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
       };
     });
 
-    // 2. Upload to Cloudinary API
     setIsUploadingImage(true);
-    setUploadStatusMsg(`Uploading ${filesToProcess.length} photo(s) to Cloudinary...`);
+    setUploadStatusMsg(`Optimizing & uploading ${filesToProcess.length} photo(s)...`);
 
     try {
-      const uploadPromises = filesToProcess.map(file => uploadApi.uploadImage(file, 'auriva_products'));
-      const results = await Promise.allSettled(uploadPromises);
+      // Compress on-device first (biggest speed win), then upload in parallel
+      const compressedFiles = await Promise.all(
+        filesToProcess.map((file) => compressImageFile(file))
+      );
 
-      const uploadedUrls = [];
-      results.forEach(res => {
+      setUploadStatusMsg(`Uploading ${compressedFiles.length} photo(s) to Cloudinary...`);
+
+      const results = await Promise.allSettled(
+        compressedFiles.map((file) => uploadApi.uploadImage(file, 'auriva_products'))
+      );
+
+      const uploadedByPreview = new Map();
+      let failedCount = 0;
+      results.forEach((res, i) => {
         if (res.status === 'fulfilled' && res.value?.data?.url) {
-          uploadedUrls.push(res.value.data.url);
+          uploadedByPreview.set(previewUrls[i], res.value.data.url);
+        } else {
+          failedCount += 1;
         }
       });
 
-      if (uploadedUrls.length > 0) {
-        setFormData(prev => {
-          const curGallery = Array.isArray(prev.gallery) ? [...prev.gallery] : [];
-          let replaceIdx = 0;
-          const finalGallery = curGallery.map(img => {
-            if (typeof img === 'string' && img.startsWith('data:') && uploadedUrls[replaceIdx]) {
-              return uploadedUrls[replaceIdx++];
+      setFormData((prev) => {
+        const curGallery = Array.isArray(prev.gallery) ? [...prev.gallery] : [];
+        const finalGallery = curGallery
+          .map((img) => {
+            if (uploadedByPreview.has(img)) return uploadedByPreview.get(img);
+            // Drop unresolved local previews (blob: / data:)
+            if (typeof img === 'string' && (img.startsWith('blob:') || img.startsWith('data:'))) {
+              return null;
             }
             return img;
-          });
-          return {
-            ...prev,
-            gallery: finalGallery,
-            image: finalGallery[0] || prev.image || ''
-          };
-        });
-        setUploadStatusMsg(`Uploaded ${uploadedUrls.length} photo(s) to Cloudinary!`);
+          })
+          .filter((img) => typeof img === 'string' && img.trim());
+
+        return {
+          ...prev,
+          gallery: finalGallery,
+          image: finalGallery[0] || ''
+        };
+      });
+
+      // Free blob memory
+      previewUrls.forEach((url) => {
+        try { URL.revokeObjectURL(url); } catch (_) { /* ignore */ }
+      });
+
+      if (uploadedByPreview.size > 0) {
+        setUploadStatusMsg(
+          failedCount > 0
+            ? `Uploaded ${uploadedByPreview.size} photo(s). ${failedCount} failed — retry those slots.`
+            : `Uploaded ${uploadedByPreview.size} photo(s)!`
+        );
       } else {
-        setUploadStatusMsg('Photos preview saved');
+        setUploadStatusMsg('Upload failed. Please try again with a smaller image.');
       }
     } catch (err) {
       console.warn('Cloudinary upload error:', err.message);
-      setUploadStatusMsg('Photos preview saved locally');
+      previewUrls.forEach((url) => {
+        try { URL.revokeObjectURL(url); } catch (_) { /* ignore */ }
+      });
+      setFormData((prev) => {
+        const kept = (Array.isArray(prev.gallery) ? prev.gallery : []).filter(
+          (img) => typeof img === 'string' && !img.startsWith('blob:') && !img.startsWith('data:')
+        );
+        return {
+          ...prev,
+          gallery: kept,
+          image: kept[0] || ''
+        };
+      });
+      setUploadStatusMsg(err.message || 'Upload failed. Please try again.');
     } finally {
       setIsUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -185,8 +251,12 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
 
   // Remove single image from gallery
   const handleRemoveGalleryImage = (idxToRemove) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const cur = Array.isArray(prev.gallery) ? prev.gallery : [];
+      const removed = cur[idxToRemove];
+      if (typeof removed === 'string' && removed.startsWith('blob:')) {
+        try { URL.revokeObjectURL(removed); } catch (_) { /* ignore */ }
+      }
       const updated = cur.filter((_, idx) => idx !== idxToRemove);
       return {
         ...prev,
@@ -264,39 +334,68 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.name.trim()) {
-      alert("Please enter a product name.");
+      alert('Please enter a product name.');
       return;
     }
     const priceNum = Number(formData.price);
     if (isNaN(priceNum) || priceNum <= 0) {
-      alert("Please enter a valid selling price greater than 0.");
+      alert('Please enter a valid selling price greater than 0.');
+      return;
+    }
+    if (isUploadingImage) {
+      alert('Please wait for photo upload to finish before saving.');
+      return;
+    }
+
+    const rawGallery = (Array.isArray(formData.gallery) ? formData.gallery : [])
+      .filter((img) => typeof img === 'string' && img.trim());
+    const pendingLocal = rawGallery.filter(
+      (img) => img.startsWith('data:') || img.startsWith('blob:')
+    );
+    if (pendingLocal.length > 0) {
+      alert('Some photos are still uploading. Wait for upload to finish, or remove them before saving.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const { subcategory, ...cleanFormData } = formData;
-      const rawGallery = Array.isArray(formData.gallery) ? formData.gallery : [];
-      const primaryImg = formData.image || rawGallery[0] || resolveProductImage();
+      const primaryImg = (typeof formData.image === 'string' && formData.image && !formData.image.startsWith('data:'))
+        ? formData.image
+        : (rawGallery[0] || resolveProductImage());
       const finalGallery = rawGallery.length > 0
         ? (rawGallery.includes(primaryImg) ? rawGallery : [primaryImg, ...rawGallery])
         : [primaryImg];
 
+      // Send only editable fields — never re-post Mongo _id/timestamps/__v
       const payload = {
-        ...cleanFormData,
-        image: primaryImg,
-        gallery: finalGallery,
         name: formData.name.trim(),
+        tagline: formData.tagline || '',
+        category: formData.category || 'flavoured-makhana',
+        flavor: formData.flavor || '',
         price: priceNum,
         oldPrice: Number(formData.oldPrice || Math.round(priceNum * 1.2)),
         stockCount: Number(formData.stockCount || 150),
         isBestseller: Boolean(formData.isBestseller),
-        badge: formData.badge || (formData.isBestseller ? 'BESTSELLER' : '')
+        badge: formData.badge || (formData.isBestseller ? 'BESTSELLER' : ''),
+        image: primaryImg,
+        gallery: finalGallery,
+        description: formData.description || '',
+        details: formData.productDetails || formData.details || '',
+        productDetails: formData.productDetails || formData.details || '',
+        weight: formData.variants?.[0]?.weight || formData.weight || '150g',
+        variants: (formData.variants || []).map((v, idx) => ({
+          id: v.id || `v_${idx + 1}`,
+          name: v.name || `Pack ${idx + 1}`,
+          weight: v.weight || '150g',
+          price: Number(v.price || priceNum),
+          oldPrice: Number(v.oldPrice || formData.oldPrice || 0),
+          stock: Number(v.stock ?? formData.stockCount ?? 150)
+        }))
       };
       await onSave(payload);
       onClose();
     } catch (err) {
-      alert(err.message || "Failed to save product. Please check connection.");
+      alert(err.message || 'Failed to save product. Please check connection.');
     } finally {
       setIsSubmitting(false);
     }
@@ -571,21 +670,22 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {(formData.gallery || []).map((imgUrl, idx) => {
                       const isPrimary = idx === 0;
+                      const isLocalPreview = typeof imgUrl === 'string' && (imgUrl.startsWith('blob:') || imgUrl.startsWith('data:'));
                       return (
                         <div 
-                          key={idx}
+                          key={`${idx}-${typeof imgUrl === 'string' ? imgUrl.slice(0, 48) : idx}`}
                           className={`relative aspect-square rounded-xl overflow-hidden border-2 bg-white shadow-2xs group transition-all ${
                             isPrimary ? 'border-[#0E2A1B] ring-2 ring-[#D4AF37]/40' : 'border-stone-200 hover:border-stone-400'
                           }`}
                         >
                           <img
-                            src={resolveProductImage(imgUrl)}
+                            src={isLocalPreview ? imgUrl : resolveProductImage(imgUrl)}
                             alt={`Gallery ${idx + 1}`}
                             className="w-full h-full object-cover"
                           />
 
-                          {/* Top Badges */}
-                          <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 pointer-events-none">
+                          {/* Top-left badge */}
+                          <div className="absolute top-1.5 left-1.5 pointer-events-none z-10">
                             {isPrimary ? (
                               <span className="bg-[#0E2A1B] text-[#D4AF37] text-[9.5px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5">
                                 <Star className="w-2.5 h-2.5 fill-[#D4AF37]" /> Cover
@@ -595,31 +695,38 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                                 #{idx + 1}
                               </span>
                             )}
-
-                            {imgUrl.includes('cloudinary') && (
-                              <span className="bg-[#0E2A1B]/80 text-[#D4AF37] text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5 shadow-xs">
-                                <Cloud className="w-2 h-2" /> Cloud
-                              </span>
-                            )}
                           </div>
 
-                          {/* Hover Actions Bar */}
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveGalleryImage(idx);
-                                }}
-                                className="p-1 rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-xs cursor-pointer"
-                                title="Delete Photo"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                          {/* Always-visible delete icon (top-right) */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveGalleryImage(idx);
+                            }}
+                            className="absolute top-1.5 right-1.5 z-20 p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 shadow-md transition-colors cursor-pointer"
+                            title="Delete photo"
+                            aria-label="Delete photo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
 
-                            {!isPrimary && (
+                          {/* Cloud / uploading hint */}
+                          {typeof imgUrl === 'string' && imgUrl.includes('cloudinary') && (
+                            <span className="absolute bottom-1.5 left-1.5 z-10 bg-[#0E2A1B]/80 text-[#D4AF37] text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5 shadow-xs pointer-events-none">
+                              <Cloud className="w-2 h-2" /> Cloud
+                            </span>
+                          )}
+                          {isLocalPreview && isUploadingImage && (
+                            <span className="absolute inset-0 z-10 bg-black/35 flex flex-col items-center justify-center gap-1 pointer-events-none">
+                              <Loader2 className="w-5 h-5 text-[#D4AF37] animate-spin" />
+                              <span className="text-[10px] font-bold text-white">Uploading...</span>
+                            </span>
+                          )}
+
+                          {/* Hover: Set as Cover */}
+                          {!isPrimary && (
+                            <div className="absolute inset-x-0 bottom-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -631,8 +738,8 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                                 <Star className="w-2.5 h-2.5" />
                                 <span>Set as Cover</span>
                               </button>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -864,13 +971,18 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
           <button
             type="submit"
             form="productForm"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isUploadingImage}
             className="px-6 py-2.5 rounded-lg bg-[#0E2A1B] text-white hover:bg-[#1B3B29] text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md hover:scale-102 transition-all disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 text-[#D4AF37] animate-spin" />
                 <span>Saving Product...</span>
+              </>
+            ) : isUploadingImage ? (
+              <>
+                <Loader2 className="w-4 h-4 text-[#D4AF37] animate-spin" />
+                <span>Waiting for Upload...</span>
               </>
             ) : (
               <>

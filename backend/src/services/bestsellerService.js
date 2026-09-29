@@ -7,6 +7,58 @@ import { HTTP_STATUS } from '../constants/status.js';
 
 class BestsellerService {
   /**
+   * Card-ready product payload for homepage (no huge galleries / base64 / long text).
+   */
+  _toPublicCardProduct(prod, meta = {}) {
+    const raw = prod?.toJSON ? prod.toJSON() : (prod || {});
+    const productId = String(raw._id || raw.id || meta.productId || '');
+
+    const pickUrl = (val) => {
+      if (typeof val !== 'string') return '';
+      const trimmed = val.trim();
+      if (!trimmed || trimmed.startsWith('data:')) return '';
+      return trimmed;
+    };
+
+    let image = pickUrl(raw.image);
+    if (!image && Array.isArray(raw.gallery)) {
+      image = raw.gallery.map(pickUrl).find(Boolean) || '';
+    }
+
+    const gallery = Array.isArray(raw.gallery)
+      ? raw.gallery.map(pickUrl).filter(Boolean).slice(0, 1)
+      : (image ? [image] : []);
+
+    if (!image && gallery[0]) image = gallery[0];
+
+    return {
+      _id: productId,
+      id: productId,
+      name: raw.name || '',
+      slug: raw.slug || '',
+      subtitle: raw.subtitle || '',
+      tagline: raw.tagline || '',
+      category: raw.category || '',
+      flavor: raw.flavor || '',
+      price: raw.price,
+      oldPrice: raw.oldPrice,
+      discountPercent: raw.discountPercent || 0,
+      rating: raw.rating,
+      reviewsCount: raw.reviewsCount || 0,
+      weight: raw.weight || '150g',
+      weightOptions: Array.isArray(raw.weightOptions) ? raw.weightOptions : [],
+      inStock: raw.inStock !== false,
+      badge: raw.badge || '',
+      badgeType: raw.badgeType || '',
+      isBestseller: true,
+      image,
+      gallery,
+      bestsellerId: meta.bestsellerId,
+      displayOrder: meta.displayOrder
+    };
+  }
+
+  /**
    * Get singleton Bestseller section configuration
    */
   async getSectionConfig() {
@@ -52,12 +104,10 @@ class BestsellerService {
       const fallbackProducts = INITIAL_PRODUCTS_SEED
         .filter(p => p.isBestseller !== false)
         .slice(0, 10)
-        .map((p, idx) => ({
-          ...p,
-          id: p._id || p.id || `seed-bs-${idx + 1}`,
-          _id: p._id || p.id || `seed-bs-${idx + 1}`,
+        .map((p, idx) => this._toPublicCardProduct(p, {
           bestsellerId: `seed-bs-${idx + 1}`,
-          displayOrder: idx + 1
+          displayOrder: idx + 1,
+          productId: p._id || p.id || `seed-bs-${idx + 1}`
         }));
       return {
         isEnabled: config.isEnabled !== false,
@@ -80,24 +130,31 @@ class BestsellerService {
       };
     }
 
+    const CARD_FIELDS =
+      'name slug subtitle tagline category flavor price oldPrice discountPercent rating reviewsCount weight weightOptions inStock badge badgeType isBestseller image gallery status';
+
     const items = await Bestseller.find({ isActive: true })
       .sort({ displayOrder: 1, createdAt: -1 })
-      .populate('product');
+      .populate({
+        path: 'product',
+        select: CARD_FIELDS
+      })
+      .lean();
 
-    // Filter out invalid or inactive products
+    // Accept ACTIVE products, and also in-stock items missing status (legacy docs)
     const validProducts = items
-      .filter((item) => item.product && item.product.status === 'ACTIVE')
-      .map((item) => {
-        const prod = item.product.toJSON ? item.product.toJSON() : item.product;
-        const productId = (prod._id || item.product._id || item.product).toString();
-        return {
-          ...prod,
-          id: productId,
-          _id: productId,
-          bestsellerId: item._id?.toString(),
-          displayOrder: item.displayOrder
-        };
-      });
+      .filter((item) => {
+        const p = item.product;
+        if (!p) return false;
+        if (p.status === 'ARCHIVED') return false;
+        if (p.status === 'INACTIVE' && p.inStock === false) return false;
+        return p.status === 'ACTIVE' || p.inStock !== false || !p.status;
+      })
+      .map((item) => this._toPublicCardProduct(item.product, {
+        bestsellerId: item._id?.toString(),
+        displayOrder: item.displayOrder,
+        productId: item.product._id?.toString()
+      }));
 
     return {
       isEnabled: true,

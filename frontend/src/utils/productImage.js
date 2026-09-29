@@ -139,3 +139,35 @@ export function resolveProductImage(productOrUrl) {
   // 7. Default fallback
   return periPeriImg;
 }
+
+/**
+ * Rewrite Cloudinary delivery URLs for fast card/thumbnail loading.
+ * Inserts f_auto,q_auto,w_* transforms so browsers download a small JPEG/WebP
+ * instead of the original multi‑MB upload.
+ */
+export function optimizeCloudinaryUrl(url, { width = 480, height, crop = 'fill' } = {}) {
+  if (!url || typeof url !== 'string') return url;
+  if (!url.includes('res.cloudinary.com') || !url.includes('/upload/')) return url;
+  // Already transformed
+  if (/\/upload\/(?:[^/]+,)*?(?:w_|c_|f_auto|q_auto)/.test(url)) return url;
+
+  const transforms = [`f_auto`, `q_auto`, `w_${Math.max(80, Math.round(width))}`];
+  if (height) {
+    transforms.push(`h_${Math.max(80, Math.round(height))}`, `c_${crop}`);
+  } else {
+    transforms.push(`c_limit`);
+  }
+  return url.replace('/upload/', `/upload/${transforms.join(',')}/`);
+}
+
+/**
+ * Resolve + optimize product image for list/card UI (homepage, shop, bestsellers).
+ */
+export function resolveOptimizedProductImage(productOrUrl, options = {}) {
+  const src = resolveProductImage(productOrUrl);
+  // Skip data URLs / local vite assets
+  if (typeof src !== 'string' || src.startsWith('data:') || src.startsWith('blob:') || src.startsWith('/')) {
+    return src;
+  }
+  return optimizeCloudinaryUrl(src, options);
+}

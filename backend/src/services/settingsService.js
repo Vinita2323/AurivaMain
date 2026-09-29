@@ -8,19 +8,19 @@ export const DEFAULT_SETTINGS = {
   standardDeliveryFee: 40,
   freeDeliveryThreshold: 499,
   lowStockThreshold: 30,
-  warehouseName: 'AURIVÁ Central Fulfillment Hub',
-  warehouseAddress: 'Plot 14, Sanwer Road Industrial Area',
-  warehouseCity: 'Indore',
-  warehouseState: 'Madhya Pradesh',
-  warehousePincode: '452015',
-  warehousePhone: '+91 9876543210',
-  hubAddress: 'AURIVÁ Central Fulfillment Hub, Plot 14, Sanwer Road Industrial Area, Indore, MP - 452015',
+  warehouseName: 'AURIVÁ Warehouse — Sonipat',
+  warehouseAddress: 'House no. 1213, Sector 15',
+  warehouseCity: 'Sonipat',
+  warehouseState: 'Haryana',
+  warehousePincode: '131001',
+  warehousePhone: '+91 98765 43210',
+  hubAddress: 'House no. 1213, Sector 15, Sonipat, Haryana - 131001',
   storeName: 'AURIVÁ Foods Private Limited',
   storeEmail: 'care@aurivafoods.com',
   supportEmail: 'care@aurivafoods.com',
-  storePhone: '+91 9876543210',
-  supportPhone: '+91 9876543210',
-  storeAddress: 'AURIVÁ Central Fulfillment Hub, Plot 14, Sanwer Road Industrial Area, Indore, MP - 452015',
+  storePhone: '+91 98765 43210',
+  supportPhone: '+91 98765 43210',
+  storeAddress: 'House no. 1213, Sector 15, Sonipat, Haryana - 131001',
   currency: '₹',
   timezone: 'Asia/Kolkata'
 };
@@ -64,6 +64,26 @@ class SettingsService {
         configKey: 'default_store_settings'
       });
       settings = created.toObject();
+    } else {
+      // Migrate legacy Indore hub → Sonipat pickup address (Shiprocket warehouse)
+      const isLegacyIndore =
+        settings.warehousePincode === '452015' ||
+        String(settings.warehouseCity || '').toLowerCase().includes('indore');
+      if (isLegacyIndore) {
+        const migrated = {
+          warehouseName: DEFAULT_SETTINGS.warehouseName,
+          warehouseAddress: DEFAULT_SETTINGS.warehouseAddress,
+          warehouseCity: DEFAULT_SETTINGS.warehouseCity,
+          warehouseState: DEFAULT_SETTINGS.warehouseState,
+          warehousePincode: DEFAULT_SETTINGS.warehousePincode,
+          warehousePhone: DEFAULT_SETTINGS.warehousePhone,
+          hubAddress: DEFAULT_SETTINGS.hubAddress,
+          storeAddress: DEFAULT_SETTINGS.storeAddress
+        };
+        await Settings.updateOne({ configKey: 'default_store_settings' }, { $set: migrated });
+        settings = { ...settings, ...migrated };
+        console.log('[Settings] Migrated warehouse pickup address to Sonipat, Haryana 131001');
+      }
     }
 
     this._cachedSettings = settings;

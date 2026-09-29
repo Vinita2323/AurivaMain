@@ -11,7 +11,18 @@ import { resolveProductImage } from '../../../utils/productImage';
 
 export default function AdminProducts() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { products, categories, refreshCategories, addProduct, updateProduct, deleteProduct, toggleProductStatus, refreshProducts } = useAdmin();
+  const { 
+    products, 
+    productsLoading, 
+    productsError, 
+    categories, 
+    refreshCategories, 
+    addProduct, 
+    updateProduct, 
+    deleteProduct, 
+    toggleProductStatus, 
+    refreshProducts 
+  } = useAdmin();
 
   useEffect(() => {
     if (refreshCategories) {
@@ -35,12 +46,12 @@ export default function AdminProducts() {
   };
 
   // Compute counts
-  const activeCount = products.filter(p => p.inStock !== false).length;
-  const inactiveCount = products.length - activeCount;
+  const activeCount = (products || []).filter(p => p.inStock !== false).length;
+  const inactiveCount = (products || []).length - activeCount;
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
+    return (products || []).filter(p => {
       if (activeStatusFilter === 'active' && p.inStock === false) return false;
       if (activeStatusFilter === 'inactive' && p.inStock !== false) return false;
       if (selectedCategory !== 'all' && p.category !== selectedCategory) return false;
@@ -60,22 +71,23 @@ export default function AdminProducts() {
   const handleSaveProduct = async (data) => {
     try {
       if (editingProduct) {
-        await updateProduct(editingProduct.id || editingProduct._id, data);
+        await updateProduct(editingProduct._id || editingProduct.id, data);
         showFeedback('success', `"${data.name || editingProduct.name}" updated successfully! Changes are live on the store.`);
       } else {
         await addProduct(data);
         showFeedback('success', `"${data.name}" added to catalog! ${data.isBestseller ? 'Automatically featured in Bestsellers.' : 'Live on user app.'}`);
       }
+      setIsAddModalOpen(false);
+      setEditingProduct(null);
     } catch (err) {
       showFeedback('error', err.message || 'Failed to save product.');
     }
-    setEditingProduct(null);
   };
 
   const handleToggle = async (p) => {
     const nextStatus = p.inStock === false;
     try {
-      await toggleProductStatus(p.id || p._id);
+      await toggleProductStatus(p._id || p.id);
       showFeedback('success', `"${p.name}" is now ${nextStatus ? 'In Stock (Active)' : 'Out of Stock (Inactive)'}.`);
     } catch (err) {
       showFeedback('error', 'Failed to toggle product status.');
@@ -85,7 +97,7 @@ export default function AdminProducts() {
   const handleDelete = async (p) => {
     if (confirm(`Are you sure you want to delete "${p.name}"? This will remove it from the store catalog.`)) {
       try {
-        await deleteProduct(p.id || p._id);
+        await deleteProduct(p._id || p.id);
         showFeedback('success', `"${p.name}" was removed from the catalog.`);
       } catch (err) {
         showFeedback('error', 'Failed to delete product.');
@@ -227,94 +239,145 @@ export default function AdminProducts() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 font-medium text-xs sm:text-sm">
-                  {filteredProducts.map((p) => {
-                    const isActive = p.inStock !== false;
-                    const displayImage = resolveProductImage(p);
-                    return (
-                      <tr key={p.id || p._id} className="hover:bg-stone-50/80 transition-colors">
-                        <td className="py-3.5 px-5">
-                          <img
-                            src={displayImage}
-                            alt=""
-                            className="w-11 h-11 rounded-md object-cover border border-stone-200 bg-[#FAF7F2] p-0.5"
-                          />
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-sans font-semibold text-sm sm:text-[15px] text-[#0E2A1B]">{p.name}</span>
-                            {p.isBestseller && (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded">
-                                <Flame className="w-2.5 h-2.5 text-[#C89038]" />
-                                Bestseller
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                            <span className="text-xs text-stone-400 font-normal">{p.flavor || p.subtitle || 'Natural Seasoning'} • {p.weight || '150g'}</span>
-                            {p.gallery && p.gallery.length > 1 && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
-                                <ImageIcon className="w-2.5 h-2.5 text-emerald-600" />
-                                {p.gallery.length} photos
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-5 capitalize text-stone-700 font-medium text-xs sm:text-[13.5px]">
-                          {(categories || []).find(c => (c.slug === p.category || (c.id || c._id) === p.category))?.name || p.category?.replace(/-/g, ' ')}
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <span className="font-bold text-sm sm:text-base text-stone-900">₹{p.price}</span>
-                          {p.oldPrice && (
-                            <span className="text-xs text-stone-400 line-through ml-1.5">₹{p.oldPrice}</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <span className={`font-semibold text-xs sm:text-sm ${p.stockCount < 50 ? 'text-amber-700' : 'text-stone-700'}`}>
-                            {p.stockCount ?? 150} units
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-5">
+                  {productsLoading && (!products || products.length === 0) ? (
+                    <tr>
+                      <td colSpan="7" className="py-16 px-5 text-center text-stone-500">
+                        <div className="flex flex-col items-center justify-center gap-2.5">
+                          <RefreshCw className="w-7 h-7 text-[#0E2A1B] animate-spin" />
+                          <span className="font-semibold text-xs sm:text-sm text-stone-700">Loading products from live database...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : productsError && (!products || products.length === 0) ? (
+                    <tr>
+                      <td colSpan="7" className="py-14 px-5 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                          <AlertCircle className="w-8 h-8 text-rose-500 shrink-0" />
+                          <span className="font-bold text-sm text-rose-900">Database Connection Error</span>
+                          <span className="text-xs text-stone-600 font-normal">{productsError}</span>
                           <button
-                            onClick={() => handleToggle(p)}
-                            className={`px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                              isActive
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                            }`}
+                            onClick={async () => {
+                              if (refreshProducts) {
+                                try {
+                                  await refreshProducts();
+                                  showFeedback('success', 'Catalog refreshed from live database.');
+                                } catch (e) {
+                                  showFeedback('error', e.message || 'Database connection failed.');
+                                }
+                              }
+                            }}
+                            className="mt-2.5 px-4 py-2 rounded-md bg-[#0E2A1B] text-[#D4AF37] font-bold text-xs uppercase tracking-wider hover:opacity-95 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                           >
-                            {isActive ? 'Active' : 'Inactive'}
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Retry Database Connection</span>
                           </button>
-                        </td>
-                        <td className="py-3.5 px-5 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <a
-                              href={`/product/${p.id || p._id || p.slug}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1.5 text-stone-500 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
-                              title="View product in storefront"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="py-16 px-5 text-center text-stone-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <AlertCircle className="w-8 h-8 text-stone-300" />
+                          <span className="font-semibold text-sm text-stone-700">No products found</span>
+                          <span className="text-xs text-stone-400 max-w-sm">
+                            {searchQuery || selectedCategory !== 'all' || activeStatusFilter !== 'all'
+                              ? 'No products match your active search or category filters.'
+                              : 'No products in database catalog. Click "Add Product" above to create your first item.'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProducts.map((p) => {
+                      const isActive = p.inStock !== false;
+                      const displayImage = resolveProductImage(p);
+                      return (
+                        <tr key={p.id || p._id} className="hover:bg-stone-50/80 transition-colors">
+                          <td className="py-3.5 px-5">
+                            <img
+                              src={displayImage}
+                              alt=""
+                              className="w-11 h-11 rounded-md object-cover border border-stone-200 bg-[#FAF7F2] p-0.5"
+                            />
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-sans font-semibold text-sm sm:text-[15px] text-[#0E2A1B]">{p.name}</span>
+                              {p.isBestseller && (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded">
+                                  <Flame className="w-2.5 h-2.5 text-[#C89038]" />
+                                  Bestseller
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                              <span className="text-xs text-stone-400 font-normal">{p.flavor || p.subtitle || 'Natural Seasoning'} • {p.weight || '150g'}</span>
+                              {p.gallery && p.gallery.length > 1 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                  <ImageIcon className="w-2.5 h-2.5 text-emerald-600" />
+                                  {p.gallery.length} photos
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-5 capitalize text-stone-700 font-medium text-xs sm:text-[13.5px]">
+                            {(categories || []).find(c => (c.slug === p.category || (c.id || c._id) === p.category))?.name || p.category?.replace(/-/g, ' ')}
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className="font-bold text-sm sm:text-base text-stone-900">₹{p.price}</span>
+                            {p.oldPrice && (
+                              <span className="text-xs text-stone-400 line-through ml-1.5">₹{p.oldPrice}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className={`font-semibold text-xs sm:text-sm ${p.stockCount < 50 ? 'text-amber-700' : 'text-stone-700'}`}>
+                              {p.stockCount ?? 150} units
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5">
                             <button
-                              onClick={() => handleEdit(p)}
-                              className="p-1.5 text-stone-600 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
-                              title="Edit product"
+                              onClick={() => handleToggle(p)}
+                              className={`px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                isActive
+                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                  : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                              }`}
                             >
-                              <Edit2 className="w-4 h-4" />
+                              {isActive ? 'Active' : 'Inactive'}
                             </button>
-                            <button
-                              onClick={() => handleDelete(p)}
-                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                              title="Delete product"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td className="py-3.5 px-5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <a
+                                href={`/product/${p.id || p._id || p.slug}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1.5 text-stone-500 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
+                                title="View product in storefront"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                              <button
+                                onClick={() => handleEdit(p)}
+                                className="p-1.5 text-stone-600 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
+                                title="Edit product"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(p)}
+                                className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                title="Delete product"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

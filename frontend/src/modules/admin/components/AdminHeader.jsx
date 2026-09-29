@@ -1,16 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Menu, Bell } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import AdminProfileModal from './AdminProfileModal';
 import NewOrderAlertModal from './NewOrderAlertModal';
 import { adminNotificationApi, adminOrderApi } from '../../../utils/api';
 import { formatOrder } from '../../../context/AuthContext';
 
 const NEW_ORDER_LS_KEY = 'auriva_admin_last_seen_order_ts';
-const POLL_INTERVAL_MS = 15_000; // 15 seconds
+const POLL_INTERVAL_MS = 20_000; // 20 seconds
 
 export default function AdminHeader({ onMenuClick, title = "Dashboard" }) {
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   // New-order alert state
@@ -34,8 +32,9 @@ export default function AdminHeader({ onMenuClick, title = "Dashboard" }) {
     return () => { isMounted = false; clearInterval(iv); };
   }, []);
 
-  // ── New-order polling (15s) ───────────────────────────────────────────
+  // ── New-order polling (20s; skip while tab is hidden to reduce admin lag) ──
   const checkForNewOrders = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       // Fetch the most recent confirmed/new orders (page 1, limit 5, newest first)
       const res = await adminOrderApi.getAllOrders({ page: 1, limit: 5, status: 'Order Received' });
@@ -143,9 +142,9 @@ export default function AdminHeader({ onMenuClick, title = "Dashboard" }) {
             )}
           </Link>
 
-          {/* Interactive Admin Avatar & Profile Button */}
-          <button
-            onClick={() => setIsProfileModalOpen(true)}
+          {/* Admin Avatar → Profile page */}
+          <Link
+            to="/admin/profile"
             className="flex items-center gap-2.5 pl-2 sm:pl-3 border-l border-stone-200 hover:bg-stone-50 p-1.5 rounded-xl transition-all cursor-pointer group text-left"
             title="Open Admin Profile"
           >
@@ -154,17 +153,11 @@ export default function AdminHeader({ onMenuClick, title = "Dashboard" }) {
             </div>
             <div className="hidden md:block text-left">
               <p className="text-xs sm:text-[13px] font-bold text-[#0E2A1B] group-hover:text-[#D4AF37] transition-colors leading-tight">Admin Manager</p>
-              <p className="text-[11px] text-stone-400 font-medium">Head Office</p>
+              <p className="text-[11px] text-stone-400 font-medium">Sonipat Hub</p>
             </div>
-          </button>
+          </Link>
         </div>
       </header>
-
-      {/* Admin Profile Modal */}
-      <AdminProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-      />
 
       {/* New Order Alert Modal */}
       {alertOrder && (

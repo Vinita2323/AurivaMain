@@ -6,13 +6,14 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
  */
 export async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const { timeoutMs, ...fetchOptions } = options;
 
   const headers = {
-    ...(options.headers || {})
+    ...(fetchOptions.headers || {})
   };
 
   // Only set application/json if body is not FormData
-  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+  if (!(fetchOptions.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -53,10 +54,16 @@ export async function apiRequest(endpoint, options = {}) {
     }
   }
 
+  const controller = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+
   try {
     const response = await fetch(url, {
-      ...options,
-      headers
+      ...fetchOptions,
+      headers,
+      signal: controller?.signal || fetchOptions.signal
     });
 
     const data = await response.json().catch(() => null);
@@ -65,7 +72,7 @@ export async function apiRequest(endpoint, options = {}) {
       // Auto-retry once on 401 Unauthorized for admin endpoints
       const isAdminRetry = endpoint.includes('/admin') || 
         (typeof window !== 'undefined' && window.location.pathname.includes('/admin'));
-      if (response.status === 401 && isAdminRetry && !options._retried && !endpoint.includes('/auth/admin/login')) {
+      if (response.status === 401 && isAdminRetry && !fetchOptions._retried && !endpoint.includes('/auth/admin/login')) {
         try {
           const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
             method: 'POST',
@@ -78,10 +85,11 @@ export async function apiRequest(endpoint, options = {}) {
             localStorage.setItem('auriva_admin_token', freshToken);
             localStorage.setItem('auriva_admin_auth', 'true');
             return apiRequest(endpoint, {
-              ...options,
+              ...fetchOptions,
+              timeoutMs,
               _retried: true,
               headers: {
-                ...options.headers,
+                ...fetchOptions.headers,
                 Authorization: `Bearer ${freshToken}`
               }
             });
@@ -92,6 +100,9 @@ export async function apiRequest(endpoint, options = {}) {
       }
 
       let errorMsg = data?.message || data?.error?.message;
+      if (Array.isArray(data?.error) && data.error.length > 0) {
+        errorMsg = data.error.map((e) => (typeof e === 'object' ? (e.message || e.msg || JSON.stringify(e)) : String(e))).join(' • ');
+      }
       if (data?.data?.errors && Array.isArray(data.data.errors) && data.data.errors.length > 0) {
         const errorStrings = data.data.errors.map(e => (typeof e === 'object' ? (e.message || e.msg || JSON.stringify(e)) : String(e)));
         errorMsg = errorStrings.join(' • ');
@@ -107,6 +118,11 @@ export async function apiRequest(endpoint, options = {}) {
 
     return data;
   } catch (err) {
+    if (err?.name === 'AbortError') {
+      const timeoutErr = new Error('Request timed out. Please try again with a smaller image or check your connection.');
+      timeoutErr.isTimeout = true;
+      throw timeoutErr;
+    }
     // If backend is unreachable or network error, wrap cleanly
     if (!err.status) {
       const netErr = new Error('Could not connect to backend server. Please check your network connection.');
@@ -114,6 +130,8 @@ export async function apiRequest(endpoint, options = {}) {
       throw netErr;
     }
     throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -219,18 +237,21 @@ export const bestsellerApi = {
 // Cloudinary Media Upload API
 export const uploadApi = {
   uploadImage: async (fileOrBase64, folder = 'auriva_products') => {
+    const UPLOAD_TIMEOUT_MS = 35_000;
     if (fileOrBase64 instanceof File || fileOrBase64 instanceof Blob) {
       const formData = new FormData();
       formData.append('image', fileOrBase64);
       formData.append('folder', folder);
       return apiRequest('/admin/upload', {
         method: 'POST',
-        body: formData
+        body: formData,
+        timeoutMs: UPLOAD_TIMEOUT_MS
       });
     }
     return apiRequest('/admin/upload', {
       method: 'POST',
-      body: JSON.stringify({ image: fileOrBase64, folder })
+      body: JSON.stringify({ image: fileOrBase64, folder }),
+      timeoutMs: UPLOAD_TIMEOUT_MS
     });
   },
   deleteImage: (publicId) => apiRequest(`/admin/upload/${publicId}`, {
@@ -490,6 +511,37 @@ export const adminOrderApi = {
   cancelOrder: (id, reason = '') => apiRequest(`/admin/orders/${id}/cancel`, {
     method: 'PATCH',
     body: JSON.stringify({ reason })
+  }),
+  // Shiprocket (admin-only; credentials stay on backend)
+  shiprocketCreate: (id, body = {}) => apiRequest(`/admin/orders/${id}/shiprocket/create`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
+  shiprocketFulfill: (id, body = {}) => apiRequest(`/admin/orders/${id}/shiprocket/fulfill`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
+  shiprocketServiceability: (id) => apiRequest(`/admin/orders/${id}/shiprocket/serviceability`, {
+    method: 'GET'
+  }),
+  shiprocketAwb: (id, body = {}) => apiRequest(`/admin/orders/${id}/shiprocket/awb`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
+  shiprocketPickup: (id) => apiRequest(`/admin/orders/${id}/shiprocket/pickup`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  }),
+  shiprocketLabel: (id) => apiRequest(`/admin/orders/${id}/shiprocket/label`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  }),
+  shiprocketTrack: (id) => apiRequest(`/admin/orders/${id}/shiprocket/track`, {
+    method: 'GET'
+  }),
+  shiprocketCancel: (id) => apiRequest(`/admin/orders/${id}/shiprocket/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({})
   }),
   getInvoiceBlob: (id) => {
     const url = `${API_BASE}/admin/orders/${id}/invoice`;

@@ -467,6 +467,11 @@ export const placeOrder = async (userId, payload) => {
       await PaymentService.recordCodPayment(savedOrder, userId).catch(err => {
         console.warn('Could not record COD payment in ledger:', err.message);
       });
+
+      // Auto-create Shiprocket shipment for COD after order is confirmed (non-blocking)
+      import('./shiprocketFulfillmentService.js')
+        .then(({ default: sr }) => sr.tryAutoCreate(savedOrder._id))
+        .catch((e) => console.warn('[Shiprocket] COD auto-create note:', e.message));
     }
 
     // 9. Clear purchased items from Cart in DB
@@ -577,7 +582,7 @@ export const normalizeStatus = (statusStr) => {
 /**
  * Helper to generate or update timeline entries
  */
-const updateOrderTimeline = (order, newStatus, updatedBy = 'System', note = '') => {
+export const updateOrderTimeline = (order, newStatus, updatedBy = 'System', note = '') => {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -1088,6 +1093,7 @@ export default {
   dispatchOrderAdmin,
   cancelOrder,
   ALLOWED_TRANSITIONS,
-  normalizeStatus
+  normalizeStatus,
+  updateOrderTimeline
 };
 

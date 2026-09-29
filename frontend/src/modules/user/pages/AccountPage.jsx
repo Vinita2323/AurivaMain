@@ -683,6 +683,12 @@ export default function AccountPage() {
                             <span className="text-xs text-stone-500">• {ord.date}</span>
                           </div>
                           <p className="text-[11px] text-stone-500 mt-0.5">Payment: {ord.paymentMethod} • Total: <strong className="text-stone-900">₹{ord.total}</strong></p>
+                          {(ord.awbNumber || ord.shiprocket?.awbCode || ord.courierName || ord.shiprocket?.courierName) && (
+                            <p className="text-[11px] text-stone-500 mt-0.5">
+                              {ord.shiprocket?.courierName || ord.courierName ? `Courier: ${ord.shiprocket?.courierName || ord.courierName}` : ''}
+                              {(ord.awbNumber || ord.shiprocket?.awbCode) ? ` • AWB: ${ord.shiprocket?.awbCode || ord.awbNumber}` : ''}
+                            </p>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2 sm:gap-3">

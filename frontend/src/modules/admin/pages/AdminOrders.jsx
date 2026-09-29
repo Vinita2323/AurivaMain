@@ -35,6 +35,8 @@ export default function AdminOrders() {
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState(null);
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState(null);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
+  const [shiprocketBusy, setShiprocketBusy] = useState('');
+  const [shiprocketMsg, setShiprocketMsg] = useState('');
 
   // Lock background scrolling when either modal is open
   useEffect(() => {
@@ -119,6 +121,52 @@ export default function AdminOrders() {
     }, 250);
     return () => clearTimeout(timer);
   }, [fetchOrders]);
+
+  const refreshDetailOrder = async (orderId) => {
+    try {
+      const res = await adminOrderApi.getOrderById(orderId);
+      const raw = res?.data?.order || res?.data;
+      if (raw) {
+        const formatted = formatOrder(raw);
+        setSelectedOrderForDetail(formatted);
+        setOrdersList((prev) => prev.map((o) => (o.id === formatted.id || o._id === formatted._id ? { ...o, ...formatted } : o)));
+      }
+    } catch (_) { /* keep current detail */ }
+  };
+
+  const handleShiprocketAction = async (action) => {
+    if (!selectedOrderForDetail) return;
+    const orderId = selectedOrderForDetail._id || selectedOrderForDetail.id;
+    setShiprocketBusy(action);
+    setShiprocketMsg('');
+    try {
+      let res;
+      if (action === 'create') res = await adminOrderApi.shiprocketCreate(orderId);
+      else if (action === 'fulfill') res = await adminOrderApi.shiprocketFulfill(orderId);
+      else if (action === 'serviceability') res = await adminOrderApi.shiprocketServiceability(orderId);
+      else if (action === 'awb') res = await adminOrderApi.shiprocketAwb(orderId);
+      else if (action === 'pickup') res = await adminOrderApi.shiprocketPickup(orderId);
+      else if (action === 'label') res = await adminOrderApi.shiprocketLabel(orderId);
+      else if (action === 'track') res = await adminOrderApi.shiprocketTrack(orderId);
+      else if (action === 'cancel') res = await adminOrderApi.shiprocketCancel(orderId);
+
+      const msg = res?.message || 'Shiprocket action completed.';
+      if (action === 'serviceability') {
+        const n = res?.data?.couriers?.length ?? 0;
+        setShiprocketMsg(`${msg} ${n} courier(s) available.`);
+      } else if (action === 'track') {
+        setShiprocketMsg(`${msg} Status: ${res?.data?.status || '—'}`);
+      } else {
+        setShiprocketMsg(msg);
+      }
+      await refreshDetailOrder(orderId);
+      fetchOrders();
+    } catch (err) {
+      setShiprocketMsg(err.message || 'Shiprocket action failed.');
+    } finally {
+      setShiprocketBusy('');
+    }
+  };
 
   // Update order status and dispatch logistics
   const handleUpdateOrderStatus = async (orderId, newStatus, extraData = {}) => {
@@ -514,6 +562,85 @@ export default function AdminOrders() {
                   {selectedOrderForDetail.deliveryNotes && <p className="text-stone-500 text-[11px] italic mt-1">Notes: {selectedOrderForDetail.deliveryNotes}</p>}
                 </div>
               )}
+
+              {/* Shiprocket Shipment (existing design language — no layout redesign) */}
+              {(() => {
+                const sr = selectedOrderForDetail.shiprocket || {};
+                const hasShipment = Boolean(sr.orderId || sr.shipmentId);
+                const hasAwb = Boolean(sr.awbCode || selectedOrderForDetail.awbNumber);
+                const isTerminal = ['Cancelled', 'Delivered'].includes(selectedOrderForDetail.status);
+                const btn = (key, label, enabled) => (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={!enabled || Boolean(shiprocketBusy)}
+                    onClick={() => handleShiprocketAction(key)}
+                    className="px-2.5 py-1.5 rounded-md border border-stone-300 bg-white text-[10px] font-bold uppercase tracking-wider text-stone-700 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {shiprocketBusy === key ? '...' : label}
+                  </button>
+                );
+                return (
+                  <div className="p-3.5 rounded-xl bg-white border border-[#E8E2D5] space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-stone-400 block text-[10px] font-bold uppercase">Shiprocket Shipment</span>
+                      <span className="text-[10px] font-semibold text-stone-500">
+                        {sr.status || (hasShipment ? 'Created' : 'Not created')}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-stone-700">
+                      <span>SR Order ID: <strong className="text-stone-900 font-mono">{sr.orderId || '—'}</strong></span>
+                      <span>Shipment ID: <strong className="text-stone-900 font-mono">{sr.shipmentId || '—'}</strong></span>
+                      <span>AWB: <strong className="text-stone-900 font-mono">{sr.awbCode || selectedOrderForDetail.awbNumber || '—'}</strong></span>
+                      <span>Courier: <strong className="text-stone-900">{sr.courierName || selectedOrderForDetail.courierName || '—'}</strong></span>
+                      <span>Pickup: <strong className="text-stone-900">{sr.pickupScheduled ? 'Scheduled' : 'Not scheduled'}</strong></span>
+                      <span>
+                        Tracking:{' '}
+                        {sr.trackingUrl || sr.awbCode ? (
+                          <a
+                            href={sr.trackingUrl || `https://shiprocket.co/tracking/${sr.awbCode || selectedOrderForDetail.awbNumber}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#0E2A1B] font-semibold underline"
+                          >
+                            Open
+                          </a>
+                        ) : (
+                          <strong className="text-stone-900">—</strong>
+                        )}
+                      </span>
+                      {sr.labelUrl && (
+                        <span className="sm:col-span-2">
+                          Label:{' '}
+                          <a href={sr.labelUrl} target="_blank" rel="noreferrer" className="text-[#0E2A1B] font-semibold underline">
+                            Download
+                          </a>
+                        </span>
+                      )}
+                      {sr.errorMessage && (
+                        <span className="sm:col-span-2 text-rose-700">{sr.errorMessage}</span>
+                      )}
+                    </div>
+                    {!isTerminal && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {btn('create', 'Create Shipment', !hasShipment)}
+                        {btn('serviceability', 'Check Couriers', true)}
+                        {btn('awb', 'Generate AWB', hasShipment && !hasAwb)}
+                        {btn('pickup', 'Schedule Pickup', hasAwb && !sr.pickupScheduled)}
+                        {btn('label', 'Generate Label', hasAwb)}
+                        {btn('track', 'Track', hasAwb)}
+                        {btn('fulfill', 'Full Fulfill', !hasAwb)}
+                        {btn('cancel', 'Cancel Shipment', hasShipment && !isTerminal)}
+                      </div>
+                    )}
+                    {shiprocketMsg && (
+                      <p className="text-[11px] text-stone-600 bg-stone-50 border border-stone-200 rounded-md px-2 py-1.5">
+                        {shiprocketMsg}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Items List */}
               <div className="space-y-2.5">

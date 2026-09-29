@@ -34,6 +34,12 @@ import adminNotificationRoutes from './routes/adminNotificationRoutes.js';
 import recipeRoutes from './routes/recipeRoutes.js';
 import adminRecipeRoutes from './routes/adminRecipeRoutes.js';
 import fcmTokenRoutes from './routes/fcmTokenRoutes.js';
+import adminShiprocketRoutes from './routes/adminShiprocketRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
+import shiprocketController from './controllers/shiprocketController.js';
+import { authMiddleware } from './middleware/authMiddleware.js';
+import { requireAdmin } from './middleware/roleMiddleware.js';
+import { validateOrderId } from './validations/orderValidation.js';
 import { notFoundHandler, errorMiddleware } from './middleware/errorMiddleware.js';
 import { sendSuccess } from './utils/response.js';
 
@@ -137,6 +143,25 @@ app.use('/api/v1/orders', orderRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/v1/admin/orders', adminOrderRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
+
+// Convenience Shiprocket actions nested under admin orders (same controller)
+const mountOrderShiprocket = (basePath) => {
+  app.post(`${basePath}/:id/shiprocket/create`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.createShipment);
+  app.post(`${basePath}/:id/shiprocket/fulfill`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.fulfill);
+  app.get(`${basePath}/:id/shiprocket/serviceability`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.serviceability);
+  app.post(`${basePath}/:id/shiprocket/awb`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.assignAwb);
+  app.post(`${basePath}/:id/shiprocket/pickup`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.schedulePickup);
+  app.post(`${basePath}/:id/shiprocket/label`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.generateLabel);
+  app.get(`${basePath}/:id/shiprocket/track`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.track);
+  app.post(`${basePath}/:id/shiprocket/cancel`, authMiddleware, requireAdmin, validateOrderId, shiprocketController.cancelShipment);
+};
+mountOrderShiprocket('/api/v1/admin/orders');
+mountOrderShiprocket('/api/admin/orders');
+
+app.use('/api/v1/admin/shiprocket', adminShiprocketRoutes);
+app.use('/api/admin/shiprocket', adminShiprocketRoutes);
+app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/webhooks', webhookRoutes);
 app.use('/api/v1/checkout', checkoutRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/v1/settings', settingsRoutes);

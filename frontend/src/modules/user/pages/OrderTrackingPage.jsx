@@ -237,6 +237,37 @@ export default function OrderTrackingPage() {
                   </p>
                   <p className="text-[11px] sm:text-xs text-stone-600">{order.address?.street || '502 Lotus Orchid, Vijay Nagar'}, {order.address?.city || 'Indore'} - {order.address?.pincode || '452010'}</p>
                 </div>
+
+                {/* Shipment tracking (from backend / Shiprocket — no direct Shiprocket calls) */}
+                {(order.awbNumber || order.courierName || order.shiprocket?.awbCode) && (
+                  <div className="space-y-1 text-xs text-stone-600 bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 mt-3">
+                    <p className="font-bold text-[#0E2A1B] text-[10px] uppercase tracking-wider mb-1">Shipment Tracking</p>
+                    <p>Status: <strong className="text-stone-900">{order.status}</strong>
+                      {order.shiprocket?.status ? ` · ${order.shiprocket.status}` : ''}
+                    </p>
+                    {(order.courierName || order.shiprocket?.courierName) && (
+                      <p>Courier: <strong className="text-stone-900">{order.shiprocket?.courierName || order.courierName}</strong></p>
+                    )}
+                    {(order.awbNumber || order.shiprocket?.awbCode) && (
+                      <p>AWB: <strong className="text-stone-900 font-mono">{order.shiprocket?.awbCode || order.awbNumber}</strong></p>
+                    )}
+                    {(order.shiprocket?.trackingUrl || order.awbNumber || order.shiprocket?.awbCode) && (
+                      <a
+                        href={order.shiprocket?.trackingUrl || `https://shiprocket.co/tracking/${order.shiprocket?.awbCode || order.awbNumber}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex text-[#0E2A1B] font-bold underline mt-1"
+                      >
+                        Track package
+                      </a>
+                    )}
+                    {order.estimatedDelivery && (
+                      <p className="text-stone-500 mt-1">
+                        Est. delivery: {new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Contact Actions */}

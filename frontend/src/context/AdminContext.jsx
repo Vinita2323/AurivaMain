@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { PRODUCTS } from '../data/products';
 import { INITIAL_COUPONS } from '../data/coupons';
 import { CATEGORIES } from '../data/categories';
 import { REVIEWS } from '../data/reviews';
@@ -189,28 +188,19 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // 1. Products State
-  const [products, setProducts] = useState(() => {
+  // 1. Products State - Database is Single Source of Truth
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState(null);
+
+  // Clear any legacy localStorage product cache
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('auriva_admin_products');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const isPouch = (p) => {
-            const name = (p.name || '').toLowerCase();
-            const img = typeof p.image === 'string' ? p.image : '';
-            return name.includes('peri') || name.includes('cream') || name.includes('tomato') || 
-                   name.includes('salted') || name.includes('masala') || name.includes('pudina') ||
-                   img.includes('PeriPeri') || img.includes('CreamOnion') || img.includes('Tomato') || img.includes('Types');
-          };
-          return [...parsed.filter(isPouch), ...parsed.filter(p => !isPouch(p))];
-        }
-      }
+      localStorage.removeItem('auriva_admin_products');
     } catch (e) {
-      console.error(e);
+      console.warn('[AdminContext] LocalStorage cleanup error:', e.message);
     }
-    return PRODUCTS;
-  });
+  }, []);
 
   // 2. Categories State
   const [categories, setCategories] = useState(() => {
@@ -260,7 +250,10 @@ export function AdminProvider({ children }) {
   const [reviews, setReviews] = useState(() => {
     try {
       const saved = localStorage.getItem('auriva_admin_reviews');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -289,11 +282,7 @@ export function AdminProvider({ children }) {
     return INITIAL_PROMOTIONS;
   });
 
-  // LocalStorage sync effects
-  useEffect(() => {
-    try { localStorage.setItem('auriva_admin_products', JSON.stringify(products)); } catch (e) { console.error(e); }
-  }, [products]);
-
+  // LocalStorage sync effects (Products are NOT stored in localStorage)
   useEffect(() => {
     try { localStorage.setItem('auriva_admin_categories', JSON.stringify(categories)); } catch (e) { console.error(e); }
   }, [categories]);
@@ -359,29 +348,31 @@ export function AdminProvider({ children }) {
       .catch(err => console.warn('[AdminContext] Recipes backend load note:', err.message));
   }, []);
 
-  // Sync products from backend on mount with smart merging
+  // Fetch and sync products directly from MongoDB backend API (Single Source of Truth)
   const refreshProducts = async () => {
+    setProductsLoading(true);
+    setProductsError(null);
     try {
       const res = await productApi.getAllProducts();
-      if (res && res.data && res.data.products && Array.isArray(res.data.products)) {
-        const fetched = res.data.products.map(p => ({
-          ...p,
-          id: (p._id || p.id)?.toString()
-        }));
-        if (fetched.length > 0) {
-          setProducts(prev => {
-            const serverIds = new Set(fetched.map(p => String(p.id || p._id)));
-            const serverSlugs = new Set(fetched.map(p => p.slug));
-            const localOnly = (prev || []).filter(p => {
-              const pid = String(p.id || p._id || '');
-              return !serverIds.has(pid) && !serverSlugs.has(p.slug);
-            });
-            return [...localOnly, ...fetched];
-          });
-        }
-      }
+      const rawList = Array.isArray(res?.data?.products)
+        ? res.data.products
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
+      const fetched = rawList.map(p => ({
+        ...p,
+        _id: (p._id || p.id)?.toString(),
+        id: (p._id || p.id)?.toString()
+      }));
+      setProducts(fetched);
+      return fetched;
     } catch (err) {
-      console.warn('[AdminContext] Could not fetch products from backend API, using cached state:', err.message);
+      console.error('[AdminContext] Could not fetch products from backend API:', err.message);
+      setProductsError(err.message || 'Could not fetch products from server');
+      setProducts([]);
+      throw err;
+    } finally {
+      setProductsLoading(false);
     }
   };
 
@@ -462,7 +453,7 @@ export function AdminProvider({ children }) {
     try {
       const res = await adminReviewApi.getAllReviews(params);
       if (res && res.data) {
-        if (Array.isArray(res.data.reviews)) {
+        if (Array.isArray(res.data.reviews) && res.data.reviews.length > 0) {
           setReviews(res.data.reviews);
         }
         if (res.data.stats) {
@@ -484,7 +475,7 @@ export function AdminProvider({ children }) {
     refreshReviews();
   }, []);
 
-  // Product Actions
+  // Product Actions - MongoDB API backed
   const addProduct = async (productData) => {
     const slug = (productData.slug || productData.name || `product-${Date.now()}`)
       .toLowerCase()
@@ -519,125 +510,87 @@ export function AdminProvider({ children }) {
       ]
     };
 
-    const tempId = productData.id || `prod-${Date.now()}`;
-    const newProduct = { ...payload, id: tempId };
-
-    // Optimistic UI update
-    setProducts(prev => [newProduct, ...prev]);
-
-    // Persist to MongoDB backend
-    try {
-      const res = await productApi.createProduct(payload);
-      if (res && res.data && res.data.product) {
-        const saved = {
-          ...res.data.product,
-          id: (res.data.product._id || res.data.product.id).toString()
-        };
-        setProducts(prev => [saved, ...prev.filter(p => (p.id || p._id) !== tempId && (p.id || p._id) !== saved.id)]);
-        await refreshProducts();
-        return saved;
-      }
-    } catch (err) {
-      console.warn('[AdminContext] Backend product create failed, rolling back:', err.message);
-      // Rollback optimistic UI update
-      setProducts(prev => prev.filter(p => (p.id || p._id) !== tempId));
-      throw err;
+    const res = await productApi.createProduct(payload);
+    if (res && res.data && res.data.product) {
+      const saved = {
+        ...res.data.product,
+        _id: (res.data.product._id || res.data.product.id).toString(),
+        id: (res.data.product._id || res.data.product.id).toString()
+      };
+      await refreshProducts();
+      return saved;
     }
-    return newProduct;
+    throw new Error('Failed to create product in database.');
   };
 
   const updateProduct = async (id, updatedData) => {
-    const targetId = id?.toString();
-    const prevProducts = [...products];
-    // Optimistic UI update
-    setProducts(prev => prev.map(p => ((p.id || p._id)?.toString() === targetId) ? { ...p, ...updatedData } : p));
+    const targetProduct = products.find(p => (p._id && p._id.toString() === id?.toString()) || (p.id && p.id.toString() === id?.toString()) || p.slug === id);
+    const targetId = (targetProduct?._id || (id && String(id).match(/^[0-9a-fA-F]{24}$/) ? id : targetProduct?.id || id))?.toString();
 
-    try {
-      const res = await productApi.updateProduct(targetId, updatedData);
-      if (res && res.data && res.data.product) {
-        const saved = {
-          ...res.data.product,
-          id: (res.data.product._id || res.data.product.id).toString()
-        };
-        setProducts(prev => prev.map(p => ((p.id || p._id)?.toString() === targetId) ? saved : p));
-        return saved;
-      }
-    } catch (err) {
-      console.warn('[AdminContext] Backend product update failed, rolling back:', err.message);
-      // Rollback optimistic UI update
-      setProducts(prevProducts);
-      throw err;
+    if (!targetId) {
+      throw new Error('Could not resolve product id for update.');
     }
+
+    // Strip Mongo metadata that must never be re-posted
+    const {
+      _id, id: _clientId, __v, createdAt, updatedAt, subcategory,
+      ...rest
+    } = updatedData || {};
+
+    const res = await productApi.updateProduct(targetId, rest);
+    if (res && res.data && res.data.product) {
+      const saved = {
+        ...res.data.product,
+        _id: (res.data.product._id || res.data.product.id).toString(),
+        id: (res.data.product._id || res.data.product.id).toString()
+      };
+      await refreshProducts();
+      return saved;
+    }
+    throw new Error(res?.message || 'Failed to update product in database.');
   };
 
   const deleteProduct = async (id) => {
-    const prevProducts = [...products];
-    // Optimistic UI update
-    setProducts(prev => prev.filter(p => p.id !== id && p._id !== id));
+    const targetProduct = products.find(p => (p._id && p._id.toString() === id?.toString()) || (p.id && p.id.toString() === id?.toString()) || p.slug === id);
+    const targetId = (targetProduct?._id || (id && String(id).match(/^[0-9a-fA-F]{24}$/) ? id : targetProduct?.id || id))?.toString();
 
-    try {
-      await productApi.deleteProduct(id);
-      await refreshProducts();
-    } catch (err) {
-      console.warn('[AdminContext] Backend product deletion failed, rolling back:', err.message);
-      setProducts(prevProducts);
-      throw err;
-    }
+    await productApi.deleteProduct(targetId);
+    await refreshProducts();
+    return { success: true };
   };
 
   const toggleProductStatus = async (id) => {
-    const prevProducts = [...products];
-    setProducts(prev => prev.map(p => {
-      if (p.id === id || p._id === id) {
-        const nextInStock = !p.inStock;
-        return { ...p, inStock: nextInStock, status: nextInStock ? 'ACTIVE' : 'INACTIVE' };
-      }
-      return p;
-    }));
+    const targetProduct = products.find(p => (p._id && p._id.toString() === id?.toString()) || (p.id && p.id.toString() === id?.toString()) || p.slug === id);
+    const targetId = (targetProduct?._id || (id && String(id).match(/^[0-9a-fA-F]{24}$/) ? id : targetProduct?.id || id))?.toString();
 
-    try {
-      const res = await productApi.toggleStatus(id);
-      if (res && res.data && res.data.product) {
-        const saved = { ...res.data.product, id: (res.data.product._id || res.data.product.id).toString() };
-        setProducts(prev => prev.map(p => (p.id === id || p._id === id) ? saved : p));
-        await refreshProducts();
-      }
-    } catch (err) {
-      console.warn('[AdminContext] Backend product status toggle failed, rolling back:', err.message);
-      setProducts(prevProducts);
-      throw err;
-    }
+    const res = await productApi.toggleStatus(targetId);
+    await refreshProducts();
+    return res?.data?.product;
   };
 
   // Inventory Stock Adjusters
   const updateProductStock = async (id, newStock) => {
+    const targetProduct = products.find(p => (p._id && p._id.toString() === id?.toString()) || (p.id && p.id.toString() === id?.toString()) || p.slug === id);
+    const targetId = (targetProduct?._id || (id && String(id).match(/^[0-9a-fA-F]{24}$/) ? id : targetProduct?.id || id))?.toString();
     const count = Math.max(0, Number(newStock));
-    setProducts(prev => prev.map(p => {
-      if (p.id === id || p._id === id) {
-        return { ...p, stockCount: count, inStock: count > 0 };
-      }
-      return p;
-    }));
 
-    try {
-      await productApi.updateStock(id, count);
-    } catch (err) {
-      console.warn('[AdminContext] Backend stock update failed:', err.message);
-    }
+    const res = await productApi.updateStock(targetId, count);
+    await refreshProducts();
+    return res?.data?.product;
   };
 
   const adjustProductStock = async (id, delta) => {
-    const prod = products.find(p => p.id === id || p._id === id);
+    const prod = products.find(p => (p._id || p.id)?.toString() === id?.toString() || p.slug === id);
     const newStock = Math.max(0, (prod?.stockCount || 0) + delta);
     await updateProductStock(id, newStock);
   };
 
-  const bulkRestock = (ids, amount = 100) => {
-    ids.forEach(id => {
-      const prod = products.find(p => p.id === id || p._id === id);
+  const bulkRestock = async (ids, amount = 100) => {
+    for (const id of ids) {
+      const prod = products.find(p => (p._id || p.id)?.toString() === id?.toString() || p.slug === id);
       const newStock = (prod?.stockCount || 0) + amount;
-      updateProductStock(id, newStock);
-    });
+      await updateProductStock(id, newStock);
+    }
   };
 
   // Category Actions (Backend API + Optimistic UI)
@@ -1101,6 +1054,8 @@ export function AdminProvider({ children }) {
       logoutAdmin,
       DEFAULT_ADMIN_CREDENTIALS,
       products,
+      productsLoading,
+      productsError,
       categories,
       coupons,
       banners,

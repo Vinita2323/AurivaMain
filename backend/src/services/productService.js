@@ -227,21 +227,10 @@ class ProductService {
    * Get all active store products with query filtering
    */
   async getAllProducts(filters = {}) {
-    // If database is currently disconnected (e.g. initial connection pending), return read-only fallback seed products with stable IDs
     if (mongoose.connection.readyState !== 1) {
-      let list = INITIAL_PRODUCTS_SEED.map((p, idx) => ({
-        ...p,
-        _id: `seed-prod-${p.slug || idx + 1}`,
-        id: `seed-prod-${p.slug || idx + 1}`
-      }));
-      if (filters.category && filters.category !== 'all') {
-        list = list.filter(p => p.category === filters.category);
-      }
-      if (filters.search) {
-        const q = filters.search.toLowerCase();
-        list = list.filter(p => (p.name || '').toLowerCase().includes(q) || (p.flavor || '').toLowerCase().includes(q));
-      }
-      return list;
+      const err = new Error('Database connection is not available. Cannot fetch products while database is offline.');
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      throw err;
     }
 
     const query = { status: { $ne: 'ARCHIVED' } };
@@ -260,7 +249,48 @@ class ProductService {
       query.$or = [{ name: regex }, { flavor: regex }, { tags: regex }, { subtitle: regex }];
     }
 
-    return await Product.find(query).sort({ createdAt: -1 });
+    return await Product.find(query)
+      .select(
+        'name slug subtitle tagline category flavor price oldPrice discountPercent rating reviewsCount weight weightOptions inStock stockCount badge badgeType isBestseller isNewLaunch isFeatured image gallery description details productDetails status createdAt updatedAt'
+      )
+      .sort({ createdAt: -1 })
+      .lean()
+      .then((docs) =>
+        docs.map((p) => {
+          const image =
+            typeof p.image === 'string' && !p.image.startsWith('data:')
+              ? p.image
+              : (Array.isArray(p.gallery)
+                  ? p.gallery.find((g) => typeof g === 'string' && !g.startsWith('data:'))
+                  : '') || p.image || '';
+          const gallery = Array.isArray(p.gallery)
+            ? p.gallery.filter((g) => typeof g === 'string' && g && !g.startsWith('data:')).slice(0, 4)
+            : [];
+          return {
+            ...p,
+            _id: p._id?.toString?.() || p._id,
+            id: p._id?.toString?.() || p._id,
+            image,
+            gallery: gallery.length > 0 ? gallery : (image ? [image] : [])
+          };
+        })
+      );
+  }
+
+  /**
+   * Helper: Find product by MongoDB ObjectId or slug string
+   */
+  async _findProductByIdOrSlug(idOrSlug) {
+    if (!idOrSlug) return null;
+    const cleanId = String(idOrSlug).trim();
+    let product = null;
+    if (mongoose.Types.ObjectId.isValid(cleanId)) {
+      product = await Product.findById(cleanId);
+    }
+    if (!product) {
+      product = await Product.findOne({ slug: cleanId.toLowerCase() });
+    }
+    return product;
   }
 
   /**
@@ -268,17 +298,12 @@ class ProductService {
    */
   async getProductById(idOrSlug) {
     if (mongoose.connection.readyState !== 1) {
-      const found = INITIAL_PRODUCTS_SEED.find(p => p.slug === idOrSlug || p.id === idOrSlug) || INITIAL_PRODUCTS_SEED[0];
-      return { ...found, _id: found.slug, id: found.slug };
+      const err = new Error('Database connection is not available. Cannot fetch product while database is offline.');
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      throw err;
     }
 
-    let product = null;
-    if (idOrSlug && idOrSlug.match(/^[0-9a-fA-F]{24}$/)) {
-      product = await Product.findById(idOrSlug);
-    }
-    if (!product) {
-      product = await Product.findOne({ slug: idOrSlug });
-    }
+    const product = await this._findProductByIdOrSlug(idOrSlug);
     if (!product) {
       const err = new Error('Product not found.');
       err.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -365,6 +390,11 @@ class ProductService {
       reviewsCount: Number(data.reviewsCount || 0),
       weight: data.weight || '150g',
       weightOptions,
+      sku: data.sku || '',
+      shippingWeightKg: data.shippingWeightKg != null ? Number(data.shippingWeightKg) : null,
+      lengthCm: data.lengthCm != null ? Number(data.lengthCm) : null,
+      breadthCm: data.breadthCm != null ? Number(data.breadthCm) : null,
+      heightCm: data.heightCm != null ? Number(data.heightCm) : null,
       inStock: data.inStock !== false,
       stockCount: Number(data.stockCount ?? 150),
       badge: data.badge || (data.isBestseller ? 'BESTSELLER' : ''),
@@ -402,56 +432,109 @@ class ProductService {
   /**
    * Update existing product catalog details
    */
-  async updateProduct(productId, updateData) {
+  async updateProduct(productId, updateData = {}) {
     if (mongoose.connection.readyState !== 1) {
       const err = new Error('Database connection is not available. Cannot update product while database is offline.');
       err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
       throw err;
     }
 
-    const product = await Product.findById(productId);
+    const product = await this._findProductByIdOrSlug(productId);
     if (!product) {
       const err = new Error('Product not found.');
       err.statusCode = HTTP_STATUS.NOT_FOUND;
       throw err;
     }
 
-    if (updateData.variants && (!updateData.weightOptions || updateData.weightOptions.length === 0)) {
-      updateData.weightOptions = updateData.variants.map((v, idx) => ({
+    // Only apply editable catalog fields — never Object.assign raw client payloads
+    // (avoids overwriting _id/timestamps and CastError/ValidationError on some products)
+    const ALLOWED_FIELDS = [
+      'name', 'subtitle', 'tagline', 'category', 'flavor', 'diet',
+      'price', 'oldPrice', 'discountPercent', 'rating', 'reviewsCount',
+      'weight', 'weightOptions', 'inStock', 'stockCount', 'badge', 'badgeType',
+      'isBestseller', 'isNewLaunch', 'isFeatured', 'image', 'gallery',
+      'description', 'details', 'productDetails', 'ingredients', 'tags', 'status',
+      'sku', 'shippingWeightKg', 'lengthCm', 'breadthCm', 'heightCm'
+    ];
+
+    const safeUpdate = {};
+    for (const key of ALLOWED_FIELDS) {
+      if (updateData[key] !== undefined) {
+        safeUpdate[key] = updateData[key];
+      }
+    }
+
+    // Map UI variants → weightOptions when weightOptions not explicitly sent
+    if (Array.isArray(updateData.variants) && updateData.variants.length > 0 && !Array.isArray(safeUpdate.weightOptions)) {
+      safeUpdate.weightOptions = updateData.variants.map((v, idx) => ({
         weight: v.weight || '150g',
         price: Number(v.price || updateData.price || product.price),
         oldPrice: Number(v.oldPrice || updateData.oldPrice || product.oldPrice || 0),
         isDefault: idx === 0
       }));
-    }
-
-    if (updateData.price !== undefined && updateData.price !== '') {
-      updateData.price = Number(updateData.price);
-    }
-    if (updateData.oldPrice !== undefined && updateData.oldPrice !== '') {
-      updateData.oldPrice = Number(updateData.oldPrice);
-    }
-    if (updateData.stockCount !== undefined && updateData.stockCount !== '') {
-      updateData.stockCount = Number(updateData.stockCount);
-      if (updateData.inStock === undefined) {
-        updateData.inStock = updateData.stockCount > 0;
+      if (safeUpdate.weightOptions[0]?.weight) {
+        safeUpdate.weight = safeUpdate.weightOptions[0].weight;
       }
     }
 
-    if (updateData.price && updateData.oldPrice && updateData.oldPrice > updateData.price && !updateData.discountPercent) {
-      updateData.discountPercent = Math.round(((updateData.oldPrice - updateData.price) / updateData.oldPrice) * 100);
+    if (safeUpdate.price !== undefined && safeUpdate.price !== '') {
+      safeUpdate.price = Number(safeUpdate.price);
+    }
+    if (safeUpdate.oldPrice !== undefined && safeUpdate.oldPrice !== '') {
+      safeUpdate.oldPrice = Number(safeUpdate.oldPrice);
+    }
+    if (safeUpdate.stockCount !== undefined && safeUpdate.stockCount !== '') {
+      safeUpdate.stockCount = Number(safeUpdate.stockCount);
+      if (safeUpdate.inStock === undefined) {
+        safeUpdate.inStock = safeUpdate.stockCount > 0;
+      }
+    }
+    if (safeUpdate.isBestseller !== undefined) {
+      safeUpdate.isBestseller = Boolean(safeUpdate.isBestseller);
     }
 
-    Object.assign(product, updateData);
+    // Reject oversized base64 blobs that blow past Mongo/body limits and freeze the admin UI
+    const MAX_STORED_IMAGE_CHARS = 500_000;
+    const isOversizedDataUrl = (val) =>
+      typeof val === 'string' && val.startsWith('data:') && val.length > MAX_STORED_IMAGE_CHARS;
+
+    if (isOversizedDataUrl(safeUpdate.image)) {
+      const err = new Error('Product image is too large to store. Please wait for Cloudinary upload to finish, or use a smaller photo / image URL.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      throw err;
+    }
+    if (Array.isArray(safeUpdate.gallery)) {
+      safeUpdate.gallery = safeUpdate.gallery.filter((img) => typeof img === 'string' && img.trim());
+      if (safeUpdate.gallery.some(isOversizedDataUrl)) {
+        const err = new Error('One or more gallery photos are still local previews and too large to save. Wait for upload to finish or remove them.');
+        err.statusCode = HTTP_STATUS.BAD_REQUEST;
+        throw err;
+      }
+    }
+
+    const nextPrice = safeUpdate.price !== undefined ? safeUpdate.price : product.price;
+    const nextOldPrice = safeUpdate.oldPrice !== undefined ? safeUpdate.oldPrice : product.oldPrice;
+    if (
+      nextPrice &&
+      nextOldPrice &&
+      nextOldPrice > nextPrice &&
+      safeUpdate.discountPercent === undefined
+    ) {
+      safeUpdate.discountPercent = Math.round(((nextOldPrice - nextPrice) / nextOldPrice) * 100);
+    }
+
+    Object.keys(safeUpdate).forEach((key) => {
+      product.set(key, safeUpdate[key]);
+    });
     await product.save();
 
-    if (updateData.stockCount !== undefined) {
+    if (safeUpdate.stockCount !== undefined) {
       notificationService.checkAndNotifyLowStock(product).catch(() => {});
     }
 
     // Sync Bestseller status
-    if (updateData.isBestseller !== undefined) {
-      if (updateData.isBestseller) {
+    if (safeUpdate.isBestseller !== undefined) {
+      if (safeUpdate.isBestseller) {
         const existing = await Bestseller.findOne({ product: product._id });
         if (!existing) {
           const highestOrder = await Bestseller.findOne().sort({ displayOrder: -1 }).select('displayOrder');
@@ -462,6 +545,9 @@ class ProductService {
             displayOrder: nextOrder,
             isActive: true
           });
+        } else if (existing.productName !== product.name) {
+          existing.productName = product.name;
+          await existing.save();
         }
       } else {
         await Bestseller.deleteOne({ product: product._id });
@@ -481,7 +567,7 @@ class ProductService {
       throw err;
     }
 
-    const product = await Product.findById(productId);
+    const product = await this._findProductByIdOrSlug(productId);
     if (!product) {
       const err = new Error('Product not found.');
       err.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -489,8 +575,9 @@ class ProductService {
     }
 
     const name = product.name;
-    await Product.deleteOne({ _id: productId });
-    await Bestseller.deleteOne({ product: productId });
+    const actualId = product._id;
+    await Product.deleteOne({ _id: actualId });
+    await Bestseller.deleteOne({ product: actualId });
 
     return { message: `Product "${name}" was deleted successfully from catalog and bestsellers.` };
   }
@@ -505,7 +592,7 @@ class ProductService {
       throw err;
     }
 
-    const product = await Product.findById(productId);
+    const product = await this._findProductByIdOrSlug(productId);
     if (!product) {
       const err = new Error('Product not found.');
       err.statusCode = HTTP_STATUS.NOT_FOUND;
@@ -529,7 +616,7 @@ class ProductService {
       throw err;
     }
 
-    const product = await Product.findById(productId);
+    const product = await this._findProductByIdOrSlug(productId);
     if (!product) {
       const err = new Error('Product not found.');
       err.statusCode = HTTP_STATUS.NOT_FOUND;

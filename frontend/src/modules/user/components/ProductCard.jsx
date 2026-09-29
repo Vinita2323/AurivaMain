@@ -3,9 +3,9 @@ import { Star, Heart, ShoppingBag, Check, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../../../context/CartContext';
 import { useWishlist } from '../../../context/WishlistContext';
-import { resolveProductImage } from '../../../utils/productImage';
+import { resolveOptimizedProductImage } from '../../../utils/productImage';
 
-export default function ProductCard({ product }) {
+export default function ProductCard({ product, priority = false }) {
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const [isAdded, setIsAdded] = useState(false);
@@ -57,7 +57,7 @@ export default function ProductCard({ product }) {
   };
 
 
-  const displayImage = resolveProductImage(product);
+  const displayImage = resolveOptimizedProductImage(product, { width: 480 });
 
   return (
     <div className="group bg-white rounded-lg sm:rounded-xl border border-[#E8E2D5] hover:border-[#D4AF37] shadow-sm sm:shadow-lg hover:shadow-[0_20px_40px_rgba(0,0,0,0.35),0_0_25px_rgba(212,175,55,0.2)] hover:-translate-y-1.5 sm:hover:-translate-y-2 transition-all duration-500 flex flex-col justify-between relative overflow-hidden text-left">
@@ -93,7 +93,11 @@ export default function ProductCard({ product }) {
           <img
             src={displayImage}
             alt={product.name}
-            loading="lazy"
+            loading={priority ? 'eager' : 'lazy'}
+            decoding="async"
+            fetchPriority={priority ? 'high' : 'auto'}
+            width={480}
+            height={480}
             className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out"
           />
         </Link>

@@ -36,6 +36,41 @@ const env = {
     SERVICE_ACCOUNT_PATH: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './config/firebase-service-account.json',
     CONFIG_JSON: process.env.FIREBASE_CONFIG || '',
     PROJECT_ID: process.env.FIREBASE_PROJECT_ID || ''
+  },
+  SHIPROCKET: {
+    EMAIL: process.env.SHIPROCKET_EMAIL || '',
+    PASSWORD: process.env.SHIPROCKET_PASSWORD || '',
+    BASE_URL: (process.env.SHIPROCKET_BASE_URL || 'https://apiv2.shiprocket.in/v1/external').replace(/\/$/, ''),
+    // Registered pickup location nickname in Shiprocket dashboard (warehouse, not customer address)
+    PICKUP_LOCATION: process.env.SHIPROCKET_PICKUP_LOCATION || 'Primary',
+    PICKUP_CONTACT_PERSON: process.env.SHIPROCKET_PICKUP_CONTACT_PERSON || '',
+    PICKUP_PHONE: process.env.SHIPROCKET_PICKUP_PHONE || '',
+    PICKUP_ADDRESS: process.env.SHIPROCKET_PICKUP_ADDRESS || '',
+    PICKUP_CITY: process.env.SHIPROCKET_PICKUP_CITY || '',
+    PICKUP_STATE: process.env.SHIPROCKET_PICKUP_STATE || '',
+    PICKUP_PINCODE: process.env.SHIPROCKET_PICKUP_PINCODE || '',
+    PICKUP_COUNTRY: process.env.SHIPROCKET_PICKUP_COUNTRY || 'India',
+    GSTIN: process.env.SHIPROCKET_GSTIN || '',
+    WEBHOOK_TOKEN: process.env.SHIPROCKET_WEBHOOK_TOKEN || '',
+    // When true and credentials exist, create Shiprocket order after prepaid verify / COD place
+    AUTO_CREATE: String(process.env.SHIPROCKET_AUTO_CREATE || 'true').toLowerCase() !== 'false',
+    // Package fallbacks (kg / cm) — used only when product shipping fields are unset
+    DEFAULT_WEIGHT_KG: process.env.SHIPROCKET_DEFAULT_WEIGHT_KG
+      ? Number(process.env.SHIPROCKET_DEFAULT_WEIGHT_KG)
+      : null,
+    DEFAULT_LENGTH_CM: process.env.SHIPROCKET_DEFAULT_LENGTH_CM
+      ? Number(process.env.SHIPROCKET_DEFAULT_LENGTH_CM)
+      : null,
+    DEFAULT_BREADTH_CM: process.env.SHIPROCKET_DEFAULT_BREADTH_CM
+      ? Number(process.env.SHIPROCKET_DEFAULT_BREADTH_CM)
+      : null,
+    DEFAULT_HEIGHT_CM: process.env.SHIPROCKET_DEFAULT_HEIGHT_CM
+      ? Number(process.env.SHIPROCKET_DEFAULT_HEIGHT_CM)
+      : null,
+    IS_CONFIGURED: Boolean(
+      process.env.SHIPROCKET_EMAIL &&
+      process.env.SHIPROCKET_PASSWORD
+    )
   }
 };
 

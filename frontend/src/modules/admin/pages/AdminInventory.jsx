@@ -36,7 +36,7 @@ export default function AdminInventory() {
   }, [products, activeTab, search]);
 
   const handleBulkRestock = () => {
-    const lowIds = lowStockProducts.concat(outOfStockProducts).map(p => p.id);
+    const lowIds = lowStockProducts.concat(outOfStockProducts).map(p => p._id || p.id);
     if (lowIds.length === 0) {
       alert("All products have sufficient stock levels!");
       return;
@@ -199,7 +199,7 @@ export default function AdminInventory() {
                             <input
                               type="number"
                               value={count}
-                              onChange={e => updateProductStock(p.id, e.target.value)}
+                              onChange={e => updateProductStock(p._id || p.id, e.target.value)}
                               className="w-22 px-3 py-1.5 text-xs sm:text-sm font-bold rounded-md border border-stone-300 bg-stone-50 focus:outline-none focus:bg-white text-center"
                             />
                             <span className="text-xs sm:text-sm text-stone-600 font-medium">units</span>

@@ -80,6 +80,32 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: '150g'
     },
+    // Shipping / Shiprocket package data (optional — validated before shipment create)
+    sku: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    shippingWeightKg: {
+      type: Number,
+      min: 0,
+      default: null
+    },
+    lengthCm: {
+      type: Number,
+      min: 0,
+      default: null
+    },
+    breadthCm: {
+      type: Number,
+      min: 0,
+      default: null
+    },
+    heightCm: {
+      type: Number,
+      min: 0,
+      default: null
+    },
     weightOptions: [weightOptionSchema],
     inStock: {
       type: Boolean,

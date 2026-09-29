@@ -253,6 +253,11 @@ class PaymentService {
     }
     await order.save();
 
+    // Auto-create Shiprocket shipment after prepaid payment is confirmed (non-blocking)
+    import('./shiprocketFulfillmentService.js')
+      .then(({ default: sr }) => sr.tryAutoCreate(order._id))
+      .catch((e) => console.warn('[Shiprocket] Prepaid auto-create note:', e.message));
+
     // 9. Clear customer's cart
     await Cart.findOneAndUpdate(
       { user: userId },
@@ -326,6 +331,10 @@ class PaymentService {
               'payment.transactionId': gatewayPaymentId
             }
           });
+
+          import('./shiprocketFulfillmentService.js')
+            .then(({ default: sr }) => sr.tryAutoCreate(payment.order))
+            .catch((e) => console.warn('[Shiprocket] Webhook auto-create note:', e.message));
         }
         break;
       }

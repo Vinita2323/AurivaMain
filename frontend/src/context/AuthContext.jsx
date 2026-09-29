@@ -99,6 +99,8 @@ export const formatOrder = (o) => {
     awbNumber: o.awbNumber || '',
     deliveryNotes: o.deliveryNotes || '',
     dispatchedAt: o.dispatchedAt || null,
+    shiprocket: o.shiprocket || null,
+    estimatedDelivery: o.delivery?.estimatedDelivery || null,
     cancelReason: o.cancelReason || '',
     cancelledBy: o.cancelledBy || null,
     cancelledAt: o.cancelledAt || null,

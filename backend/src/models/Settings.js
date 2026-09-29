@@ -40,37 +40,37 @@ const settingsSchema = new mongoose.Schema(
     warehouseName: {
       type: String,
       trim: true,
-      default: 'AURIVÁ Central Fulfillment Hub'
+      default: 'AURIVÁ Warehouse — Sonipat'
     },
     warehouseAddress: {
       type: String,
       trim: true,
-      default: 'Plot 14, Sanwer Road Industrial Area'
+      default: 'House no. 1213, Sector 15'
     },
     warehouseCity: {
       type: String,
       trim: true,
-      default: 'Indore'
+      default: 'Sonipat'
     },
     warehouseState: {
       type: String,
       trim: true,
-      default: 'Madhya Pradesh'
+      default: 'Haryana'
     },
     warehousePincode: {
       type: String,
       trim: true,
-      default: '452015'
+      default: '131001'
     },
     warehousePhone: {
       type: String,
       trim: true,
-      default: '+91 9876543210'
+      default: '+91 98765 43210'
     },
     hubAddress: {
       type: String,
       trim: true,
-      default: 'AURIVÁ Central Fulfillment Hub, Plot 14, Sanwer Road Industrial Area, Indore, MP - 452015'
+      default: 'House no. 1213, Sector 15, Sonipat, Haryana - 131001'
     },
 
     // 5. Store Identity & Customer Support Information

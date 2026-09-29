@@ -15,6 +15,7 @@ import AdminAnalytics from '../pages/AdminAnalytics';
 import AdminNotifications from '../pages/AdminNotifications';
 import AdminSettings from '../pages/AdminSettings';
 import AdminRecipes from '../pages/AdminRecipes';
+import AdminProfile from '../pages/AdminProfile';
 import AdminLogin from '../pages/AdminLogin';
 
 function ProtectedAdminRoute({ children }) {
@@ -49,6 +50,7 @@ export default function AdminRoutes() {
       <Route path="/notifications" element={<ProtectedAdminRoute><AdminNotifications /></ProtectedAdminRoute>} />
       <Route path="/analytics" element={<ProtectedAdminRoute><AdminAnalytics /></ProtectedAdminRoute>} />
       <Route path="/settings" element={<ProtectedAdminRoute><AdminSettings /></ProtectedAdminRoute>} />
+      <Route path="/profile" element={<ProtectedAdminRoute><AdminProfile /></ProtectedAdminRoute>} />
       
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/admin" replace />} />

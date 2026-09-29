@@ -191,6 +191,30 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+    /**
+     * Shiprocket shipment metadata (auth tokens are NEVER stored here).
+     * Multi-seller ready: optional pickupLocation override per fulfillment source.
+     */
+    shiprocket: {
+      orderId: { type: String, default: '', trim: true, index: true },
+      shipmentId: { type: String, default: '', trim: true, index: true },
+      awbCode: { type: String, default: '', trim: true, index: true },
+      courierId: { type: Number, default: null },
+      courierName: { type: String, default: '', trim: true },
+      status: { type: String, default: '', trim: true },
+      statusCode: { type: Number, default: null },
+      labelUrl: { type: String, default: '' },
+      invoiceUrl: { type: String, default: '' },
+      trackingUrl: { type: String, default: '' },
+      pickupScheduled: { type: Boolean, default: false },
+      pickupLocation: { type: String, default: '', trim: true },
+      channelOrderId: { type: String, default: '', trim: true },
+      lastSyncedAt: { type: Date, default: null },
+      lastUpdatedAt: { type: Date, default: null },
+      errorMessage: { type: String, default: '' },
+      // Deduplicate webhook deliveries
+      processedWebhookIds: { type: [String], default: [] }
+    },
     status: {
       type: String,
       enum: [

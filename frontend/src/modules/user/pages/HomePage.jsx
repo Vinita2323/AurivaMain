@@ -16,14 +16,34 @@ import Footer from '../components/Footer';
 
 import { FLAVORS } from '../../../data/flavors';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../../../data/products';
+import { REVIEWS as DEFAULT_REVIEWS } from '../../../data/reviews';
 import { useAdmin } from '../../../context/AdminContext';
 import { bestsellerApi } from '../../../utils/api';
-import { resolveProductImage } from '../../../utils/productImage';
+import { resolveOptimizedProductImage } from '../../../utils/productImage';
 import philosophyImg from '../../../assets/user/philosophy.png';
+
+const BESTSELLER_CACHE_KEY = 'auriva_bestsellers_cache_v1';
+
+function readBestsellerCache() {
+  try {
+    const raw = sessionStorage.getItem(BESTSELLER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.bestsellers && Array.isArray(parsed.bestsellers)) return parsed;
+  } catch (_) { /* ignore */ }
+  return null;
+}
+
+function writeBestsellerCache(payload) {
+  try {
+    sessionStorage.setItem(BESTSELLER_CACHE_KEY, JSON.stringify(payload));
+  } catch (_) { /* ignore quota */ }
+}
 
 export default function HomePage() {
   const { products: adminProducts, categories: CATEGORIES, reviews: REVIEWS } = useAdmin();
   const allProducts = (adminProducts && adminProducts.length > 0) ? adminProducts : DEFAULT_PRODUCTS;
+  const displayReviews = (REVIEWS && REVIEWS.length > 0) ? REVIEWS : DEFAULT_REVIEWS;
 
   // Place products using signature pouch packaging (assets/user/Types/) at the front as fallback
   const isPouch = (p) => {
@@ -46,8 +66,8 @@ export default function HomePage() {
   const otherProducts = allProducts.filter(p => !isPouch(p));
   const fallbackProducts = [...pouchProducts, ...otherProducts];
 
-  // Dynamic Bestsellers State
-  const [bestsellerData, setBestsellerData] = useState({
+  // Dynamic Bestsellers State — hydrate from cache for instant paint
+  const [bestsellerData, setBestsellerData] = useState(() => readBestsellerCache() || {
     config: {
       sectionLabel: 'OUR BESTSELLERS',
       sectionHeading: 'DISCOVER OUR MOST LOVED FLAVOURS',
@@ -57,13 +77,17 @@ export default function HomePage() {
     },
     bestsellers: []
   });
-  const [loadingBestsellers, setLoadingBestsellers] = useState(true);
+  // Only show skeleton if we have nothing cached to paint yet
+  const [loadingBestsellers, setLoadingBestsellers] = useState(() => {
+    const cached = readBestsellerCache();
+    return !(cached?.bestsellers?.length > 0);
+  });
 
   useEffect(() => {
     let isMounted = true;
-    const fetchBestsellers = async () => {
+    const fetchBestsellers = async ({ silent = false } = {}) => {
       try {
-        setLoadingBestsellers(true);
+        if (!silent) setLoadingBestsellers(true);
         const res = await bestsellerApi.getPublicBestsellers();
         if (isMounted && res && res.success && res.data) {
           const raw = res.data;
@@ -75,7 +99,9 @@ export default function HomePage() {
             isEnabled: raw.isEnabled !== undefined ? raw.isEnabled : true
           };
           const bestsellers = raw.products || raw.bestsellers || [];
-          setBestsellerData({ config, bestsellers });
+          const next = { config, bestsellers };
+          setBestsellerData(next);
+          writeBestsellerCache(next);
         }
       } catch (err) {
         console.warn('Failed to load dynamic bestsellers, fallback in place:', err);
@@ -84,10 +110,12 @@ export default function HomePage() {
       }
     };
 
-    fetchBestsellers();
+    const hasCache = Boolean(readBestsellerCache()?.bestsellers?.length);
+    fetchBestsellers({ silent: hasCache });
 
+    // Silent refresh on tab focus — never flash skeletons again
     const handleFocus = () => {
-      fetchBestsellers();
+      fetchBestsellers({ silent: true });
     };
     window.addEventListener('focus', handleFocus);
 
@@ -200,7 +228,7 @@ export default function HomePage() {
               </div>
 
               {/* Products Horizontal Scroll Container */}
-              {loadingBestsellers ? (
+              {loadingBestsellers && activeProducts.length === 0 ? (
                 <div className="flex gap-4 sm:gap-6 overflow-x-hidden px-4 md:px-1 pb-4">
                   {[1, 2, 3, 4].map((idx) => (
                     <div
@@ -222,7 +250,7 @@ export default function HomePage() {
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                   {activeProducts.map((product, index) => {
-                    const displayImage = resolveProductImage(product);
+                    const displayImage = resolveOptimizedProductImage(product, { width: 480 });
                     const productToRender = {
                       ...product,
                       id: product.id || product._id,
@@ -234,7 +262,7 @@ export default function HomePage() {
                         key={product._id || product.id || index}
                         className="w-[260px] sm:w-[280px] lg:w-[290px] xl:w-[300px] min-w-[250px] sm:min-w-[270px] snap-start shrink-0"
                       >
-                        <ProductCard product={productToRender} />
+                        <ProductCard product={productToRender} priority={index < 4} />
                       </div>
                     );
                   })}
@@ -563,7 +591,7 @@ export default function HomePage() {
 
             {/* 4-Card Testimonials Grid with Mobile Horizontal Touch-Swipe */}
             <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 mb-8 sm:mb-12 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 pb-2">
-              {REVIEWS.map((review) => (
+              {displayReviews.map((review) => (
                 <div key={review.id} className="first:ml-4 md:first:ml-0 min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-start shrink-0 flex-1">
                   <TestimonialCard review={review} />
                 </div>
