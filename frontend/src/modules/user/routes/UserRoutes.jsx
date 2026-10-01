@@ -11,6 +11,8 @@ import AccountPage from '../pages/AccountPage';
 import LoginPage from '../pages/LoginPage';
 import AboutPage from '../pages/AboutPage';
 import ContactPage from '../pages/ContactPage';
+import PrivacyPolicyPage from '../pages/PrivacyPolicyPage';
+import HelpSupportPage from '../pages/HelpSupportPage';
 import RecipesPage from '../pages/RecipesPage';
 import MobileBottomNav from '../components/MobileBottomNav';
 
@@ -27,6 +29,10 @@ export default function UserRoutes() {
         <Route path="/recipes" element={<RecipesPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/help-support" element={<HelpSupportPage />} />
+        <Route path="/help" element={<Navigate to="/help-support" replace />} />
+        <Route path="/privacy" element={<Navigate to="/privacy-policy" replace />} />
         <Route path="/order-tracking" element={<OrderTrackingPage />} />
         <Route path="/order-tracking/:orderId" element={<OrderTrackingPage />} />
         <Route path="/account" element={<AccountPage />} />

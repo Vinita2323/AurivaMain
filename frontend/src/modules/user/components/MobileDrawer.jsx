@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { 
   X, ChevronRight, Home, ShoppingBag, Heart, MapPin, 
-  Gift, LayoutDashboard, Sparkles, Tag, Layers, Nut, Flower2, ChefHat 
+  Gift, LayoutDashboard, Sparkles, Tag, Layers, Nut, Flower2, ChefHat,
+  LifeBuoy, Shield
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -36,6 +37,8 @@ export default function MobileDrawer({ isOpen, onClose }) {
     { name: 'Gourmet Seeds', path: '/shop?category=seeds', icon: Sparkles },
     { name: 'Gifting Combos', path: '/shop?filter=combos', icon: Layers, badge: 'Popular' },
     { name: 'About Us & Story', path: '/about', icon: Sparkles },
+    { name: 'Help & Support', path: '/help-support', icon: LifeBuoy },
+    { name: 'Privacy Policy', path: '/privacy-policy', icon: Shield },
     { name: 'Special Offers', path: '/account?tab=offers', icon: Tag, badge: 'Save' },
   ];
 

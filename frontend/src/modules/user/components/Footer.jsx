@@ -132,11 +132,11 @@ export default function Footer() {
           <div className="flex flex-col">
             <h4 className="font-bold text-[#C89038] text-xs tracking-wider uppercase mb-5">HELP</h4>
             <ul className="space-y-3">
-              <li><Link to="/contact" className="text-xs hover:text-[#F7F3E9] transition-colors">FAQ's</Link></li>
-              <li><Link to="/contact" className="text-xs hover:text-[#F7F3E9] transition-colors">Shipping & Delivery</Link></li>
-              <li><Link to="/contact" className="text-xs hover:text-[#F7F3E9] transition-colors">Returns & Refunds</Link></li>
-              <li><Link to="/contact" className="text-xs hover:text-[#F7F3E9] transition-colors">Terms & Conditions</Link></li>
-              <li><Link to="/contact" className="text-xs hover:text-[#F7F3E9] transition-colors">Privacy Policy</Link></li>
+              <li><Link to="/help-support" className="text-xs hover:text-[#F7F3E9] transition-colors">Help & Support</Link></li>
+              <li><Link to="/help-support#faqs" className="text-xs hover:text-[#F7F3E9] transition-colors">FAQ's</Link></li>
+              <li><Link to="/help-support#shipping" className="text-xs hover:text-[#F7F3E9] transition-colors">Shipping & Delivery</Link></li>
+              <li><Link to="/help-support#returns" className="text-xs hover:text-[#F7F3E9] transition-colors">Returns & Refunds</Link></li>
+              <li><Link to="/privacy-policy" className="text-xs hover:text-[#F7F3E9] transition-colors">Privacy Policy</Link></li>
             </ul>
           </div>
 
@@ -167,11 +167,11 @@ export default function Footer() {
         <div className="max-w-[1550px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-[#8A9C90]">
           <p>© {new Date().getFullYear()} Aurivá Wellness Foods Pvt. Ltd. All rights reserved.</p>
           <div className="flex items-center gap-4 flex-wrap">
-            <Link to="/contact" className="hover:text-[#D4AF37] transition-colors">Privacy Policy</Link>
+            <Link to="/privacy-policy" className="hover:text-[#D4AF37] transition-colors">Privacy Policy</Link>
             <span>•</span>
-            <Link to="/contact" className="hover:text-[#D4AF37] transition-colors">Terms of Service</Link>
+            <Link to="/help-support" className="hover:text-[#D4AF37] transition-colors">Help & Support</Link>
             <span>•</span>
-            <Link to="/contact" className="hover:text-[#D4AF37] transition-colors">Shipping & Returns</Link>
+            <Link to="/help-support#shipping" className="hover:text-[#D4AF37] transition-colors">Shipping & Returns</Link>
           </div>
         </div>
       </div>
