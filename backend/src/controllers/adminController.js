@@ -37,6 +37,26 @@ export const getProfile = async (req, res, next) => {
 };
 
 /**
+ * Update Admin Profile
+ * PATCH|PUT /api/v1/admin/profile
+ */
+export const updateProfile = async (req, res, next) => {
+  try {
+    const admin = await adminAuthService.updateAdminProfile(req.user._id, {
+      name: req.body?.name,
+      email: req.body?.email,
+      phone: req.body?.phone
+    });
+    return sendSuccess(res, 'Admin profile updated successfully', { admin }, HTTP_STATUS.OK);
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, {}, error.statusCode);
+    }
+    next(error);
+  }
+};
+
+/**
  * Get All Registered Users (Admin only)
  * GET /api/v1/admin/users
  */

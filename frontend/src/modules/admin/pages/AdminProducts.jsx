@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, Flame, CheckCircle2, AlertCircle, ExternalLink, RefreshCw, Image as ImageIcon } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Search, Edit2, Trash2, Flame, CheckCircle2, AlertCircle, Eye, RefreshCw, Image as ImageIcon } from 'lucide-react';
 
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
 import AddProductModal from '../components/AddProductModal';
+import ViewProductModal from '../components/ViewProductModal';
 import { useAdmin } from '../../../context/AdminContext';
 import { CATEGORIES } from '../../../data/categories';
 import { resolveProductImage } from '../../../utils/productImage';
@@ -36,6 +36,7 @@ export default function AdminProducts() {
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [viewingProduct, setViewingProduct] = useState(null);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
 
   const showFeedback = (type, message) => {
@@ -349,15 +350,14 @@ export default function AdminProducts() {
                           </td>
                           <td className="py-3.5 px-5 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <a
-                                href={`/product/${p.id || p._id || p.slug}`}
-                                target="_blank"
-                                rel="noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => setViewingProduct(p)}
                                 className="p-1.5 text-stone-500 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
-                                title="View product in storefront"
+                                title="View product details"
                               >
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
+                                <Eye className="w-4 h-4" />
+                              </button>
                               <button
                                 onClick={() => handleEdit(p)}
                                 className="p-1.5 text-stone-600 hover:text-[#0E2A1B] hover:bg-stone-100 rounded-md transition-colors cursor-pointer"
@@ -401,6 +401,13 @@ export default function AdminProducts() {
         }}
         onSave={handleSaveProduct}
         initialData={editingProduct}
+        categories={categories}
+      />
+
+      <ViewProductModal
+        isOpen={Boolean(viewingProduct)}
+        onClose={() => setViewingProduct(null)}
+        product={viewingProduct}
         categories={categories}
       />
     </div>

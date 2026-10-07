@@ -12,6 +12,7 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 import { requireAdmin } from '../middleware/roleMiddleware.js';
 import { adminLoginLimiter } from '../middleware/rateLimiter.js';
 import { validateAdminLogin, validateUserStatusUpdate } from '../validations/adminValidation.js';
+import { validateAdminProfileUpdate } from '../validations/adminAuthValidation.js';
 
 const router = Router();
 
@@ -33,6 +34,8 @@ router.use('/notifications', adminNotificationRoutes);
 router.use(authMiddleware, requireAdmin);
 
 router.get('/profile', adminController.getProfile);
+router.patch('/profile', validateAdminProfileUpdate, adminController.updateProfile);
+router.put('/profile', validateAdminProfileUpdate, adminController.updateProfile);
 router.get('/users', adminController.getAllUsers);
 router.patch('/users/:id/status', validateUserStatusUpdate, adminController.updateUserStatus);
 

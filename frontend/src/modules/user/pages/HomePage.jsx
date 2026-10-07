@@ -145,17 +145,194 @@ export default function HomePage() {
 
   const isSectionEnabled = bestsellerData.config?.isEnabled !== false;
 
-  const bestsellersScrollRef = useRef(null);
+  const bestsellersViewportRef = useRef(null);
+  const bestsellersTrackRef = useRef(null);
+  const bestsellersOffsetRef = useRef(0);
+  const bestsellersSegmentRef = useRef(0);
+  const bestsellersPausedRef = useRef(false);
+  const bestsellersManualPauseUntilRef = useRef(0);
+  const bestsellersRafRef = useRef(0);
+  const bestsellersTouchRef = useRef({ active: false, startX: 0, startOffset: 0 });
 
-  const scrollBestsellers = (direction) => {
-    if (bestsellersScrollRef.current) {
-      const container = bestsellersScrollRef.current;
-      const scrollAmount = container.clientWidth * 0.75 || 320;
-      container.scrollBy({
-        left: direction === 'next' ? scrollAmount : -scrollAmount,
-        behavior: 'smooth'
+  // Triple the list so one segment is always wider than the viewport → seamless wrap
+  const LOOP_COPIES = 3;
+  const loopProducts = useMemo(() => {
+    if (!activeProducts.length) return [];
+    const out = [];
+    for (let copy = 0; copy < LOOP_COPIES; copy += 1) {
+      activeProducts.forEach((p, i) => {
+        out.push({
+          product: p,
+          key: `bs-${copy}-${p._id || p.id || i}`
+        });
       });
     }
+    return out;
+  }, [activeProducts]);
+
+  const pauseBestsellersAutoScroll = (ms = 0) => {
+    if (ms > 0) {
+      bestsellersManualPauseUntilRef.current = Math.max(
+        bestsellersManualPauseUntilRef.current,
+        Date.now() + ms
+      );
+    } else {
+      bestsellersPausedRef.current = true;
+    }
+  };
+
+  const resumeBestsellersAutoScroll = () => {
+    bestsellersPausedRef.current = false;
+  };
+
+  const normalizeBestsellersOffset = () => {
+    const segment = bestsellersSegmentRef.current;
+    if (segment <= 0) return;
+    let x = bestsellersOffsetRef.current;
+    // Keep offset in (-segment, 0]
+    while (x <= -segment) x += segment;
+    while (x > 0) x -= segment;
+    bestsellersOffsetRef.current = x;
+  };
+
+  const applyBestsellersTransform = () => {
+    const track = bestsellersTrackRef.current;
+    if (!track) return;
+    track.style.transform = `translate3d(${bestsellersOffsetRef.current}px, 0, 0)`;
+  };
+
+  const measureBestsellersSegment = () => {
+    const track = bestsellersTrackRef.current;
+    if (!track || !activeProducts.length) {
+      bestsellersSegmentRef.current = 0;
+      return;
+    }
+    // One logical set = total track width / number of copies
+    bestsellersSegmentRef.current = track.scrollWidth / LOOP_COPIES;
+  };
+
+  const scrollBestsellers = (direction) => {
+    pauseBestsellersAutoScroll(1800);
+    measureBestsellersSegment();
+    const step = bestsellersViewportRef.current?.clientWidth
+      ? bestsellersViewportRef.current.clientWidth * 0.75
+      : 320;
+    bestsellersOffsetRef.current += direction === 'next' ? -step : step;
+    normalizeBestsellersOffset();
+    applyBestsellersTransform();
+  };
+
+  // Infinite marquee via translate3d + rAF (never hits a scrollLeft end)
+  useEffect(() => {
+    if (loadingBestsellers && activeProducts.length === 0) return;
+    if (activeProducts.length < 1) return;
+
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const track = bestsellersTrackRef.current;
+    const viewport = bestsellersViewportRef.current;
+    if (!track || !viewport) return;
+
+    measureBestsellersSegment();
+    bestsellersOffsetRef.current = 0;
+    applyBestsellersTransform();
+
+    if (prefersReduced) return undefined;
+
+    const SPEED_PX_PER_SEC = 40; // slow continuous marquee (30–50px/s)
+    let lastTs = 0;
+
+    const tick = (ts) => {
+      if (!lastTs) lastTs = ts;
+      const dt = Math.min((ts - lastTs) / 1000, 0.064);
+      lastTs = ts;
+
+      const manualHold = Date.now() < bestsellersManualPauseUntilRef.current;
+      const touching = bestsellersTouchRef.current.active;
+
+      if (
+        !bestsellersPausedRef.current &&
+        !manualHold &&
+        !touching &&
+        !document.hidden &&
+        bestsellersSegmentRef.current > 0
+      ) {
+        bestsellersOffsetRef.current -= SPEED_PX_PER_SEC * dt;
+        normalizeBestsellersOffset();
+        applyBestsellersTransform();
+      }
+
+      bestsellersRafRef.current = requestAnimationFrame(tick);
+    };
+
+    bestsellersRafRef.current = requestAnimationFrame(tick);
+
+    const onResize = () => {
+      measureBestsellersSegment();
+      normalizeBestsellersOffset();
+      applyBestsellersTransform();
+    };
+
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null;
+    ro?.observe(track);
+    ro?.observe(viewport);
+    window.addEventListener('resize', onResize);
+
+    const onVisibility = () => {
+      if (!document.hidden) lastTs = 0;
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Remeasure after images/layout settle
+    const remasureTimers = [100, 400, 1000].map((ms) =>
+      setTimeout(() => {
+        measureBestsellersSegment();
+        normalizeBestsellersOffset();
+        applyBestsellersTransform();
+      }, ms)
+    );
+
+    return () => {
+      cancelAnimationFrame(bestsellersRafRef.current);
+      remasureTimers.forEach(clearTimeout);
+      ro?.disconnect();
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+    // Re-init when product set changes (API load / refresh)
+  }, [activeProducts, loadingBestsellers, loopProducts.length]);
+
+  const onBestsellersTouchStart = (e) => {
+    const t = e.touches?.[0];
+    if (!t) return;
+    bestsellersTouchRef.current = {
+      active: true,
+      startX: t.clientX,
+      startOffset: bestsellersOffsetRef.current
+    };
+    pauseBestsellersAutoScroll();
+  };
+
+  const onBestsellersTouchMove = (e) => {
+    const touchState = bestsellersTouchRef.current;
+    if (!touchState.active) return;
+    const t = e.touches?.[0];
+    if (!t) return;
+    const dx = t.clientX - touchState.startX;
+    bestsellersOffsetRef.current = touchState.startOffset + dx;
+    normalizeBestsellersOffset();
+    applyBestsellersTransform();
+  };
+
+  const onBestsellersTouchEnd = () => {
+    bestsellersTouchRef.current.active = false;
+    normalizeBestsellersOffset();
+    applyBestsellersTransform();
+    // Resume after a short delay so swipe feels natural
+    pauseBestsellersAutoScroll(2000);
+    resumeBestsellersAutoScroll();
   };
 
   return (
@@ -181,32 +358,34 @@ export default function HomePage() {
             <div className="w-full px-4 sm:px-6 lg:px-8">
 
               {/* Header */}
-              <div className="flex flex-col md:flex-row items-center justify-between mb-8 sm:mb-12 gap-4">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 sm:mb-12 gap-4 sm:gap-5">
+                <div className="flex items-center justify-center md:justify-start gap-2">
                   <Leaf className="w-4 h-4 text-[#C89038]" />
                   <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B]">
                     {bestsellerData.config?.sectionLabel || 'OUR BESTSELLERS'}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-4 text-center">
+                <div className="flex items-center justify-center gap-4 text-center px-1">
                   <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-r from-transparent to-[#D4AF37]"></div>
                   <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37]" />
-                  <h2 className="font-serif text-lg sm:text-2xl md:text-3xl font-bold text-[#C89038] tracking-wide">
+                  <h2 className="font-serif text-lg sm:text-2xl md:text-3xl font-bold text-[#C89038] tracking-wide leading-snug">
                     {bestsellerData.config?.sectionHeading || 'DISCOVER OUR MOST LOVED FLAVOURS'}
                   </h2>
                   <ArrowRight className="hidden sm:block w-3 h-3 text-[#D4AF37] rotate-180" />
                   <div className="hidden sm:block h-[1px] w-12 bg-gradient-to-l from-transparent to-[#D4AF37]"></div>
                 </div>
 
-                <div className="flex items-center gap-4">
+                {/* Mobile: full-width — link left, arrows right; Desktop: compact row */}
+                <div className="w-full md:w-auto flex items-center justify-between md:justify-end gap-3">
                   <Link
                     to={bestsellerData.config?.viewAllLink || '/shop'}
                     className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#0E2A1B] hover:text-[#D4AF37] transition-colors"
                   >
                     {bestsellerData.config?.viewAllText || 'VIEW ALL PRODUCTS'}
+                    <ArrowRight className="w-3 h-3 md:hidden text-[#C89038]" />
                   </Link>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => scrollBestsellers('prev')}
                       className="w-8 h-8 rounded-full border border-stone-300 hover:border-[#D4AF37] hover:bg-white text-[#0E2A1B] hover:text-[#D4AF37] flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs active:scale-90"
@@ -245,27 +424,39 @@ export default function HomePage() {
                 </div>
               ) : (
                 <div
-                  ref={bestsellersScrollRef}
-                  className="flex gap-4 sm:gap-6 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory px-4 md:px-1 pb-4"
+                  ref={bestsellersViewportRef}
+                  className="overflow-hidden px-4 md:px-1 pb-4 touch-pan-y"
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  onMouseEnter={() => pauseBestsellersAutoScroll()}
+                  onMouseLeave={() => resumeBestsellersAutoScroll()}
+                  onTouchStart={onBestsellersTouchStart}
+                  onTouchMove={onBestsellersTouchMove}
+                  onTouchEnd={onBestsellersTouchEnd}
+                  onTouchCancel={onBestsellersTouchEnd}
                 >
-                  {activeProducts.map((product, index) => {
-                    const displayImage = resolveOptimizedProductImage(product, { width: 480 });
-                    const productToRender = {
-                      ...product,
-                      id: product.id || product._id,
-                      image: displayImage
-                    };
+                  <div
+                    ref={bestsellersTrackRef}
+                    className="flex gap-4 sm:gap-6 w-max will-change-transform"
+                    style={{ transform: 'translate3d(0,0,0)' }}
+                  >
+                    {loopProducts.map(({ product, key }, index) => {
+                      const displayImage = resolveOptimizedProductImage(product, { width: 480 });
+                      const productToRender = {
+                        ...product,
+                        id: product.id || product._id,
+                        image: displayImage
+                      };
 
-                    return (
-                      <div
-                        key={product._id || product.id || index}
-                        className="w-[260px] sm:w-[280px] lg:w-[290px] xl:w-[300px] min-w-[250px] sm:min-w-[270px] snap-start shrink-0"
-                      >
-                        <ProductCard product={productToRender} priority={index < 4} />
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div
+                          key={key}
+                          className="w-[260px] sm:w-[280px] lg:w-[290px] xl:w-[300px] min-w-[250px] sm:min-w-[270px] shrink-0"
+                        >
+                          <ProductCard product={productToRender} priority={index < 4} />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

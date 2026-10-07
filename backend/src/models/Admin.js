@@ -54,7 +54,13 @@ const adminSchema = new mongoose.Schema(
     lastLoginAt: {
       type: Date,
       default: null
-    }
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: [20, 'Phone cannot exceed 20 characters']
+    },
   },
   {
     timestamps: true,

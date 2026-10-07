@@ -977,10 +977,27 @@ export function AdminProvider({ children }) {
         setSettings(res.data.settings);
         return { success: true, settings: res.data.settings };
       }
+      throw new Error(res?.message || 'Settings update did not return saved data.');
     } catch (err) {
-      console.warn('[AdminContext] Server settings update failed, saved locally:', err.message);
+      console.warn('[AdminContext] Server settings update failed:', err.message);
+      // Re-sync from server so UI does not keep a fake local-only save
+      try { await refreshSettings(); } catch (_) { /* ignore */ }
+      throw err;
     }
-    return { success: true };
+  };
+
+  const updateAdminProfile = async (profileData) => {
+    const res = await adminAuthApi.updateProfile(profileData);
+    if (res && res.data && res.data.admin) {
+      setAdminUser(res.data.admin);
+      try {
+        localStorage.setItem('auriva_admin_user', JSON.stringify(res.data.admin));
+      } catch (e) {
+        console.error(e);
+      }
+      return { success: true, admin: res.data.admin };
+    }
+    throw new Error(res?.message || 'Could not update admin profile.');
   };
 
   // Recipe Actions
@@ -1053,6 +1070,7 @@ export function AdminProvider({ children }) {
       adminUser,
       loginAdmin,
       logoutAdmin,
+      updateAdminProfile,
       DEFAULT_ADMIN_CREDENTIALS,
       products,
       productsLoading,

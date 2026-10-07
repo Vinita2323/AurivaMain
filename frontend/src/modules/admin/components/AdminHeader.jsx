@@ -4,11 +4,24 @@ import { Link } from 'react-router-dom';
 import NewOrderAlertModal from './NewOrderAlertModal';
 import { adminNotificationApi, adminOrderApi } from '../../../utils/api';
 import { formatOrder } from '../../../context/AuthContext';
+import { useAdmin } from '../../../context/AdminContext';
 
 const NEW_ORDER_LS_KEY = 'auriva_admin_last_seen_order_ts';
 const POLL_INTERVAL_MS = 20_000; // 20 seconds
 
 export default function AdminHeader({ onMenuClick, title = "Dashboard" }) {
+  const { adminUser, settings } = useAdmin();
+  const displayName = adminUser?.name || 'Admin Manager';
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('') || 'AD';
+  const hubLabel = settings?.warehouseCity
+    ? `${settings.warehouseCity} Hub`
+    : 'Sonipat Hub';
+
   const [unreadCount, setUnreadCount] = useState(0);
 
   // New-order alert state
@@ -149,11 +162,11 @@ export default function AdminHeader({ onMenuClick, title = "Dashboard" }) {
             title="Open Admin Profile"
           >
             <div className="w-8.5 h-8.5 rounded-full bg-[#0E2A1B] text-[#D4AF37] font-bold text-xs flex items-center justify-center border border-[#D4AF37] group-hover:scale-105 transition-transform shadow-2xs">
-              AD
+              {initials}
             </div>
             <div className="hidden md:block text-left">
-              <p className="text-xs sm:text-[13px] font-bold text-[#0E2A1B] group-hover:text-[#D4AF37] transition-colors leading-tight">Admin Manager</p>
-              <p className="text-[11px] text-stone-400 font-medium">Sonipat Hub</p>
+              <p className="text-xs sm:text-[13px] font-bold text-[#0E2A1B] group-hover:text-[#D4AF37] transition-colors leading-tight">{displayName}</p>
+              <p className="text-[11px] text-stone-400 font-medium">{hubLabel}</p>
             </div>
           </Link>
         </div>

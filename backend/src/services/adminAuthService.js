@@ -111,6 +111,104 @@ class AdminAuthService {
   }
 
   /**
+   * Update authenticated admin profile (name, email, phone)
+   * @param {string} adminId
+   * @param {{ name?: string, email?: string, phone?: string }} updates
+   * @returns {Promise<object>}
+   */
+  async updateAdminProfile(adminId, updates = {}) {
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      const err = new Error('Admin profile not found.');
+      err.statusCode = HTTP_STATUS.NOT_FOUND;
+      throw err;
+    }
+
+    if (updates.name !== undefined) {
+      const name = String(updates.name || '').trim();
+      if (!name) {
+        const err = new Error('Admin name is required.');
+        err.statusCode = HTTP_STATUS.BAD_REQUEST;
+        throw err;
+      }
+      admin.name = name;
+    }
+
+    if (updates.email !== undefined) {
+      const email = String(updates.email || '').trim().toLowerCase();
+      const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/;
+      if (!emailRegex.test(email)) {
+        const err = new Error('Please enter a valid email address.');
+        err.statusCode = HTTP_STATUS.BAD_REQUEST;
+        throw err;
+      }
+      if (email !== admin.email) {
+        const existing = await Admin.findOne({ email, _id: { $ne: adminId } });
+        if (existing) {
+          const err = new Error('Another admin account already uses this email.');
+          err.statusCode = HTTP_STATUS.CONFLICT;
+          throw err;
+        }
+        admin.email = email;
+      }
+    }
+
+    if (updates.phone !== undefined) {
+      admin.phone = String(updates.phone || '').trim();
+    }
+
+    await admin.save();
+    return admin.toJSON();
+  }
+
+  /**
+   * Change admin password (requires current password)
+   * @param {string} adminId
+   * @param {{ currentPassword: string, newPassword: string }} payload
+   * @returns {Promise<{ message: string }>}
+   */
+  async changeAdminPassword(adminId, { currentPassword, newPassword }) {
+    const admin = await Admin.findById(adminId).select('+password');
+    if (!admin) {
+      const err = new Error('Admin profile not found.');
+      err.statusCode = HTTP_STATUS.NOT_FOUND;
+      throw err;
+    }
+
+    const current = String(currentPassword || '');
+    const next = String(newPassword || '');
+
+    if (!current || !next) {
+      const err = new Error('Current password and new password are required.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      throw err;
+    }
+
+    if (next.length < 6) {
+      const err = new Error('New password must be at least 6 characters long.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      throw err;
+    }
+
+    const matches = await admin.comparePassword(current);
+    if (!matches) {
+      const err = new Error('Current password is incorrect.');
+      err.statusCode = HTTP_STATUS.UNAUTHORIZED;
+      throw err;
+    }
+
+    if (current === next) {
+      const err = new Error('New password must be different from the current password.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      throw err;
+    }
+
+    admin.password = next;
+    await admin.save();
+    return { message: 'Password updated successfully.' };
+  }
+
+  /**
    * Ensure initial default super admin exists on server boot
    */
   async ensureDefaultAdmin() {

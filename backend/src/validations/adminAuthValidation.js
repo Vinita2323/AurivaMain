@@ -47,6 +47,89 @@ export const validateAdminLogin = (req, res, next) => {
   next();
 };
 
+/**
+ * Validate Admin profile update payload
+ */
+export const validateAdminProfileUpdate = (req, res, next) => {
+  const body = req.body;
+  const errors = [];
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return sendError(
+      res,
+      'Profile update payload must be an object.',
+      { reason: 'INVALID_BODY' },
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  const hasAny =
+    body.name !== undefined ||
+    body.email !== undefined ||
+    body.phone !== undefined;
+
+  if (!hasAny) {
+    return sendError(
+      res,
+      'Provide at least one of: name, email, phone.',
+      { reason: 'EMPTY_UPDATE' },
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  if (body.name !== undefined) {
+    const name = String(body.name || '').trim();
+    if (!name || name.length > 100) {
+      errors.push({ field: 'name', message: 'Name is required (max 100 characters).' });
+    }
+  }
+
+  if (body.email !== undefined) {
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/;
+    if (!emailRegex.test(String(body.email || '').trim())) {
+      errors.push({ field: 'email', message: 'Please enter a valid email address.' });
+    }
+  }
+
+  if (body.phone !== undefined && String(body.phone).trim().length > 20) {
+    errors.push({ field: 'phone', message: 'Phone cannot exceed 20 characters.' });
+  }
+
+  if (errors.length > 0) {
+    return sendError(res, 'Profile validation failed.', { errors }, HTTP_STATUS.BAD_REQUEST);
+  }
+
+  next();
+};
+
+/**
+ * Validate Admin password change payload
+ */
+export const validateAdminChangePassword = (req, res, next) => {
+  const { currentPassword, newPassword, confirmPassword } = req.body || {};
+  const errors = [];
+
+  if (!currentPassword || typeof currentPassword !== 'string') {
+    errors.push({ field: 'currentPassword', message: 'Current password is required.' });
+  }
+
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    errors.push({ field: 'newPassword', message: 'New password must be at least 6 characters.' });
+  }
+
+  if (confirmPassword !== undefined && confirmPassword !== newPassword) {
+    errors.push({ field: 'confirmPassword', message: 'Password confirmation does not match.' });
+  }
+
+  if (errors.length > 0) {
+    return sendError(res, 'Password validation failed.', { errors }, HTTP_STATUS.BAD_REQUEST);
+  }
+
+  next();
+};
+
 export default {
-  validateAdminLogin
+  validateAdminLogin,
+  validateAdminProfileUpdate,
+  validateAdminChangePassword
 };

@@ -80,7 +80,7 @@ export default function CheckoutPage() {
   const lastShippingKeyRef = useRef('');
   const [gatewayConfig, setGatewayConfig] = useState({ 
     isConfigured: true, 
-    keyId: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TRZdg2aAOYv4KK' 
+    keyId: import.meta.env.VITE_RAZORPAY_KEY_ID || '' 
   });
 
   useEffect(() => {
@@ -415,7 +415,7 @@ export default function CheckoutPage() {
 
       const sessionData = session?.data || session;
       let razorpayOrderId = sessionData?.razorpayOrderId;
-      let keyId = sessionData?.keyId || gatewayConfig.keyId || 'rzp_test_TRZdg2aAOYv4KK';
+      let keyId = sessionData?.keyId || gatewayConfig.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID || '';
       let amount = sessionData?.amount || Math.round(total * 100);
       let currency = sessionData?.currency || 'INR';
 

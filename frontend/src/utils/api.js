@@ -1,10 +1,10 @@
 const LOCAL_API_BASE = 'http://localhost:5000/api/v1';
 
 function resolveApiBase() {
-  // Vite/local dev: prefer .env, else localhost
+  // Always use local backend while Vite is in development — avoids hitting
+  // production (aurivabites.in) where new routes are not deployed yet.
   if (import.meta.env.DEV) {
-    const devUrl = import.meta.env.VITE_API_URL;
-    return String(devUrl || LOCAL_API_BASE).replace(/\/$/, '');
+    return LOCAL_API_BASE;
   }
 
   const envUrl = import.meta.env.VITE_API_URL;
@@ -237,6 +237,16 @@ export const adminAuthApi = {
 
   getProfile: () => apiRequest('/auth/admin/profile', {
     method: 'GET'
+  }),
+
+  updateProfile: (data) => apiRequest('/auth/admin/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  }),
+
+  changePassword: (data) => apiRequest('/auth/admin/change-password', {
+    method: 'POST',
+    body: JSON.stringify(data)
   })
 };
 
