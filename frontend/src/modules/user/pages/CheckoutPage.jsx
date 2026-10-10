@@ -18,7 +18,8 @@ import { paymentApi, shippingApi, addressApi, cartApi } from '../../../utils/api
 import {
   calculateCheckoutTotals,
   checkoutPaymentMethodKey,
-  estimateCartWeightKg
+  estimateCartWeightKg,
+  resolveDeliveryFee
 } from '../../../utils/checkoutPricing';
 
 const loadRazorpayScript = () => {
@@ -101,9 +102,14 @@ export default function CheckoutPage() {
   const cartWeightKg = useMemo(() => estimateCartWeightKg(cartItems), [cartItems]);
   const isCodPayment = paymentMethod === 'cod';
   const pinReady = deliveryPincode.length === 6;
+  // TEMP testing: set VITE_SHIPROCKET_CHECKOUT_ENABLED=false to hide live rates + use store fees
+  const shiprocketCheckoutEnabled =
+    String(import.meta.env.VITE_SHIPROCKET_CHECKOUT_ENABLED ?? 'true').toLowerCase() !== 'false';
 
   // One API call returns both prepaid + COD — pick fee locally when payment changes
-  const shiprocketDeliveryFee = !pinReady
+  const shiprocketDeliveryFee = !shiprocketCheckoutEnabled
+    ? undefined
+    : !pinReady
     ? 0
     : shippingQuoteLoading
     ? undefined
@@ -112,6 +118,14 @@ export default function CheckoutPage() {
     : shippingQuote?.prepaid?.fee;
 
   const checkoutPricing = useMemo(() => {
+    if (!shiprocketCheckoutEnabled) {
+      return calculateCheckoutTotals({
+        subtotal,
+        discountAmount,
+        paymentMethod: checkoutPaymentMethodKey(paymentMethod),
+        settings: shippingSettings || {}
+      });
+    }
     return calculateCheckoutTotals({
       subtotal,
       discountAmount,
@@ -119,12 +133,29 @@ export default function CheckoutPage() {
       settings: shippingSettings || {},
       deliveryFee: shiprocketDeliveryFee ?? 0
     });
-  }, [subtotal, discountAmount, paymentMethod, shippingSettings, shiprocketDeliveryFee]);
+  }, [subtotal, discountAmount, paymentMethod, shippingSettings, shiprocketDeliveryFee, shiprocketCheckoutEnabled]);
 
   const { deliveryFee, tax, total } = checkoutPricing;
-  const shippingReady = !pinReady || (!shippingQuoteLoading && shippingQuote && !shippingQuote.error);
+  const settingsPrepaidFee = resolveDeliveryFee({
+    subtotal,
+    paymentMethod: 'UPI',
+    settings: shippingSettings || {}
+  });
+  const settingsCodFee = resolveDeliveryFee({
+    subtotal,
+    paymentMethod: 'COD',
+    settings: shippingSettings || {}
+  });
+  const shippingReady =
+    !shiprocketCheckoutEnabled ||
+    !pinReady ||
+    (!shippingQuoteLoading && shippingQuote && !shippingQuote.error);
   const shippingLabel =
-    deliveryFee === 0 && shippingQuote?.freeDeliveryApplied
+    !shiprocketCheckoutEnabled
+      ? isCodPayment
+        ? 'Shipping (COD)'
+        : 'Shipping (Prepaid)'
+      : deliveryFee === 0 && shippingQuote?.freeDeliveryApplied
       ? 'Shipping / Delivery'
       : isCodPayment
       ? 'Shiprocket Shipping (COD)'
@@ -149,8 +180,15 @@ export default function CheckoutPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentStep]);
 
-  // Fetch Shiprocket rates only when pincode / weight / subtotal change (not on payment toggle)
+  // Fetch Shiprocket rates only when enabled + pincode / weight / subtotal change (not on payment toggle)
   useEffect(() => {
+    if (!shiprocketCheckoutEnabled) {
+      setShippingQuote(null);
+      setShippingQuoteLoading(false);
+      lastShippingKeyRef.current = '';
+      return;
+    }
+
     if (deliveryPincode.length !== 6 || subtotal <= 0) {
       setShippingQuote(null);
       lastShippingKeyRef.current = '';
@@ -191,7 +229,7 @@ export default function CheckoutPage() {
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- shippingQuote intentionally omitted to avoid loop
-  }, [deliveryPincode, cartWeightKg, subtotal]);
+  }, [deliveryPincode, cartWeightKg, subtotal, shiprocketCheckoutEnabled]);
 
   // Block background scroll when address modal is open
   useEffect(() => {
@@ -337,12 +375,12 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (shippingQuoteLoading) {
-      setOrderError('Please wait while Shiprocket shipping rates load.');
+    if (shiprocketCheckoutEnabled && shippingQuoteLoading) {
+      setOrderError('Please wait while shipping rates load.');
       return;
     }
 
-    if (shippingQuote?.error) {
+    if (shiprocketCheckoutEnabled && shippingQuote?.error) {
       setOrderError(shippingQuote.error);
       return;
     }
@@ -874,8 +912,10 @@ export default function CheckoutPage() {
                             <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Online Payment</span>
                             <p className="text-[9.5px] sm:text-[11px] text-stone-500">
                               UPI, Cards & Net Banking · Prepaid shipping
-                              {shippingQuote?.prepaid?.fee != null
+                              {shiprocketCheckoutEnabled && shippingQuote?.prepaid?.fee != null
                                 ? ` · ₹${shippingQuote.prepaid.fee}`
+                                : !shiprocketCheckoutEnabled
+                                ? ` · ₹${settingsPrepaidFee}`
                                 : ''}
                             </p>
                           </div>
@@ -911,7 +951,11 @@ export default function CheckoutPage() {
                             <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Cash on Delivery</span>
                             <p className="text-[9.5px] sm:text-[11px] text-stone-500">
                               Pay at doorstep · COD shipping
-                              {shippingQuote?.cod?.fee != null ? ` · ₹${shippingQuote.cod.fee}` : ''}
+                              {shiprocketCheckoutEnabled && shippingQuote?.cod?.fee != null
+                                ? ` · ₹${shippingQuote.cod.fee}`
+                                : !shiprocketCheckoutEnabled
+                                ? ` · ₹${settingsCodFee}`
+                                : ''}
                             </p>
                           </div>
                         </div>
@@ -1069,7 +1113,7 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-stone-600">
                   <span>{shippingLabel}</span>
                   <span className="font-sans">
-                    {shippingQuoteLoading && pinReady ? (
+                    {shiprocketCheckoutEnabled && shippingQuoteLoading && pinReady ? (
                       'Loading…'
                     ) : deliveryFee === 0 ? (
                       <strong className="text-emerald-700">FREE</strong>
@@ -1078,7 +1122,8 @@ export default function CheckoutPage() {
                     )}
                   </span>
                 </div>
-                {deliveryPincode?.replace(/\D/g, '').length === 6 && (
+                {/* TEMP: hide Live Shiprocket rates while VITE_SHIPROCKET_CHECKOUT_ENABLED=false */}
+                {shiprocketCheckoutEnabled && deliveryPincode?.replace(/\D/g, '').length === 6 && (
                   <div className="rounded-lg border border-stone-100 bg-stone-50/80 px-2.5 py-2 text-[10px] sm:text-[11px] text-stone-600 space-y-1">
                     <div className="flex items-center gap-1.5 font-semibold text-[#0E2A1B]">
                       <Truck className="w-3.5 h-3.5 text-[#C89038] shrink-0" />
@@ -1117,7 +1162,7 @@ export default function CheckoutPage() {
                     )}
                   </div>
                 )}
-                {deliveryPincode?.replace(/\D/g, '').length !== 6 && (
+                {shiprocketCheckoutEnabled && deliveryPincode?.replace(/\D/g, '').length !== 6 && (
                   <p className="text-[10px] text-stone-500">Add a delivery address to see Shiprocket shipping rates</p>
                 )}
 

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
-  CheckCircle2, Clock, Phone, MapPin, 
-  ChevronRight, Navigation, MessageSquare, FileText, Wifi
+  CheckCircle2, Phone, MapPin, 
+  ChevronRight, MessageSquare, FileText, Wifi
 } from 'lucide-react';
 
 const ORDER_POLL_INTERVAL_MS = 15_000; // Re-fetch order status every 15 seconds
@@ -64,14 +64,8 @@ export default function OrderTrackingPage() {
     ]
   };
 
-  const [etaMinutes, setEtaMinutes] = useState(25);
-
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    const interval = setInterval(() => {
-      setEtaMinutes(prev => (prev > 5 ? prev - 1 : 25));
-    }, 15000);
-    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -106,6 +100,7 @@ export default function OrderTrackingPage() {
                   order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800'
                   : order.status === 'Cancelled' ? 'bg-rose-100 text-rose-800'
                   : order.status === 'Out for Delivery' ? 'bg-blue-100 text-blue-800'
+                  : order.status === 'Accepted' ? 'bg-teal-100 text-teal-800'
                   : order.status === 'Packed' ? 'bg-cyan-100 text-cyan-800'
                   : order.status === 'Ready for Dispatch' ? 'bg-purple-100 text-purple-800'
                   : 'bg-amber-100 text-amber-800'
@@ -123,7 +118,7 @@ export default function OrderTrackingPage() {
               <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5 sm:mt-1">
                 Placed on {order.date} • Expected delivery today by 03:15 PM
               </p>
-              {['Order Received', 'Packed', 'Confirmed'].includes(order.status) && (
+              {['Order Received', 'Accepted', 'Packed', 'Confirmed'].includes(order.status) && (
                 <button
                   onClick={async () => {
                     const reason = window.prompt("Enter reason for cancelling your order:", "Changed my mind");
@@ -172,6 +167,7 @@ export default function OrderTrackingPage() {
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-2 relative z-10">
                 {(order.timeline || [
                   { status: 'Order Received', time: 'Order Placed', done: true, current: order.status === 'Order Received' },
+                  { status: 'Accepted', time: 'Team confirmed', done: ['Accepted', 'Packed', 'Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Accepted' },
                   { status: 'Packed', time: 'Warehouse Hub', done: ['Packed', 'Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Packed' },
                   { status: 'Ready for Dispatch', time: 'Sealed & Inspected', done: ['Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Ready for Dispatch' },
                   { status: 'Out for Delivery', time: 'On the Way', done: ['Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Out for Delivery' },
@@ -205,11 +201,9 @@ export default function OrderTrackingPage() {
             </div>
           </div>
 
-          {/* Delivery Details & Live Tracking Map Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-8 items-stretch pt-3 sm:pt-4 border-t border-stone-200">
-            
-            {/* Left: Delivery Partner Details */}
-            <div className="lg:col-span-5 bg-[#FAF7F2] rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 border border-[#E8E2D5] flex flex-col justify-between space-y-3.5 sm:space-y-6">
+          {/* Delivery Partner Details */}
+          <div className="pt-3 sm:pt-4 border-t border-stone-200">
+            <div className="max-w-xl bg-[#FAF7F2] rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 border border-[#E8E2D5] flex flex-col justify-between space-y-3.5 sm:space-y-6">
               <div>
                 <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-widest text-[#28543B]">
                   ASSIGNED COURIER / RIDER
@@ -293,67 +287,6 @@ export default function OrderTrackingPage() {
               </div>
 
             </div>
-
-            {/* Right: Live Tracking Simulated Map */}
-            <div className="lg:col-span-7 bg-[#0E2A1B] text-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-[#D4AF37]/30 flex flex-col justify-between relative overflow-hidden shadow-xl min-h-[260px] sm:min-h-[340px]">
-              
-              {/* Map Top Bar */}
-              <div className="relative z-10 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[10.5px] sm:text-xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span className="font-semibold text-[#D4AF37]">Live GPS Tracking</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[10.5px] sm:text-xs">
-                  <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#D4AF37]" />
-                  <span>ETA: <strong className="text-[#D4AF37]">{etaMinutes} mins</strong></span>
-                </div>
-              </div>
-
-              {/* Simulated Map Visual Graphic */}
-              <div className="absolute inset-0 z-0 opacity-40">
-                <svg viewBox="0 0 600 400" className="w-full h-full object-cover">
-                  {/* Grid Lines */}
-                  <defs>
-                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(212, 175, 55, 0.15)" strokeWidth="1" />
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="#0A2014" />
-                  <rect width="100%" height="100%" fill="url(#grid)" />
-                  
-                  {/* Winding Roads */}
-                  <path d="M 50 80 Q 200 40 300 180 T 520 320" fill="none" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="8" strokeLinecap="round" />
-                  <path d="M 80 340 Q 250 280 350 220 T 550 100" fill="none" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="6" strokeLinecap="round" />
-                  
-                  {/* Active Route Path in Gold */}
-                  <path d="M 120 120 C 180 160, 240 280, 360 220 S 480 300, 480 300" fill="none" stroke="#D4AF37" strokeWidth="4" strokeDasharray="6 4" />
-
-                  {/* Origin Warehouse Pin */}
-                  <circle cx="120" cy="120" r="8" fill="#1B3B29" stroke="#D4AF37" strokeWidth="3" />
-
-                  {/* Rider Pin */}
-                  <circle cx="320" cy="235" r="14" fill="#D4AF37" className="animate-pulse" />
-                  <circle cx="320" cy="235" r="7" fill="#0E2A1B" />
-
-                  {/* Destination Home Pin */}
-                  <circle cx="480" cy="300" r="10" fill="#E05A36" stroke="#FFFFFF" strokeWidth="2" />
-                </svg>
-              </div>
-
-              {/* Map Floating HUD status */}
-              <div className="relative z-10 mt-auto pt-16 sm:pt-24 flex items-end justify-between">
-                <div className="bg-[#143322]/90 backdrop-blur-md p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-[#D4AF37]/30 text-xs space-y-0.5 sm:space-y-1">
-                  <div className="flex items-center gap-1.5 text-[#D4AF37] font-bold text-[11px] sm:text-xs">
-                    <Navigation className="w-3.5 h-3.5 shrink-0" />
-                    <span>2.5 km away from delivery location</span>
-                  </div>
-                  <p className="text-[10px] sm:text-[11px] text-[#A2B5A8]">Rider has picked up freshly packed snacks from Fulfillment Hub.</p>
-                </div>
-              </div>
-
-            </div>
-
           </div>
 
           {/* Bottom Items in this Order */}

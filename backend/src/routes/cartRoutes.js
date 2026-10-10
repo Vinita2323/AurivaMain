@@ -16,7 +16,8 @@ const optionalAuth = async (req, res, next) => {
       const token = authHeader.split(' ')[1];
       try {
         const decoded = verifyToken(token);
-        if (decoded && decoded.id) {
+        // Only attach real USER accounts — ignore ADMIN JWTs on cart routes
+        if (decoded && decoded.id && decoded.role !== 'ADMIN') {
           const user = await User.findById(decoded.id);
           if (user) {
             req.user = user;

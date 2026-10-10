@@ -166,7 +166,7 @@ export const getCheckoutSummary = async (userId) => {
     deliveryFee: pricingPreview.deliveryFee,
     codDeliveryFee: shippingQuote?.cod?.fee ?? 0,
     onlineDeliveryFee: shippingQuote?.prepaid?.fee ?? 0,
-    shippingSource: 'shiprocket',
+    shippingSource: shippingQuote?.source || 'settings',
     shippingQuote,
     tax: pricingPreview.tax,
     total: pricingPreview.total,
@@ -332,7 +332,13 @@ export const placeOrder = async (userId, payload) => {
     productMap
   });
 
-  if (shipQuote.error && !shipQuote.freeDeliveryApplied && shipQuote.deliveryFee === 0) {
+  // Hard-fail only for real serviceability issues (invalid pin / no courier).
+  // Settings fallback and "not configured" never block place-order.
+  if (
+    shipQuote.error &&
+    shipQuote.source !== 'settings' &&
+    !shipQuote.freeDeliveryApplied
+  ) {
     const err = new Error(shipQuote.error);
     err.statusCode = 400;
     throw err;
@@ -343,7 +349,7 @@ export const placeOrder = async (userId, payload) => {
     discount,
     paymentMethod: normalizedPaymentMethod,
     settings,
-    deliveryFee: shipQuote.deliveryFee
+    deliveryFee: shipQuote.error ? undefined : shipQuote.deliveryFee
   });
   const { deliveryFee, tax, total } = pricing;
 
@@ -509,37 +515,12 @@ export const placeOrder = async (userId, payload) => {
       console.warn('[Notification Note] Order placement notifications error:', notifErr.message);
     }
 
-    // Record COD in payment ledger + push to Shiprocket (await so Hostinger doesn't drop the job)
+    // Record COD in payment ledger only.
+    // Shiprocket push is deferred until admin sets "Ready for Dispatch" (SHIPPED).
     if (normalizedPaymentMethod === 'COD') {
       await PaymentService.recordCodPayment(savedOrder, userId).catch(err => {
         console.warn('Could not record COD payment in ledger:', err.message);
       });
-
-      try {
-        const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
-        const srResult = await shiprocketFulfillmentService.tryAutoCreate(savedOrder._id);
-        if (srResult?.error) {
-          console.warn(`[Shiprocket] COD order ${savedOrder.orderNumber} not pushed:`, srResult.error);
-        } else if (srResult?.shiprocket?.orderId) {
-          // Attach fresh Shiprocket fields onto the response document
-          savedOrder.shiprocket = srResult.shiprocket;
-        }
-      } catch (e) {
-        console.warn('[Shiprocket] COD auto-create note:', e.message);
-      }
-    } else if (initialPaymentStatus === 'PAID') {
-      // Prepaid order created only after payment success — push to Shiprocket now
-      try {
-        const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
-        const srResult = await shiprocketFulfillmentService.tryAutoCreate(savedOrder._id);
-        if (srResult?.error) {
-          console.warn(`[Shiprocket] Prepaid order ${savedOrder.orderNumber} not pushed:`, srResult.error);
-        } else if (srResult?.shiprocket?.orderId) {
-          savedOrder.shiprocket = srResult.shiprocket;
-        }
-      } catch (e) {
-        console.warn('[Shiprocket] Prepaid auto-create note:', e.message);
-      }
     }
 
     // 9. Clear purchased items from Cart in DB
@@ -612,9 +593,10 @@ export const getUserOrders = async (userId) => {
  */
 export const ALLOWED_TRANSITIONS = {
   PENDING: ['CONFIRMED', 'CANCELLED'],
-  CONFIRMED: ['PACKED', 'CANCELLED'],
+  CONFIRMED: ['ACCEPTED', 'PACKED', 'CANCELLED'],
+  ACCEPTED: ['PACKED', 'CANCELLED'],
   PACKED: ['SHIPPED', 'CANCELLED'],
-  PROCESSING: ['SHIPPED', 'CANCELLED'],
+  PROCESSING: ['ACCEPTED', 'PACKED', 'SHIPPED', 'CANCELLED'],
   SHIPPED: ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
   OUT_FOR_DELIVERY: ['DELIVERED', 'CANCELLED'],
   DELIVERED: [], // Terminal
@@ -632,8 +614,11 @@ export const normalizeStatus = (statusStr) => {
   const mapping = {
     'ORDER_RECEIVED': 'CONFIRMED',
     'CONFIRMED': 'CONFIRMED',
+    'ACCEPTED': 'ACCEPTED',
+    'ACCEPTED_BY_ADMIN': 'ACCEPTED',
     'PACKED': 'PACKED',
-    'PROCESSING': 'PACKED',
+    // PROCESSING is an internal legacy/Shiprocket label — keep distinct from PACKED
+    'PROCESSING': 'PROCESSING',
     'READY_FOR_DISPATCH': 'SHIPPED',
     'DISPATCHED': 'SHIPPED',
     'SHIPPED': 'SHIPPED',
@@ -657,13 +642,14 @@ export const updateOrderTimeline = (order, newStatus, updatedBy = 'System', note
 
   const standardSteps = [
     { key: 'CONFIRMED', label: 'Order Received' },
+    { key: 'ACCEPTED', label: 'Accepted' },
     { key: 'PACKED', label: 'Packed' },
     { key: 'SHIPPED', label: 'Ready for Dispatch' },
     { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
     { key: 'DELIVERED', label: 'Delivered' }
   ];
 
-  const statusOrder = ['CONFIRMED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+  const statusOrder = ['CONFIRMED', 'ACCEPTED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
   const targetIndex = statusOrder.indexOf(newStatus);
 
   if (newStatus === 'CANCELLED') {
@@ -852,7 +838,23 @@ export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy 
   }
 
   updateOrderTimeline(order, newStatus, updatedBy, note);
-  const updatedOrder = await order.save();
+  let updatedOrder = await order.save();
+
+  // Push to Shiprocket only when admin marks Ready for Dispatch (SHIPPED)
+  if (newStatus === 'SHIPPED') {
+    try {
+      const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
+      const srResult = await shiprocketFulfillmentService.tryAutoCreate(updatedOrder._id);
+      if (srResult?.error) {
+        console.warn(`[Shiprocket] Ready-for-dispatch push failed for ${updatedOrder.orderNumber}:`, srResult.error);
+      } else {
+        const refreshed = await Order.findById(updatedOrder._id);
+        if (refreshed) updatedOrder = refreshed;
+      }
+    } catch (e) {
+      console.warn('[Shiprocket] Ready-for-dispatch push note:', e.message);
+    }
+  }
 
   // Trigger Notifications for Order Status Transition
   try {
@@ -860,7 +862,11 @@ export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy 
     let userMessage = `Your order #${order.orderNumber} status has been updated to ${newStatus}.`;
     let notifType = 'SYSTEM';
 
-    if (newStatus === 'PACKED') {
+    if (newStatus === 'ACCEPTED') {
+      userTitle = 'Order Accepted!';
+      userMessage = `Your order #${order.orderNumber} has been accepted by our team and will be packed shortly.`;
+      notifType = 'ORDER_CONFIRMED';
+    } else if (newStatus === 'PACKED') {
       userTitle = 'Order Packed!';
       userMessage = `Your order #${order.orderNumber} has been packed and is ready for dispatch.`;
       notifType = 'ORDER_PACKED';
@@ -962,8 +968,9 @@ export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
     };
   }
 
-  // Advance status to SHIPPED if currently CONFIRMED or PACKED
-  if (['CONFIRMED', 'PACKED', 'PROCESSING'].includes(order.status)) {
+  // Advance status to SHIPPED if still in warehouse stages
+  const becameShipped = ['CONFIRMED', 'ACCEPTED', 'PACKED', 'PROCESSING'].includes(order.status);
+  if (becameShipped) {
     order.status = 'SHIPPED';
   }
 
@@ -972,7 +979,23 @@ export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
   const noteMsg = `Dispatched via ${order.courierName || 'Standard Express'}${order.awbNumber ? ` (AWB: ${order.awbNumber})` : ''}`;
   updateOrderTimeline(order, 'SHIPPED', hubName, noteMsg);
 
-  const savedOrder = await order.save();
+  let savedOrder = await order.save();
+
+  // Push to Shiprocket when dispatch advances to Ready for Dispatch / SHIPPED
+  if (becameShipped || order.status === 'SHIPPED') {
+    try {
+      const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
+      const srResult = await shiprocketFulfillmentService.tryAutoCreate(savedOrder._id);
+      if (srResult?.error) {
+        console.warn(`[Shiprocket] Dispatch push failed for ${savedOrder.orderNumber}:`, srResult.error);
+      } else {
+        const refreshed = await Order.findById(savedOrder._id);
+        if (refreshed) savedOrder = refreshed;
+      }
+    } catch (e) {
+      console.warn('[Shiprocket] Dispatch push note:', e.message);
+    }
+  }
 
   try {
     if (savedOrder.user) {
@@ -1040,7 +1063,7 @@ export const cancelOrder = async (orderId, options = {}) => {
 
   // Customer cancellation rules: customer can only cancel if status is CONFIRMED or PACKED
   if (!isAdmin) {
-    if (!['CONFIRMED', 'PACKED', 'PROCESSING', 'PENDING'].includes(order.status)) {
+    if (!['CONFIRMED', 'ACCEPTED', 'PACKED', 'PROCESSING', 'PENDING'].includes(order.status)) {
       const err = new Error(
         `Order cannot be cancelled because it is already in "${order.status}" status. Please reach out to customer support.`
       );

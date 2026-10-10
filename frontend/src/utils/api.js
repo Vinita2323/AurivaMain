@@ -72,11 +72,16 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   // Attach appropriate Token if available
+  // IMPORTANT: Never send admin JWT on storefront/user APIs (cart, wishlist, orders…).
+  // Doing so causes User.findById(adminId) to fail → 401 → clears the fresh user session after OTP login.
+  let attachedAuthRole = null; // 'ADMIN' | 'USER' | null
   if (!headers.Authorization) {
     let adminToken = localStorage.getItem('auriva_admin_token');
     let userToken = localStorage.getItem('auriva_user_token');
-    const isAdminContext = endpoint.includes('/admin') || 
-      (typeof window !== 'undefined' && window.location.pathname.includes('/admin'));
+    const pathIsAdmin =
+      typeof window !== 'undefined' && window.location.pathname.includes('/admin');
+    const endpointIsAdmin = endpoint.includes('/admin') || endpoint.includes('/auth/admin');
+    const isAdminContext = endpointIsAdmin || pathIsAdmin;
 
     // Drop stale user JWTs before they spam 401s on checkout / orders
     if (userToken && isJwtExpired(userToken)) {
@@ -84,7 +89,7 @@ export async function apiRequest(endpoint, options = {}) {
       userToken = null;
     }
 
-    if (isAdminContext || (endpoint.includes('/fcm-tokens') && !userToken)) {
+    if (isAdminContext || (endpoint.includes('/fcm-tokens') && !userToken && pathIsAdmin)) {
       if (!adminToken && !endpoint.includes('/auth/admin/login')) {
         try {
           const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
@@ -104,14 +109,19 @@ export async function apiRequest(endpoint, options = {}) {
       }
       if (adminToken) {
         headers.Authorization = `Bearer ${adminToken}`;
+        attachedAuthRole = 'ADMIN';
       } else if (userToken) {
         headers.Authorization = `Bearer ${userToken}`;
+        attachedAuthRole = 'USER';
       }
     } else if (userToken) {
       headers.Authorization = `Bearer ${userToken}`;
-    } else if (adminToken) {
-      headers.Authorization = `Bearer ${adminToken}`;
+      attachedAuthRole = 'USER';
     }
+    // No admin-token fallback on user/storefront endpoints
+  } else if (typeof headers.Authorization === 'string') {
+    const payload = decodeJwtPayload(headers.Authorization.replace(/^Bearer\s+/i, ''));
+    attachedAuthRole = payload?.role === 'ADMIN' ? 'ADMIN' : payload ? 'USER' : null;
   }
 
   const controller = typeof timeoutMs === 'number' && timeoutMs > 0 ? new AbortController() : null;
@@ -159,12 +169,14 @@ export async function apiRequest(endpoint, options = {}) {
         }
       }
 
-      // User session expired / invalid — clear so checkout can prompt login
+      // User session expired / invalid — clear so checkout can prompt login.
+      // Only clear when THIS request actually used the user JWT (never after an admin-token mishap).
       const isUserAuthEndpoint = endpoint.includes('/auth/user');
       if (
         response.status === 401 &&
         !isAdminRetry &&
         !isUserAuthEndpoint &&
+        attachedAuthRole === 'USER' &&
         localStorage.getItem('auriva_user_token')
       ) {
         clearExpiredUserSession();
@@ -573,6 +585,10 @@ export const orderApi = {
 };
 
 // Admin Order Management API
+export const adminDashboardApi = {
+  getSummary: () => apiRequest('/admin/dashboard', { method: 'GET' })
+};
+
 export const adminOrderApi = {
   getAllOrders: (params = {}) => {
     const query = new URLSearchParams();
@@ -929,6 +945,7 @@ export default {
   wishlistApi,
   addressApi,
   orderApi,
+  adminDashboardApi,
   adminOrderApi,
   checkoutApi,
   shippingApi,

@@ -1,15 +1,34 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { 
-  LayoutDashboard, ShoppingCart, Package, Flame, FolderTree, 
+  LayoutDashboard, ShoppingCart, Package, FolderTree, 
   Boxes, Users, Tag, Star, Megaphone, Bell, 
   BarChart3, Settings, ExternalLink, X, ChefHat, UserCircle
 } from 'lucide-react';
 import Logo from '../../user/components/Logo';
+import { adminDashboardApi, adminNotificationApi } from '../../../utils/api';
+import { useAdmin } from '../../../context/AdminContext';
 
-export default function AdminSidebar({ isOpen, onClose }) {
+function formatBadge(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n > 999 ? '999+' : String(n);
+}
+
+export default function AdminSidebar({ isOpen, onClose, badges: badgesProp }) {
   const asideRef = useRef(null);
   const navRef = useRef(null);
+  const { coupons } = useAdmin();
+  const propOrders = badgesProp?.orders;
+  const propCoupons = badgesProp?.coupons;
+  const propNotifications = badgesProp?.notifications;
+  const hasPropBadges = badgesProp != null;
+  const [badges, setBadges] = useState({
+    orders: propOrders,
+    coupons: propCoupons ?? coupons?.length,
+    notifications: propNotifications
+  });
 
   // Lenis owns the page wheel — trap it on the sidebar so gentle scroll
   // moves the nav only, never the main admin content.
@@ -28,18 +47,64 @@ export default function AdminSidebar({ isOpen, onClose }) {
     return () => aside.removeEventListener('wheel', onWheel);
   }, []);
 
+  // Prefer parent-provided badges (dashboard); otherwise fetch lightweight counts
+  useEffect(() => {
+    if (hasPropBadges) {
+      setBadges((prev) => ({
+        ...prev,
+        orders: propOrders ?? prev.orders,
+        coupons: propCoupons ?? prev.coupons ?? coupons?.length,
+        notifications: propNotifications ?? prev.notifications
+      }));
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const [summaryRes, unreadRes] = await Promise.all([
+          adminDashboardApi.getSummary().catch(() => null),
+          adminNotificationApi.getUnreadCount().catch(() => null)
+        ]);
+        if (cancelled) return;
+        const quick = summaryRes?.data?.quick || summaryRes?.quick || {};
+        const unread =
+          unreadRes?.data?.unreadCount ??
+          unreadRes?.data?.count ??
+          unreadRes?.unreadCount ??
+          quick.unreadNotifications;
+        setBadges({
+          orders: quick.queueCount,
+          coupons: quick.couponCount ?? coupons?.length,
+          notifications: unread
+        });
+      } catch {
+        if (!cancelled) {
+          setBadges((prev) => ({
+            ...prev,
+            coupons: prev.coupons ?? coupons?.length
+          }));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPropBadges, propOrders, propCoupons, propNotifications, coupons?.length]);
+
   const links = [
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, end: true },
-    { name: 'Orders', path: '/admin/orders', icon: ShoppingCart, badge: '256' },
+    { name: 'Orders', path: '/admin/orders', icon: ShoppingCart, badge: formatBadge(badges.orders) },
     { name: 'Products', path: '/admin/products', icon: Package },
     { name: 'Categories', path: '/admin/categories', icon: FolderTree },
     { name: 'Inventory', path: '/admin/inventory', icon: Boxes },
     { name: 'Customers', path: '/admin/customers', icon: Users },
-    { name: 'Coupons', path: '/admin/coupons', icon: Tag, badge: '5' },
+    { name: 'Coupons', path: '/admin/coupons', icon: Tag, badge: formatBadge(badges.coupons) },
     { name: 'Reviews', path: '/admin/reviews', icon: Star },
     { name: 'Promotions', path: '/admin/promotions', icon: Megaphone },
     { name: 'Recipes', path: '/admin/recipes', icon: ChefHat },
-    { name: 'Notifications', path: '/admin/notifications', icon: Bell, badge: '3' },
+    { name: 'Notifications', path: '/admin/notifications', icon: Bell, badge: formatBadge(badges.notifications) },
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
     { name: 'Profile', path: '/admin/profile', icon: UserCircle },
     { name: 'Settings', path: '/admin/settings', icon: Settings },

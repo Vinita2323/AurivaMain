@@ -14,6 +14,7 @@ import { adminOrderApi } from '../../../utils/api';
 const STATUS_FILTERS = [
   { id: 'All', label: 'All Orders' },
   { id: 'Order Received', label: 'Received (Confirmed)' },
+  { id: 'Accepted', label: 'Accepted' },
   { id: 'Packed', label: 'Packed' },
   { id: 'Ready for Dispatch', label: 'Dispatched (Shipped)' },
   { id: 'Out for Delivery', label: 'Out for Delivery' },
@@ -120,6 +121,13 @@ export default function AdminOrders() {
       fetchOrders();
     }, 250);
     return () => clearTimeout(timer);
+  }, [fetchOrders]);
+
+  // Refresh list when an incoming-order alert is acknowledged (status unchanged)
+  useEffect(() => {
+    const onAccepted = () => { fetchOrders(); };
+    window.addEventListener('auriva:order-alert-accepted', onAccepted);
+    return () => window.removeEventListener('auriva:order-alert-accepted', onAccepted);
   }, [fetchOrders]);
 
   const refreshDetailOrder = async (orderId) => {
@@ -383,12 +391,15 @@ export default function AdminOrders() {
                                 ? 'bg-rose-50 text-rose-800 border-rose-300'
                                 : ord.status === 'Packed'
                                 ? 'bg-cyan-50 text-cyan-800 border-cyan-300'
+                                : ord.status === 'Accepted'
+                                ? 'bg-teal-50 text-teal-800 border-teal-300'
                                 : ord.status === 'Ready for Dispatch'
                                 ? 'bg-purple-50 text-purple-800 border-purple-300'
                                 : 'bg-blue-50 text-blue-800 border-blue-300'
                             }`}
                           >
                             <option value="Order Received">Order Received</option>
+                            <option value="Accepted">Accepted</option>
                             <option value="Packed">Packed</option>
                             <option value="Ready for Dispatch">Ready for Dispatch</option>
                             <option value="Out for Delivery">Out for Delivery</option>

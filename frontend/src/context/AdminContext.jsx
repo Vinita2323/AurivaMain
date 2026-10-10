@@ -18,10 +18,47 @@ const INITIAL_SETTINGS = {
   standardDeliveryFee: 40,
   codDeliveryFee: 60,
   gstRate: 5,
-  hubAddress: "AURIVÁ Central Fulfillment Hub, Plot 14, Sanwer Road Industrial Area, Indore, MP - 452015",
+  hubAddress: "House no. 1213, Sector 15, Sonipat, Haryana - 131001",
+  warehouseName: "AURIVÁ Warehouse — Sonipat",
+  warehouseAddress: "House no. 1213, Sector 15",
+  warehouseCity: "Sonipat",
+  warehouseState: "Haryana",
+  warehousePincode: "131001",
+  warehousePhone: "+91 98765 43210",
   lowStockThreshold: 30,
   currency: "₹"
 };
+
+const SETTINGS_UPDATE_KEYS = [
+  'gstRate',
+  'standardDeliveryFee',
+  'codDeliveryFee',
+  'freeDeliveryThreshold',
+  'lowStockThreshold',
+  'warehouseName',
+  'warehouseAddress',
+  'warehouseCity',
+  'warehouseState',
+  'warehousePincode',
+  'warehousePhone',
+  'hubAddress',
+  'storeName',
+  'storeEmail',
+  'supportEmail',
+  'storePhone',
+  'supportPhone',
+  'currency',
+  'storeAddress',
+  'timezone'
+];
+
+function sanitizeSettingsPayload(raw = {}) {
+  const out = {};
+  for (const key of SETTINGS_UPDATE_KEYS) {
+    if (raw[key] !== undefined) out[key] = raw[key];
+  }
+  return out;
+}
 
 const INITIAL_PROMOTIONS = [
   {
@@ -968,13 +1005,14 @@ export function AdminProvider({ children }) {
     }));
   };
 
-  // Settings Actions
+  // Settings Actions — only send allowlisted fields (never _id / configKey / timestamps)
   const updateSettings = async (newSettings) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    const payload = sanitizeSettingsPayload(newSettings);
+    setSettings(prev => ({ ...prev, ...payload }));
     try {
-      const res = await adminSettingsApi.updateSettings(newSettings);
+      const res = await adminSettingsApi.updateSettings(payload);
       if (res && res.data && res.data.settings) {
-        setSettings(res.data.settings);
+        setSettings(prev => ({ ...prev, ...res.data.settings }));
         return { success: true, settings: res.data.settings };
       }
       throw new Error(res?.message || 'Settings update did not return saved data.');

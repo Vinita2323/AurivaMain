@@ -579,18 +579,7 @@ class PaymentService {
     }
     await order.save();
 
-    // Push prepaid order to Shiprocket (await so hosting doesn't drop the job)
-    try {
-      const { default: shiprocketFulfillmentService } = await import('./shiprocketFulfillmentService.js');
-      const srResult = await shiprocketFulfillmentService.tryAutoCreate(order._id);
-      if (srResult?.error) {
-        console.warn(`[Shiprocket] Prepaid order ${order.orderNumber} not pushed:`, srResult.error);
-      } else if (srResult?.shiprocket?.orderId) {
-        order.shiprocket = srResult.shiprocket;
-      }
-    } catch (e) {
-      console.warn('[Shiprocket] Prepaid auto-create note:', e.message);
-    }
+    // Shiprocket is NOT pushed on payment — admin pushes on "Ready for Dispatch".
 
     // 9. Clear customer's cart
     await Cart.findOneAndUpdate(
@@ -666,12 +655,7 @@ class PaymentService {
             }
           });
 
-          try {
-            const { default: sr } = await import('./shiprocketFulfillmentService.js');
-            await sr.tryAutoCreate(payment.order);
-          } catch (e) {
-            console.warn('[Shiprocket] Webhook auto-create note:', e.message);
-          }
+          // Shiprocket deferred until admin "Ready for Dispatch"
         }
         break;
       }

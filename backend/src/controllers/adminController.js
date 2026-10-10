@@ -1,4 +1,5 @@
 import adminAuthService from '../services/adminAuthService.js';
+import { getDashboardSummary } from '../services/dashboardService.js';
 import User from '../models/User.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/status.js';
@@ -52,6 +53,19 @@ export const updateProfile = async (req, res, next) => {
     if (error.statusCode) {
       return sendError(res, error.message, {}, error.statusCode);
     }
+    next(error);
+  }
+};
+
+/**
+ * Executive Dashboard summary (live KPIs, chart, top products, recent orders)
+ * GET /api/v1/admin/dashboard
+ */
+export const getDashboard = async (req, res, next) => {
+  try {
+    const summary = await getDashboardSummary({ adminId: req.user?._id || null });
+    return sendSuccess(res, 'Dashboard summary fetched successfully', summary, HTTP_STATUS.OK);
+  } catch (error) {
     next(error);
   }
 };
@@ -128,6 +142,7 @@ export const updateUserStatus = async (req, res, next) => {
 export default {
   login,
   getProfile,
+  getDashboard,
   getAllUsers,
   updateUserStatus
 };

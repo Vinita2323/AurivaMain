@@ -89,7 +89,10 @@ export const formatOrder = (o) => {
     if (!s) return 'Order Received';
     const u = String(s).toUpperCase().replace(/\s+/g, '_');
     if (u === 'CONFIRMED' || u === 'ORDER_RECEIVED') return 'Order Received';
-    if (u === 'PACKED' || u === 'PROCESSING') return 'Packed';
+    if (u === 'ACCEPTED') return 'Accepted';
+    // PROCESSING is legacy/internal — treat as Accepted, never as Packed
+    if (u === 'PROCESSING') return 'Accepted';
+    if (u === 'PACKED') return 'Packed';
     if (u === 'SHIPPED' || u === 'READY_FOR_DISPATCH') return 'Ready for Dispatch';
     if (u === 'OUT_FOR_DELIVERY') return 'Out for Delivery';
     if (u === 'DELIVERED') return 'Delivered';
@@ -104,6 +107,7 @@ export const formatOrder = (o) => {
     customer: o.shippingAddress?.fullName || o.customer || "Customer",
     email: o.email || "customer@aurivafoods.com",
     phone: o.shippingAddress?.phoneNumber || o.phone || "+91 9876543210",
+    createdAt: o.createdAt || null,
     date: o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (o.date || 'Today'),
     time: o.createdAt ? new Date(o.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : (o.time || 'Just now'),
     items: o.items || [],
@@ -129,11 +133,12 @@ export const formatOrder = (o) => {
     cancelledBy: o.cancelledBy || null,
     cancelledAt: o.cancelledAt || null,
     timeline: o.timeline && o.timeline.length > 0 ? o.timeline : [
-      { status: "Order Received", time: "Order Placed", done: true, current: false },
-      { status: "Packed", time: "Warehouse Hub", done: true, current: false },
-      { status: "Ready for Dispatch", time: "In process", done: true, current: false },
-      { status: "Out for Delivery", time: "Live", done: true, current: true },
-      { status: "Delivered", time: "Estimated in 25 mins", done: false, current: false }
+      { status: "Order Received", time: "Order Placed", done: true, current: true },
+      { status: "Accepted", time: "Awaiting team", done: false, current: false },
+      { status: "Packed", time: "Warehouse Hub", done: false, current: false },
+      { status: "Ready for Dispatch", time: "In process", done: false, current: false },
+      { status: "Out for Delivery", time: "Live", done: false, current: false },
+      { status: "Delivered", time: "Estimated", done: false, current: false }
     ],
     rider: o.rider || {
       name: "Rohan Kumar",
@@ -358,6 +363,17 @@ export function AuthProvider({ children }) {
       const response = await userAuthApi.verifyOtp(phoneNumber, otp);
       if (response && response.data) {
         const { token: receivedToken, user: receivedUser } = response.data;
+
+        // Persist JWT synchronously BEFORE React effects (cart sync, address fetch)
+        // so apiRequest never falls back to an admin token and wipes this session.
+        try {
+          if (receivedToken) {
+            localStorage.setItem('auriva_user_token', receivedToken);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+
         setToken(receivedToken);
         
         // Enrich user with UI fields if needed
@@ -377,6 +393,12 @@ export function AuthProvider({ children }) {
           role: receivedUser.role || 'USER',
           status: receivedUser.status || 'ACTIVE'
         };
+
+        try {
+          localStorage.setItem('auriva_user', JSON.stringify(formattedUser));
+        } catch (e) {
+          console.error(e);
+        }
 
         setUser(formattedUser);
         setCustomers(prev => {

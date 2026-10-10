@@ -2,7 +2,7 @@ import env from '../config/env.js';
 import settingsService from './settingsService.js';
 import shiprocketClient from './shiprocketClient.js';
 import shiprocketFulfillmentService, { parseWeightToKg } from './shiprocketFulfillmentService.js';
-import { isCodPaymentMethod } from '../utils/pricing.js';
+import { isCodPaymentMethod, resolveDeliveryFee } from '../utils/pricing.js';
 
 function pickCourierRate(courier) {
   const rate = Number(
@@ -107,11 +107,33 @@ export async function resolveShiprocketDeliveryFee({
   if (!deliveryPostcode || deliveryPostcode.length !== 6) {
     return { ...empty, error: 'Valid 6-digit pincode required' };
   }
-  if (!pickup.pincode) {
-    return { ...empty, error: 'Warehouse pincode not configured' };
-  }
-  if (!shiprocketFulfillmentService.isReady()) {
-    return { ...empty, error: 'Shiprocket not configured on server' };
+
+  // Testing / missing credentials: fall back to store settings fees (do not block checkout)
+  const quotesEnabled = env.SHIPROCKET.CHECKOUT_QUOTES !== false;
+  if (!quotesEnabled || !shiprocketFulfillmentService.isReady() || !pickup.pincode) {
+    const prepaidFee = resolveDeliveryFee({
+      subtotal: amount,
+      paymentMethod: 'UPI',
+      settings
+    });
+    const codFee = resolveDeliveryFee({
+      subtotal: amount,
+      paymentMethod: 'COD',
+      settings
+    });
+    const selectedFee = isCodPaymentMethod(paymentMethod) ? codFee : prepaidFee;
+    return {
+      deliveryFee: selectedFee,
+      prepaid: { fee: prepaidFee, rawFee: prepaidFee, courier: null, etd: null, couriers: [] },
+      cod: { fee: codFee, rawFee: codFee, courier: null, etd: null, couriers: [] },
+      weightKg: weight,
+      pincode: deliveryPostcode,
+      pickupPincode: pickup.pincode || null,
+      paymentMethod: isCodPaymentMethod(paymentMethod) ? 'COD' : 'Prepaid',
+      source: 'settings',
+      freeDeliveryApplied: amount > 0 && amount >= Number(settings.freeDeliveryThreshold ?? 499),
+      error: null
+    };
   }
 
   try {
@@ -167,8 +189,31 @@ export async function resolveShiprocketDeliveryFee({
           ? 'No prepaid couriers available for this pincode'
           : null
     };
-  } catch (error) {
-    return { ...empty, error: error.message || 'Shiprocket rate lookup failed' };
+  } catch {
+    // Live resilience: never block checkout if Shiprocket API is down
+    const prepaidFee = resolveDeliveryFee({
+      subtotal: amount,
+      paymentMethod: 'UPI',
+      settings
+    });
+    const codFee = resolveDeliveryFee({
+      subtotal: amount,
+      paymentMethod: 'COD',
+      settings
+    });
+    const selectedFee = isCodPaymentMethod(paymentMethod) ? codFee : prepaidFee;
+    return {
+      deliveryFee: selectedFee,
+      prepaid: { fee: prepaidFee, rawFee: prepaidFee, courier: null, etd: null, couriers: [] },
+      cod: { fee: codFee, rawFee: codFee, courier: null, etd: null, couriers: [] },
+      weightKg: weight,
+      pincode: deliveryPostcode,
+      pickupPincode: pickup.pincode || null,
+      paymentMethod: isCodPaymentMethod(paymentMethod) ? 'COD' : 'Prepaid',
+      source: 'settings',
+      freeDeliveryApplied: amount > 0 && amount >= Number(settings.freeDeliveryThreshold ?? 499),
+      error: null
+    };
   }
 }
 
@@ -186,7 +231,7 @@ export async function getShippingQuote(params = {}) {
     paymentMethod: quote.paymentMethod,
     deliveryFee: quote.deliveryFee,
     freeDeliveryApplied: quote.freeDeliveryApplied,
-    source: 'shiprocket',
+    source: quote.source || 'shiprocket',
     selected: {
       fee: quote.deliveryFee,
       rawFee: selected?.rawFee ?? 0,

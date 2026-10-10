@@ -43,17 +43,23 @@ export const validateUpdateSettings = (req, res, next) => {
     );
   }
 
-  // Check for unauthorized / unapproved fields
-  const submittedKeys = Object.keys(body);
-  const unknownFields = submittedKeys.filter(key => !ALLOWED_SETTINGS_FIELDS.includes(key));
-  if (unknownFields.length > 0) {
+  // Ignore unknown keys (e.g. _id, configKey, createdAt from client form state)
+  // Keep only allowed fields on the request body for downstream update
+  const sanitizedBody = {};
+  for (const key of ALLOWED_SETTINGS_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body, key) && body[key] !== undefined) {
+      sanitizedBody[key] = body[key];
+    }
+  }
+  if (Object.keys(sanitizedBody).length === 0) {
     return sendError(
       res,
-      `Unapproved fields in settings update: ${unknownFields.join(', ')}`,
-      { unknownFields, allowedFields: ALLOWED_SETTINGS_FIELDS },
+      'No valid settings fields provided to update',
+      { allowedFields: ALLOWED_SETTINGS_FIELDS },
       HTTP_STATUS.UNPROCESSABLE_ENTITY
     );
   }
+  req.body = sanitizedBody;
 
   // 1. GST Rate validation
   if (body.gstRate !== undefined) {

@@ -100,6 +100,7 @@ export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatu
                 className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-bold rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white text-stone-800 shadow-2xs cursor-pointer"
               >
                 <option value="Order Received">Order Received (Confirmed)</option>
+                <option value="Accepted">Accepted</option>
                 <option value="Packed">Packed</option>
                 <option value="Ready for Dispatch">Ready for Dispatch (Shipped)</option>
                 <option value="Out for Delivery">Out for Delivery</option>

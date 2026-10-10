@@ -54,6 +54,8 @@ const env = {
     WEBHOOK_TOKEN: process.env.SHIPROCKET_WEBHOOK_TOKEN || '',
     // When true and credentials exist, create Shiprocket order after prepaid verify / COD place
     AUTO_CREATE: String(process.env.SHIPROCKET_AUTO_CREATE || 'true').toLowerCase() !== 'false',
+    // Checkout live rate quotes (set false to use store settings fees while testing)
+    CHECKOUT_QUOTES: String(process.env.SHIPROCKET_CHECKOUT_QUOTES || 'true').toLowerCase() !== 'false',
     // Auto pipeline depth after order confirm: create | awb | full
     // create = SR order only | awb = create + assign AWB | full = create→AWB→pickup→label→invoice
     AUTO_FULFILL: String(process.env.SHIPROCKET_AUTO_FULFILL || 'create').toLowerCase().trim(),

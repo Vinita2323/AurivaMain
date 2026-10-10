@@ -92,6 +92,8 @@ export function mapShiprocketStatusToOrderStatus(srStatus, statusCode = null) {
   ) {
     return 'SHIPPED';
   }
+  // Early warehouse / AWB states must NOT force Auriva PACKED.
+  // Admin Accept → ACCEPTED, Admin Pack → PACKED. Shiprocket only drives transit+.
   if (
     s.includes('PICKUP SCHEDULED') ||
     s.includes('PICKUP GENERATED') ||
@@ -101,25 +103,27 @@ export function mapShiprocketStatusToOrderStatus(srStatus, statusCode = null) {
     s.includes('LABEL GENERATED') ||
     s.includes('READY TO SHIP') ||
     s.includes('PACKED') ||
-    s.includes('INVOICED')
+    s.includes('INVOICED') ||
+    s.includes('NEW') ||
+    s.includes('CREATED') ||
+    s.includes('PROCESSING') ||
+    s.includes('PENDING')
   ) {
-    return 'PACKED';
-  }
-  if (s.includes('NEW') || s.includes('CREATED') || s.includes('PROCESSING') || s.includes('PENDING')) {
-    return 'PROCESSING';
+    return null;
   }
 
   // Numeric status_code fallback (Shiprocket webhook / track IDs)
   if (statusCode != null) {
     const codeMap = {
-      1: 'PROCESSING',
-      2: 'PACKED',
-      3: 'PACKED',
+      // 1–3 / 8 = early SR states — do not override admin warehouse workflow
+      1: null,
+      2: null,
+      3: null,
       4: 'SHIPPED',
       5: 'CANCELLED',
       6: 'SHIPPED',
       7: 'DELIVERED',
-      8: 'PROCESSING',
+      8: null,
       9: 'CANCELLED',
       10: 'OUT_FOR_DELIVERY',
       12: 'SHIPPED',
@@ -141,7 +145,8 @@ export function mapShiprocketStatusToOrderStatus(srStatus, statusCode = null) {
       46: 'SHIPPED',
       47: 'CANCELLED'
     };
-    return codeMap[Number(statusCode)] || null;
+    const mapped = codeMap[Number(statusCode)];
+    return mapped === undefined ? null : mapped;
   }
 
   return null;
@@ -153,10 +158,11 @@ export function canTransitionOrderStatus(from, to) {
   if (allowed.includes(to)) return true;
   // Shiprocket often skips intermediate warehouse steps
   const forwardJumps = {
-    PENDING: ['CONFIRMED', 'PACKED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
-    CONFIRMED: ['PACKED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
+    PENDING: ['CONFIRMED', 'ACCEPTED', 'PACKED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
+    CONFIRMED: ['ACCEPTED', 'PACKED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
+    ACCEPTED: ['PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
     PACKED: ['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
-    PROCESSING: ['PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
+    PROCESSING: ['ACCEPTED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
     SHIPPED: ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
     OUT_FOR_DELIVERY: ['DELIVERED', 'CANCELLED']
   };
@@ -543,14 +549,8 @@ class ShiprocketFulfillmentService {
       sr.lastUpdatedAt = new Date();
       sr.lastSyncedAt = new Date();
 
-      if (canTransitionOrderStatus(order.status, 'PROCESSING') && order.status === 'CONFIRMED') {
-        order.status = 'PROCESSING';
-        try {
-          updateOrderTimeline(order, 'PROCESSING', 'Shiprocket', `Created SR order ${srOrderId}`);
-        } catch (_) {
-          /* ignore */
-        }
-      }
+      // Keep Auriva warehouse status as CONFIRMED until admin Accepts / Packs.
+      // Shiprocket order creation must not jump the order to PROCESSING/PACKED.
 
       order.markModified('shiprocket');
       await order.save();
@@ -684,20 +684,7 @@ class ShiprocketFulfillmentService {
     order.courierName = sr.courierName || order.courierName;
     order.awbNumber = sr.awbCode;
 
-    if (canTransitionOrderStatus(order.status, 'PACKED')) {
-      order.status = 'PACKED';
-      try {
-        const settings = await settingsService.getSettings();
-        updateOrderTimeline(
-          order,
-          'PACKED',
-          settings.warehouseName || 'Warehouse',
-          `AWB ${sr.awbCode} assigned via Shiprocket (${sr.courierName || 'courier'})`
-        );
-      } catch (_) {
-        /* ignore */
-      }
-    }
+    // AWB assignment is logistics-only — do not auto-mark Auriva status as PACKED.
 
     order.markModified('shiprocket');
     await order.save();
@@ -1028,7 +1015,8 @@ class ShiprocketFulfillmentService {
   }
 
   /**
-   * Auto pipeline after COD / prepaid confirm.
+   * Push order to Shiprocket when admin marks Ready for Dispatch (SHIPPED).
+   * Not called on place-order / Accept / Pack.
    * SHIPROCKET_AUTO_FULFILL: create | awb | full
    */
   async tryAutoCreate(orderId) {

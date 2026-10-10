@@ -17,6 +17,27 @@ function App() {
     pushNotificationService.initializePushNotifications({
       onMessage: (payload) => {
         console.log('[Aurivá Push Engine] Received notification:', payload);
+        try {
+          const type =
+            payload?.data?.type ||
+            payload?.data?.notificationType ||
+            payload?.notification?.title ||
+            '';
+          window.dispatchEvent(
+            new CustomEvent('auriva:fcm-message', {
+              detail: { type, payload, data: payload?.data || {} }
+            })
+          );
+          if (String(type).toUpperCase().includes('ORDER')) {
+            window.dispatchEvent(
+              new CustomEvent('auriva:new-order', {
+                detail: { type, payload, data: payload?.data || {} }
+              })
+            );
+          }
+        } catch (_) {
+          /* ignore event dispatch failures */
+        }
       }
     });
   }, []);
