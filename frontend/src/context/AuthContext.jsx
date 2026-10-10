@@ -819,28 +819,73 @@ export function AuthProvider({ children }) {
   };
 
   const updateProfile = async (data) => {
-    setUser(prev => {
-      const updated = prev ? ({ ...prev, ...data }) : null;
-      if (updated) {
+    const prevSnapshot = user;
+
+    // Optimistic local merge for snappy UI
+    const optimisticPhone =
+      data.phone !== undefined
+        ? (() => {
+            const digits = String(data.phone || '').replace(/\D/g, '').slice(-10);
+            return digits ? `+91 ${digits}` : (prevSnapshot?.phone || '');
+          })()
+        : undefined;
+
+    const optimistic = {
+      ...(prevSnapshot || {}),
+      ...data,
+      ...(optimisticPhone !== undefined ? { phone: optimisticPhone } : {})
+    };
+    setUser(optimistic);
+    try {
+      localStorage.setItem('auriva_user', JSON.stringify(optimistic));
+    } catch (e) {}
+
+    if (!token) {
+      return { success: true, user: optimistic };
+    }
+
+    try {
+      const payload = { ...data };
+      if (payload.phone !== undefined) {
+        payload.phone = String(payload.phone || '').replace(/\D/g, '').slice(-10);
+      }
+      if (payload.email !== undefined) {
+        payload.email = String(payload.email || '').trim().toLowerCase();
+      }
+
+      const res = await userAuthApi.updateProfile(payload);
+      if (res?.data?.user) {
+        const serverUser = res.data.user;
+        const formatted = {
+          ...(prevSnapshot || {}),
+          ...serverUser,
+          id: serverUser._id || serverUser.id || prevSnapshot?.id,
+          name: serverUser.name ?? optimistic.name ?? '',
+          email: serverUser.email || '',
+          phone: serverUser.phone
+            ? `+91 ${String(serverUser.phone).replace(/\D/g, '').slice(-10)}`
+            : optimistic.phone || '',
+          avatar: serverUser.avatar ?? optimistic.avatar ?? '',
+          role: serverUser.role || prevSnapshot?.role || 'USER',
+          status: serverUser.status || prevSnapshot?.status || 'ACTIVE'
+        };
+        setUser(formatted);
         try {
-          localStorage.setItem('auriva_user', JSON.stringify(updated));
+          localStorage.setItem('auriva_user', JSON.stringify(formatted));
+        } catch (e) {}
+        return { success: true, user: formatted };
+      }
+      throw new Error(res?.message || 'Profile update did not return saved data.');
+    } catch (err) {
+      console.warn('[AuthContext] Backend updateProfile failed:', err.message);
+      // Roll back optimistic UI so failed edits do not look saved
+      if (prevSnapshot) {
+        setUser(prevSnapshot);
+        try {
+          localStorage.setItem('auriva_user', JSON.stringify(prevSnapshot));
         } catch (e) {}
       }
-      return updated;
-    });
-
-    if (token) {
-      try {
-        const res = await userAuthApi.updateProfile(data);
-        if (res?.data?.user) {
-          setUser(prev => ({
-            ...prev,
-            ...res.data.user
-          }));
-        }
-      } catch (err) {
-        console.warn('[AuthContext] Backend updateProfile note:', err.message);
-      }
+      throw err;
     }
   };
 

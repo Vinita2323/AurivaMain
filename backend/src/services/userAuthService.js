@@ -145,25 +145,49 @@ class UserAuthService {
       throw err;
     }
 
-    const allowedFields = ['name', 'email', 'avatar', 'addresses'];
-
     // Check if email already taken by another user
-    if (updateData.email && updateData.email.trim() !== '') {
-      const normalizedEmail = updateData.email.trim().toLowerCase();
-      const existingWithEmail = await User.findOne({
-        email: normalizedEmail,
-        _id: { $ne: userId }
-      });
-      if (existingWithEmail) {
-        const err = new Error('This email address is already in use by another account.');
-        err.statusCode = HTTP_STATUS.CONFLICT;
-        throw err;
+    if (updateData.email !== undefined) {
+      const rawEmail = String(updateData.email || '').trim().toLowerCase();
+      if (rawEmail) {
+        const existingWithEmail = await User.findOne({
+          email: rawEmail,
+          _id: { $ne: userId }
+        });
+        if (existingWithEmail) {
+          const err = new Error('This email address is already in use by another account.');
+          err.statusCode = HTTP_STATUS.CONFLICT;
+          throw err;
+        }
+        user.email = rawEmail;
+      } else {
+        user.email = undefined;
       }
-      user.email = normalizedEmail;
     }
 
     if (updateData.name !== undefined) {
-      user.name = updateData.name.trim();
+      user.name = String(updateData.name || '').trim();
+    }
+
+    // Phone is login identity — allow update only if unique 10-digit number
+    if (updateData.phone !== undefined) {
+      const digits = String(updateData.phone || '').replace(/\D/g, '').slice(-10);
+      if (digits.length !== 10) {
+        const err = new Error('Please enter a valid 10-digit mobile number.');
+        err.statusCode = HTTP_STATUS.BAD_REQUEST;
+        throw err;
+      }
+      if (digits !== user.phone) {
+        const existingWithPhone = await User.findOne({
+          phone: digits,
+          _id: { $ne: userId }
+        });
+        if (existingWithPhone) {
+          const err = new Error('This mobile number is already linked to another account.');
+          err.statusCode = HTTP_STATUS.CONFLICT;
+          throw err;
+        }
+        user.phone = digits;
+      }
     }
 
     if (updateData.avatar !== undefined) {

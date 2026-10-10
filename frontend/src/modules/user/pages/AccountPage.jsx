@@ -100,9 +100,21 @@ export default function AccountPage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   // Profile Form State
-  const [profileName, setProfileName] = useState(user?.name || 'Vini Sharma');
-  const [profilePhone, setProfilePhone] = useState(user?.phone || '9876543210');
+  const digitsOnlyPhone = (value) => String(value || '').replace(/\D/g, '').slice(-10);
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profileEmail, setProfileEmail] = useState(user?.email || '');
+  const [profilePhone, setProfilePhone] = useState(digitsOnlyPhone(user?.phone) || '');
   const [profileSaved, setProfileSaved] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+
+  // Keep form in sync when auth user loads / refreshes
+  useEffect(() => {
+    if (!user) return;
+    setProfileName(user.name || '');
+    setProfileEmail(user.email || '');
+    setProfilePhone(digitsOnlyPhone(user.phone) || '');
+  }, [user?.id, user?.name, user?.email, user?.phone]);
 
   // Block background scrolling when modal is open
   useEffect(() => {
@@ -393,15 +405,35 @@ export default function AccountPage() {
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    setProfileError('');
+    setProfileSaved(false);
+
+    const name = profileName.trim();
+    const email = profileEmail.trim().toLowerCase();
+    const phone = digitsOnlyPhone(profilePhone);
+
+    if (!name) {
+      setProfileError('Please enter your full name.');
+      return;
+    }
+    if (email && !/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/.test(email)) {
+      setProfileError('Please enter a valid email address.');
+      return;
+    }
+    if (phone.length !== 10) {
+      setProfileError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    setProfileSaving(true);
     try {
-      await updateProfile({
-        name: profileName.trim(),
-        phone: profilePhone.trim()
-      });
+      await updateProfile({ name, email, phone });
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2500);
     } catch (err) {
-      alert('Could not update profile: ' + (err.message || 'Error'));
+      setProfileError(err.message || 'Could not update profile. Please try again.');
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -1005,41 +1037,91 @@ export default function AccountPage() {
                 </div>
 
                 <form onSubmit={handleSaveProfile} className="space-y-4 max-w-lg">
+                  {profileError && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                      {profileError}
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">Full Name</label>
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="profileName">
+                      Full Name
+                    </label>
                     <input
+                      id="profileName"
+                      name="name"
                       type="text"
+                      autoComplete="name"
                       value={profileName}
-                      onChange={(e) => setProfileName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:border-[#0E2A1B]"
+                      onChange={(e) => {
+                        setProfileSaved(false);
+                        setProfileError('');
+                        setProfileName(e.target.value);
+                      }}
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 bg-white text-[#0E2A1B] focus:outline-none focus:border-[#0E2A1B]"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">Email Address</label>
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="profileEmail">
+                      Email Address
+                    </label>
                     <input
+                      id="profileEmail"
+                      name="email"
                       type="email"
-                      disabled
-                      value={user?.email || 'vini.sharma@gmail.com'}
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-200 bg-stone-100 text-stone-500 cursor-not-allowed"
+                      autoComplete="email"
+                      value={profileEmail}
+                      onChange={(e) => {
+                        setProfileSaved(false);
+                        setProfileError('');
+                        setProfileEmail(e.target.value);
+                      }}
+                      placeholder="you@example.com"
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 bg-white text-[#0E2A1B] focus:outline-none focus:border-[#0E2A1B]"
                     />
+                    <span className="text-[10px] text-stone-400 mt-0.5 block">Used for order updates and invoices</span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">Mobile Phone</label>
-                    <input
-                      type="tel"
-                      value={profilePhone}
-                      onChange={(e) => setProfilePhone(e.target.value)}
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:border-[#0E2A1B]"
-                    />
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="profilePhone">
+                      Mobile Phone
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-200 bg-stone-50 text-stone-600 shrink-0">
+                        +91
+                      </span>
+                      <input
+                        id="profilePhone"
+                        name="phone"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        maxLength={10}
+                        value={profilePhone}
+                        onChange={(e) => {
+                          setProfileSaved(false);
+                          setProfileError('');
+                          setProfilePhone(digitsOnlyPhone(e.target.value));
+                        }}
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 bg-white text-[#0E2A1B] focus:outline-none focus:border-[#0E2A1B]"
+                      />
+                    </div>
+                    <span className="text-[10px] text-stone-400 mt-0.5 block">
+                      10-digit number used for OTP login
+                    </span>
                   </div>
 
                   <button
                     type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-[#0E2A1B] text-[#D4AF37] font-bold text-xs uppercase tracking-wider hover:bg-[#1B3B29] transition-colors shadow-sm min-h-[44px]"
+                    disabled={profileSaving}
+                    className="px-6 py-2.5 rounded-xl bg-[#0E2A1B] text-[#D4AF37] font-bold text-xs uppercase tracking-wider hover:bg-[#1B3B29] transition-colors shadow-sm min-h-[44px] disabled:opacity-60"
                   >
-                    {profileSaved ? 'Saved Successfully ✓' : 'Update Profile'}
+                    {profileSaving
+                      ? 'Saving…'
+                      : profileSaved
+                      ? 'Saved Successfully ✓'
+                      : 'Update Profile'}
                   </button>
                 </form>
               </div>

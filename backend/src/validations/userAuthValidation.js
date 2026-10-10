@@ -74,7 +74,7 @@ export const validateVerifyOtp = (req, res, next) => {
  * Validate user profile updates
  */
 export const validateUpdateProfile = (req, res, next) => {
-  const { name, email } = req.body;
+  const { name, email, phone } = req.body;
 
   if (name !== undefined && typeof name !== 'string') {
     return sendError(
@@ -85,13 +85,25 @@ export const validateUpdateProfile = (req, res, next) => {
     );
   }
 
-  if (email) {
+  if (email !== undefined && email !== null && String(email).trim() !== '') {
     const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/;
     if (!emailRegex.test(String(email).trim())) {
       return sendError(
         res,
         'Please enter a valid email address.',
         { field: 'email', reason: 'INVALID_FORMAT' },
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+  }
+
+  if (phone !== undefined && phone !== null && String(phone).trim() !== '') {
+    const digits = String(phone).replace(/\D/g, '').slice(-10);
+    if (digits.length !== 10) {
+      return sendError(
+        res,
+        'Please enter a valid 10-digit mobile number.',
+        { field: 'phone', reason: 'INVALID_FORMAT' },
         HTTP_STATUS.BAD_REQUEST
       );
     }
