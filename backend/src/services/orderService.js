@@ -423,14 +423,6 @@ export const placeOrder = async (userId, payload) => {
     const initialPaymentStatus =
       String(paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'PENDING';
 
-    const timeline = [
-      { status: 'Order Received', time: `${timeStr}, ${dateStr}`, done: true, current: false },
-      { status: 'Packed', time: 'Just now', done: true, current: false },
-      { status: 'Ready for Dispatch', time: 'In process', done: true, current: false },
-      { status: 'Out for Delivery', time: 'Live', done: true, current: true },
-      { status: 'Delivered', time: 'Estimated in 25 mins', done: false, current: false }
-    ];
-
     const order = new Order({
       orderNumber,
       user: userId,
@@ -457,23 +449,17 @@ export const placeOrder = async (userId, payload) => {
           date: deliverySlot.date || dateStr,
           timeSlot: deliverySlot.timeSlot || 'Standard Delivery (1-3 Days)'
         },
-        status: 'In Transit',
+        status: 'Pending',
         estimatedDelivery: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
       },
       status: 'CONFIRMED',
-      timeline,
-      rider: {
-        name: 'Rohan Kumar',
-        phone: '+91 9811122334',
-        rating: 4.9,
-        vehicle: 'MP09-AB-1234',
-        eta: '25 mins',
-        distance: '2.5 km away',
-        lat: 22.7196,
-        lng: 75.8577
-      },
+      timeline: [],
+      rider: {},
       ...(idempotencyKey ? { idempotencyKey: String(idempotencyKey).trim() } : {})
     });
+
+    // Only "Order Received" is current at placement — never fake Out for Delivery
+    updateOrderTimeline(order, 'CONFIRMED', 'System', 'Order placed successfully');
 
     const savedOrder = await order.save();
 
@@ -504,7 +490,7 @@ export const placeOrder = async (userId, payload) => {
         message: `Your order #${savedOrder.orderNumber} for ₹${savedOrder.pricing.total} has been confirmed.`,
         type: 'ORDER_CONFIRMED',
         relatedId: savedOrder._id.toString(),
-        link: `/orders/${savedOrder.orderNumber}`,
+        link: `/order-tracking/${savedOrder.orderNumber}`,
         metadata: {
           orderId: savedOrder._id.toString(),
           orderNumber: savedOrder.orderNumber,
@@ -903,7 +889,7 @@ export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy 
         message: userMessage,
         type: notifType,
         relatedId: order._id.toString(),
-        link: `/orders/${order.orderNumber}`,
+        link: `/order-tracking/${order.orderNumber}`,
         metadata: { orderId: order._id.toString(), orderNumber: order.orderNumber, status: newStatus }
       });
     }
@@ -1006,7 +992,7 @@ export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
         message: `Your order #${savedOrder.orderNumber} has been dispatched${savedOrder.courierName ? ` via ${savedOrder.courierName}` : ''}${savedOrder.awbNumber ? ` (AWB: ${savedOrder.awbNumber})` : ''}.`,
         type: 'ORDER_SHIPPED',
         relatedId: savedOrder._id.toString(),
-        link: `/orders/${savedOrder.orderNumber}`,
+        link: `/order-tracking/${savedOrder.orderNumber}`,
         metadata: {
           orderId: savedOrder._id.toString(),
           orderNumber: savedOrder.orderNumber,
@@ -1061,7 +1047,7 @@ export const cancelOrder = async (orderId, options = {}) => {
     throw err;
   }
 
-  // Customer cancellation rules: customer can only cancel if status is CONFIRMED or PACKED
+  // Customer cancellation rules: customer can only cancel early in the lifecycle
   if (!isAdmin) {
     if (!['CONFIRMED', 'ACCEPTED', 'PACKED', 'PROCESSING', 'PENDING'].includes(order.status)) {
       const err = new Error(
@@ -1071,6 +1057,9 @@ export const cancelOrder = async (orderId, options = {}) => {
       throw err;
     }
   }
+
+  // Do not auto-restock units that are already with the courier
+  const shouldRestoreStock = !['SHIPPED', 'OUT_FOR_DELIVERY'].includes(order.status);
 
   // 2. Atomic state transition lock
   // Only transitions if status is NOT CANCELLED and isStockRestored is false.
@@ -1086,7 +1075,7 @@ export const cancelOrder = async (orderId, options = {}) => {
         cancelledBy: (cancelledBy || 'CUSTOMER').toUpperCase(),
         cancelledAt: new Date(),
         cancelReason: cancelReason || (isAdmin ? 'Cancelled by administrator' : 'Customer requested cancellation'),
-        isStockRestored: true
+        isStockRestored: shouldRestoreStock
       }
     },
     { new: true }
@@ -1098,23 +1087,38 @@ export const cancelOrder = async (orderId, options = {}) => {
     throw err;
   }
 
-  // 3. Atomically restore inventory stock for each ordered item
+  // 3. Atomically restore inventory stock for each ordered item (pre-dispatch only)
   const restoredItems = [];
-  for (const item of lockedOrder.items) {
-    if (item.product) {
-      try {
-        await Product.updateOne(
-          { _id: item.product },
-          {
-            $inc: { stockCount: item.qty },
-            $set: { inStock: true }
-          }
-        );
-        restoredItems.push({ product: item.product, qty: item.qty });
-      } catch (restockErr) {
-        console.error(`[Stock Restoration Error] Product ${item.product}:`, restockErr.message);
+  if (shouldRestoreStock) {
+    for (const item of lockedOrder.items) {
+      if (item.product) {
+        try {
+          await Product.updateOne(
+            { _id: item.product },
+            {
+              $inc: { stockCount: item.qty },
+              $set: { inStock: true }
+            }
+          );
+          restoredItems.push({ product: item.product, qty: item.qty });
+        } catch (restockErr) {
+          console.error(`[Stock Restoration Error] Product ${item.product}:`, restockErr.message);
+        }
       }
     }
+  }
+
+  // Release coupon usage slot so limits stay accurate
+  try {
+    const couponId = lockedOrder.pricing?.couponDetails?.couponId;
+    if (couponId) {
+      await Coupon.updateOne(
+        { _id: couponId, usedCount: { $gt: 0 } },
+        { $inc: { usedCount: -1 } }
+      );
+    }
+  } catch (couponErr) {
+    console.warn('[Coupon] Cancel usage decrement note:', couponErr.message);
   }
 
   // 4. Update timeline with persistent Cancellation step
@@ -1165,7 +1169,7 @@ export const cancelOrder = async (orderId, options = {}) => {
           : `Your order #${lockedOrder.orderNumber} was cancelled by store administration. Reason: ${lockedOrder.cancelReason || 'Support action'}.`,
         type: 'ORDER_CANCELLED',
         relatedId: lockedOrder._id.toString(),
-        link: `/orders/${lockedOrder.orderNumber}`,
+        link: `/order-tracking/${lockedOrder.orderNumber}`,
         metadata: {
           orderId: lockedOrder._id.toString(),
           orderNumber: lockedOrder.orderNumber,

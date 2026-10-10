@@ -90,23 +90,7 @@ export async function apiRequest(endpoint, options = {}) {
     }
 
     if (isAdminContext || (endpoint.includes('/fcm-tokens') && !userToken && pathIsAdmin)) {
-      if (!adminToken && !endpoint.includes('/auth/admin/login')) {
-        try {
-          const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: 'admin@aurivafoods.com', password: 'Admin@123456' })
-          });
-          const authData = await authRes.json();
-          if (authData && authData.data && authData.data.token) {
-            adminToken = authData.data.token;
-            localStorage.setItem('auriva_admin_token', adminToken);
-            localStorage.setItem('auriva_admin_auth', 'true');
-          }
-        } catch (e) {
-          console.warn('Auto admin token recovery note:', e.message);
-        }
-      }
+      // Never auto-login with embedded credentials — admin must sign in via /admin/login
       if (adminToken) {
         headers.Authorization = `Bearer ${adminToken}`;
         attachedAuthRole = 'ADMIN';
@@ -142,30 +126,16 @@ export async function apiRequest(endpoint, options = {}) {
       // Auto-retry once on 401 Unauthorized for admin endpoints
       const isAdminRetry = endpoint.includes('/admin') || 
         (typeof window !== 'undefined' && window.location.pathname.includes('/admin'));
-      if (response.status === 401 && isAdminRetry && !fetchOptions._retried && !endpoint.includes('/auth/admin/login')) {
+      if (response.status === 401 && isAdminRetry && !endpoint.includes('/auth/admin/login')) {
         try {
-          const authRes = await fetch(`${API_BASE}/auth/admin/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: 'admin@aurivafoods.com', password: 'Admin@123456' })
-          });
-          const authData = await authRes.json();
-          if (authData?.data?.token) {
-            const freshToken = authData.data.token;
-            localStorage.setItem('auriva_admin_token', freshToken);
-            localStorage.setItem('auriva_admin_auth', 'true');
-            return apiRequest(endpoint, {
-              ...fetchOptions,
-              timeoutMs,
-              _retried: true,
-              headers: {
-                ...fetchOptions.headers,
-                Authorization: `Bearer ${freshToken}`
-              }
-            });
-          }
-        } catch (retryErr) {
-          console.warn('Admin token refresh failed:', retryErr.message);
+          localStorage.removeItem('auriva_admin_token');
+          localStorage.removeItem('auriva_admin_auth');
+          localStorage.removeItem('auriva_admin_user');
+        } catch {
+          // ignore
+        }
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/admin/login')) {
+          window.location.assign('/admin/login');
         }
       }
 

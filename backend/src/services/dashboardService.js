@@ -4,7 +4,11 @@ import Product from '../models/Product.js';
 import Coupon from '../models/Coupon.js';
 import Notification from '../models/Notification.js';
 
-const ACTIVE_ORDER_FILTER = { status: { $ne: 'CANCELLED' } };
+// Revenue / GMV: exclude cancelled + failed payments (COD PENDING still counts as booked GMV)
+const ACTIVE_ORDER_FILTER = {
+  status: { $ne: 'CANCELLED' },
+  'payment.status': { $nin: ['FAILED'] }
+};
 const QUEUE_STATUSES = ['PENDING', 'CONFIRMED', 'ACCEPTED', 'PACKED', 'PROCESSING'];
 
 function startOfMonth(date) {

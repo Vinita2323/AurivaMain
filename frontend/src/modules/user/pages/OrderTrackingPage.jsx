@@ -14,59 +14,101 @@ import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
 import { useAuth, formatOrder } from '../../../context/AuthContext';
 import { orderApi } from '../../../utils/api';
-import { INITIAL_ORDERS } from '../../../data/adminData';
 
 export default function OrderTrackingPage() {
   const { orderId } = useParams();
   const { orders, cancelOrder } = useAuth();
   const [liveOrder, setLiveOrder] = useState(null);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isInvoicePreviewOpen, setIsInvoicePreviewOpen] = useState(false);
   const pollRef = useRef(null);
 
   // Fetch once on mount, then poll every 15s for status updates
-  const fetchOrder = async (id) => {
+  const fetchOrder = async (id, { silent = false } = {}) => {
+    if (!silent) setIsLoading(true);
     try {
       const res = await orderApi.getOrderById(id);
       if (res?.data?.order) {
         setLiveOrder(formatOrder(res.data.order));
         setIsLiveConnected(true);
+        setLoadError('');
+      } else if (!silent) {
+        setLoadError('Order not found.');
       }
     } catch (err) {
       console.warn('[OrderTrackingPage] Backend order fetch note:', err.message);
       setIsLiveConnected(false);
+      if (!silent) {
+        setLoadError(err.message || 'Could not load this order.');
+      }
+    } finally {
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderId) {
+      setIsLoading(false);
+      setLoadError('Missing order id.');
+      return;
+    }
 
-    // Initial fetch
+    setLiveOrder(null);
+    setLoadError('');
     fetchOrder(orderId);
 
-    // Start polling for live status updates
-    pollRef.current = setInterval(() => fetchOrder(orderId), ORDER_POLL_INTERVAL_MS);
+    pollRef.current = setInterval(() => fetchOrder(orderId, { silent: true }), ORDER_POLL_INTERVAL_MS);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [orderId]);
 
-  // Find target order: live from API, from context, or fallback
-  const order = liveOrder || orders.find(o => o.id === orderId || o.orderNumber === orderId) || INITIAL_ORDERS.find(o => o.id === 'AV10294') || orders[0] || {
-    id: orderId || 'AV41186',
-    status: 'Out for Delivery',
-    date: '18 Aug 2026',
-    total: 459,
-    items: [
-      { name: 'Classic Salted Roasted Makhana', weight: '150g', qty: 2, price: 199, image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=150' },
-      { name: 'Peri Peri Gourmet Makhana', weight: '150g', qty: 1, price: 249, image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=150' }
-    ]
-  };
+  // Only real order from API or the user's own order list — never demo data
+  const order =
+    liveOrder ||
+    orders.find((o) => o.id === orderId || o.orderNumber === orderId) ||
+    null;
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+
+  if (isLoading && !order) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#F7F3E9]">
+        <AnnouncementBar />
+        <Header />
+        <main className="flex-1 flex items-center justify-center p-8 text-sm text-stone-500">
+          Loading order…
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#F7F3E9]">
+        <AnnouncementBar />
+        <Header />
+        <main className="flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="text-sm font-semibold text-[#0E2A1B]">
+            {loadError || 'Order not found'}
+          </p>
+          <Link
+            to="/account?tab=orders"
+            className="text-xs font-bold uppercase tracking-wider text-[#D4AF37] hover:underline"
+          >
+            Back to My Orders
+          </Link>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col justify-between bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] font-sans">

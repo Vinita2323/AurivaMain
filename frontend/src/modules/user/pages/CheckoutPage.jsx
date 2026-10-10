@@ -146,10 +146,12 @@ export default function CheckoutPage() {
     paymentMethod: 'COD',
     settings: shippingSettings || {}
   });
+  // Allow checkout when quote failed — settings fees still apply (matches backend fallback)
   const shippingReady =
     !shiprocketCheckoutEnabled ||
     !pinReady ||
-    (!shippingQuoteLoading && shippingQuote && !shippingQuote.error);
+    (!shippingQuoteLoading &&
+      (shippingQuote == null || !shippingQuote.error || shippingQuote.source === 'settings'));
   const shippingLabel =
     !shiprocketCheckoutEnabled
       ? isCodPayment
@@ -216,8 +218,15 @@ export default function CheckoutPage() {
         setShippingQuote(res?.data?.quote || res?.quote || null);
       } catch {
         if (!cancelled) {
-          lastShippingKeyRef.current = '';
-          setShippingQuote(null);
+          // Soft-fail: use settings fees instead of blocking Confirm & Pay
+          lastShippingKeyRef.current = key;
+          setShippingQuote({
+            source: 'settings',
+            error: null,
+            freeDeliveryApplied: false,
+            prepaid: { fee: settingsPrepaidFee },
+            cod: { fee: settingsCodFee }
+          });
         }
       } finally {
         if (!cancelled) setShippingQuoteLoading(false);
@@ -380,7 +389,11 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (shiprocketCheckoutEnabled && shippingQuote?.error) {
+    if (
+      shiprocketCheckoutEnabled &&
+      shippingQuote?.error &&
+      shippingQuote.source !== 'settings'
+    ) {
       setOrderError(shippingQuote.error);
       return;
     }

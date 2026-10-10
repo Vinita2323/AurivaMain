@@ -16,8 +16,8 @@ router.post('/', requireUser, validatePlaceOrder, orderController.placeOrder);
 // GET /api/orders - Get orders of the logged-in user
 router.get('/', requireUser, orderController.getUserOrders);
 
-// GET /api/orders/:id - Get single order by ID or orderNumber
-router.get('/:id', validateOrderId, orderController.getOrderById);
+// GET /api/orders/:id - Get single order by ID or orderNumber (customer only)
+router.get('/:id', requireUser, validateOrderId, orderController.getOrderById);
 
 // GET /api/orders/:id/invoice - Download customer invoice PDF
 router.get('/:id/invoice', requireUser, validateOrderId, invoiceController.getOrderInvoice);
