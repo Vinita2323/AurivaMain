@@ -477,22 +477,42 @@ class CartService {
       const prodId = item.productId || item.product?._id || item.product || item.id;
       if (!prodId) continue;
 
+      // Resolve slug / id to a real catalog product (same as addToCart)
+      let product = null;
+      if (mongoose.Types.ObjectId.isValid(String(prodId))) {
+        product = await Product.findById(prodId);
+      }
+      if (!product) {
+        product = await Product.findOne({ slug: String(prodId) });
+      }
+      if (!product) continue;
+
+      const weight = item.weight || product.weight || '150g';
       const existingIndex = userCart.items.findIndex(
-        (it) => it.product.toString() === prodId.toString() && it.weight === (item.weight || '150g')
+        (it) => it.product.toString() === product._id.toString() && it.weight === weight
       );
 
       const qtyToAdd = Math.max(1, Number(item.qty || 1));
+      let finalPrice = product.price;
+      let finalOldPrice = product.oldPrice || 0;
+      if (product.weightOptions?.length) {
+        const match = product.weightOptions.find((w) => w.weight === weight);
+        if (match) {
+          finalPrice = match.price;
+          finalOldPrice = match.oldPrice || 0;
+        }
+      }
 
       if (existingIndex > -1) {
         userCart.items[existingIndex].qty = Math.max(userCart.items[existingIndex].qty, qtyToAdd);
       } else {
         userCart.items.push({
-          product: prodId,
-          name: item.name || 'Snack Product',
-          image: item.image || '',
-          weight: item.weight || '150g',
-          price: Number(item.price || 249),
-          oldPrice: Number(item.oldPrice || 0),
+          product: product._id,
+          name: product.name || item.name || 'Snack Product',
+          image: product.image || item.image || '',
+          weight,
+          price: Number(finalPrice || item.price || 0),
+          oldPrice: Number(finalOldPrice || item.oldPrice || 0),
           qty: qtyToAdd
         });
       }

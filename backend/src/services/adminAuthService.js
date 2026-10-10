@@ -19,12 +19,15 @@ class AdminAuthService {
       throw err;
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail =
+      email.trim().toLowerCase() === 'admin'
+        ? 'admin@aurivafoods.com'
+        : email.trim().toLowerCase();
 
     // Offline / Disconnected development fallback
     if (mongoose.connection.readyState !== 1) {
       if (
-        (normalizedEmail === 'admin@aurivafoods.com' || normalizedEmail === 'admin') &&
+        normalizedEmail === 'admin@aurivafoods.com' &&
         (password === 'Admin@123456' || password === 'admin' || password === 'auriva@2026')
       ) {
         const fallbackAdmin = {
@@ -209,15 +212,21 @@ class AdminAuthService {
   }
 
   /**
-   * Ensure initial default super admin exists on server boot
+   * Ensure default super admin exists on server boot.
+   * In development (or when RESET_DEFAULT_ADMIN_PASSWORD=true), also reset
+   * password to Admin@123456 so local login always works with documented credentials.
    */
   async ensureDefaultAdmin() {
+    const defaultEmail = 'admin@aurivafoods.com';
+    const defaultPassword = 'Admin@123456';
+    const shouldResetPassword =
+      String(process.env.RESET_DEFAULT_ADMIN_PASSWORD || '').toLowerCase() === 'true' ||
+      String(process.env.NODE_ENV || 'development').toLowerCase() !== 'production';
+
     try {
-      const adminCount = await Admin.countDocuments();
-      if (adminCount === 0) {
-        const defaultEmail = 'admin@aurivafoods.com';
-        const defaultPassword = 'Admin@123456';
-        
+      let admin = await Admin.findOne({ email: defaultEmail }).select('+password');
+
+      if (!admin) {
         await Admin.create({
           name: 'Super Admin',
           email: defaultEmail,
@@ -226,8 +235,20 @@ class AdminAuthService {
           status: ACCOUNT_STATUS.ACTIVE,
           permissions: ['SUPER_ADMIN']
         });
+        console.log(`[Admin Seeding] Seeded Super Admin: ${defaultEmail} / ${defaultPassword}`);
+        return;
+      }
 
-        console.log(`[Admin Seeding] Seeded initial Super Admin account: ${defaultEmail}`);
+      if (shouldResetPassword) {
+        const matches = await admin.comparePassword(defaultPassword);
+        if (!matches) {
+          admin.password = defaultPassword;
+          admin.status = ACCOUNT_STATUS.ACTIVE;
+          await admin.save();
+          console.log(
+            `[Admin Seeding] Reset Super Admin password for ${defaultEmail} (dev / RESET_DEFAULT_ADMIN_PASSWORD)`
+          );
+        }
       }
     } catch (error) {
       console.error('[Admin Seeding Error] Could not seed default admin:', error.message);

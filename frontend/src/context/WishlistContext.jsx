@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { wishlistApi } from '../utils/api';
+import { useAuth } from './AuthContext';
 
 const WishlistContext = createContext();
 
@@ -17,6 +18,7 @@ const getOrCreateGuestId = () => {
 };
 
 export function WishlistProvider({ children }) {
+  const { token, isAuthenticated } = useAuth();
   const [guestId] = useState(getOrCreateGuestId);
 
   // Wishlist starts CLEAN and EMPTY - zero hardcoded dummy items
@@ -85,6 +87,27 @@ export function WishlistProvider({ children }) {
   useEffect(() => {
     refreshWishlistFromBackend();
   }, [refreshWishlistFromBackend]);
+
+  // After OTP login, merge guest/local wishlist into the authenticated account
+  useEffect(() => {
+    if (!token || !isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const localSaved = localStorage.getItem('auriva_wishlist');
+        const parsed = localSaved ? JSON.parse(localSaved) : [];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          await wishlistApi.syncWishlist(parsed, guestId);
+        }
+        if (!cancelled) await refreshWishlistFromBackend();
+      } catch (err) {
+        console.warn('[WishlistContext] Post-login sync note:', err.message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isAuthenticated, guestId, refreshWishlistFromBackend]);
 
   /**
    * Check if a product is in wishlist

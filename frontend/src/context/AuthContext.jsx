@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { INITIAL_ORDERS } from '../data/adminData';
 import { userAuthApi, addressApi, orderApi, cartApi, isJwtExpired } from '../utils/api';
 import confetti from 'canvas-confetti';
 import pushNotificationService from '../services/pushNotificationService';
@@ -169,11 +168,20 @@ export function AuthProvider({ children }) {
   const [orders, setOrders] = useState(() => {
     try {
       const saved = localStorage.getItem('auriva_orders');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Never hydrate demo/seed orders for a real session
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const looksLikeDemo = parsed.some(
+            (o) => o?.id === 'AV10294' || o?.customer === 'Vini Sharma'
+          );
+          if (!looksLikeDemo) return parsed;
+        }
+      }
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_ORDERS;
+    return [];
   });
 
   const [customers, setCustomers] = useState(() => {
@@ -205,34 +213,8 @@ export function AuthProvider({ children }) {
     return INITIAL_CUSTOMERS;
   });
 
-  const [addresses, setAddresses] = useState(() => {
-    return [
-      {
-        id: "addr-1",
-        type: "Home",
-        isDefault: true,
-        street: "32, Green Park, A-Block, Near Lotus Lake",
-        city: "Indore",
-        state: "Madhya Pradesh",
-        pincode: "452001",
-        phone: "9876543210",
-        name: "Vini Sharma"
-      },
-      {
-        id: "addr-2",
-        type: "Work",
-        isDefault: false,
-        street: "Tech Tower 4, 3rd Floor, Vijay Nagar",
-        city: "Indore",
-        state: "Madhya Pradesh",
-        pincode: "452010",
-        phone: "9876543210",
-        name: "Vini Sharma"
-      }
-    ];
-  });
-
-  const [selectedAddressId, setSelectedAddressId] = useState("addr-1");
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
 
   useEffect(() => {
     try {
@@ -302,12 +284,14 @@ export function AuthProvider({ children }) {
 
     addressApi.getAddresses()
       .then(res => {
-        if (res?.data?.addresses && res.data.addresses.length > 0) {
-          const formatted = res.data.addresses.map(formatAddress);
-          setAddresses(formatted);
+        const list = Array.isArray(res?.data?.addresses) ? res.data.addresses : [];
+        const formatted = list.map(formatAddress);
+        setAddresses(formatted);
+        if (formatted.length > 0) {
           const def = formatted.find(a => a.isDefault);
-          if (def) setSelectedAddressId(def.id);
-          else setSelectedAddressId(formatted[0].id);
+          setSelectedAddressId(def ? def.id : formatted[0].id);
+        } else {
+          setSelectedAddressId(null);
         }
       })
       .catch(err => {
@@ -321,10 +305,8 @@ export function AuthProvider({ children }) {
 
     orderApi.getUserOrders()
       .then(res => {
-        if (res?.data?.orders && res.data.orders.length > 0) {
-          const formatted = res.data.orders.map(formatOrder);
-          setOrders(formatted);
-        }
+        const list = Array.isArray(res?.data?.orders) ? res.data.orders : [];
+        setOrders(list.map(formatOrder));
       })
       .catch(err => {
         if (err?.status === 401) {
@@ -401,6 +383,13 @@ export function AuthProvider({ children }) {
         }
 
         setUser(formattedUser);
+        // Drop any leftover demo order history from localStorage
+        setOrders([]);
+        try {
+          localStorage.setItem('auriva_orders', '[]');
+        } catch (e) {
+          console.error(e);
+        }
         setCustomers(prev => {
           const exists = prev.some(c => c.phone === formattedUser.phone);
           return exists ? prev : [formattedUser, ...prev];
@@ -410,13 +399,10 @@ export function AuthProvider({ children }) {
       }
       return { success: false, message: 'Invalid response from server' };
     } catch (err) {
-      // Offline fallback for seamless testing
-      if (err.isNetworkError) {
-        return loginWithPhone(phoneNumber);
-      }
+      // Never create a fake logged-in session without a JWT
       return {
         success: false,
-        message: err.message || 'Verification failed'
+        message: err.message || 'Verification failed. Please check your connection and try again.'
       };
     }
   };
@@ -679,7 +665,7 @@ export function AuthProvider({ children }) {
       const res = await orderApi.placeOrder(payload);
       if (res && res.data && res.data.order) {
         const formatted = formatOrder(res.data.order);
-        setOrders(prev => [formatted, ...prev]);
+        setOrders(prev => [formatted, ...prev.filter((o) => o.id !== formatted.id)]);
 
         // Trigger confetti
         try {
@@ -695,66 +681,11 @@ export function AuthProvider({ children }) {
 
         return formatted.id;
       }
+
+      throw new Error(res?.message || 'Order could not be placed. Please try again.');
     }
 
-    // Fallback simulation for offline testing
-    const newOrderId = `AV${Math.floor(10000 + Math.random() * 90000)}`;
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
-    const newOrder = {
-      id: newOrderId,
-      customer: user?.name || orderPayload.name || "Guest Customer",
-      email: user?.email || orderPayload.email || "guest@aurivafoods.com",
-      phone: user?.phone || orderPayload.phone || "+91 9876543210",
-      date: dateStr,
-      time: timeStr,
-      items: orderPayload.items,
-      subtotal: orderPayload.subtotal,
-      discount: orderPayload.discount,
-      couponApplied: orderPayload.couponApplied || 'None',
-      deliveryFee: orderPayload.deliveryFee,
-      tax: orderPayload.tax,
-      total: orderPayload.total,
-      paymentMethod: orderPayload.paymentMethod || 'UPI',
-      paymentStatus: "Paid",
-      deliveryType: orderPayload.deliveryType || "Quick Commerce",
-      status: "Out for Delivery",
-      timeline: [
-        { status: "Order Received", time: `${timeStr}, ${dateStr}`, done: true, current: false },
-        { status: "Packed", time: "Just now", done: true, current: false },
-        { status: "Ready for Dispatch", time: "In process", done: true, current: false },
-        { status: "Out for Delivery", time: "Live", done: true, current: true },
-        { status: "Delivered", time: "Estimated in 25 mins", done: false, current: false }
-      ],
-      rider: {
-        name: "Rohan Kumar",
-        phone: "+91 9811122334",
-        rating: 4.9,
-        vehicle: "MP09-AB-1234",
-        eta: "25 mins",
-        distance: "2.5 km away",
-        lat: 22.7196,
-        lng: 75.8577
-      },
-      address: orderPayload.address || addresses.find(a => a.id === selectedAddressId) || addresses[0]
-    };
-
-    setOrders(prev => [newOrder, ...prev]);
-
-    try {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#D4AF37', '#1B3B29', '#E5C358', '#0E2A1B']
-      });
-    } catch {
-      // ignore
-    }
-
-    return newOrderId;
+    throw new Error('Please log in to place your order.');
   };
 
   const updateOrderStatus = (orderId, newStatus, extraData = {}) => {

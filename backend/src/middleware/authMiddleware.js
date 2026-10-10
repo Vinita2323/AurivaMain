@@ -51,19 +51,17 @@ export const authMiddleware = async (req, res, next) => {
       );
     }
 
-    // Identify user based on decoded role
+    // Identify user based on decoded role — fail closed when DB is offline
     let account = null;
     if (mongoose.connection.readyState !== 1) {
-      // Database offline fallback: construct account directly from verified token
-      account = {
-        _id: decoded.id || 'admin-fallback-001',
-        id: decoded.id || 'admin-fallback-001',
-        name: decoded.name || 'Super Admin',
-        email: decoded.email || 'admin@aurivafoods.com',
-        role: decoded.role || ROLES.ADMIN,
-        status: ACCOUNT_STATUS.ACTIVE
-      };
-    } else if (decoded.role === ROLES.ADMIN) {
+      return sendError(
+        res,
+        'Database temporarily unavailable. Please try again shortly.',
+        { reason: 'DB_OFFLINE' },
+        HTTP_STATUS.SERVICE_UNAVAILABLE
+      );
+    }
+    if (decoded.role === ROLES.ADMIN) {
       account = await Admin.findById(decoded.id);
     } else {
       account = await User.findById(decoded.id);

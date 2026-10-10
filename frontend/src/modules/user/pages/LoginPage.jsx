@@ -15,7 +15,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { user, requestOtp, verifyOtpAndLogin } = useAuth();
+  const { user, token, isAuthenticated, requestOtp, verifyOtpAndLogin } = useAuth();
 
   const redirectTarget = searchParams.get('redirect') || location.state?.from?.pathname || '/account';
 
@@ -37,12 +37,12 @@ export default function LoginPage() {
     useRef(null), useRef(null), useRef(null)
   ];
 
-  // If already authenticated, redirect
+  // If already authenticated (JWT + user), redirect
   useEffect(() => {
-    if (user && !isLoading) {
+    if ((isAuthenticated || (token && user)) && !isLoading) {
       navigate(redirectTarget, { replace: true });
     }
-  }, [user, navigate, redirectTarget, isLoading]);
+  }, [isAuthenticated, token, user, navigate, redirectTarget, isLoading]);
 
   // Resend OTP Countdown Timer
   useEffect(() => {
@@ -99,20 +99,11 @@ export default function LoginPage() {
           otpInputRefs[0]?.current?.focus();
         }, 100);
       } else {
-        // In dev if network error, continue with local simulation
-        setStep('otp');
-        setOtpDigits(['', '', '', '', '', '']);
-        const simulated = Math.floor(100000 + Math.random() * 900000).toString();
-        setGeneratedOtp(simulated);
-        setTimer(30);
-        setCanResend(false);
-        setTimeout(() => {
-          otpInputRefs[0]?.current?.focus();
-        }, 100);
+        setErrorMsg(res.message || 'Could not send OTP. Please try again.');
       }
-    } catch {
+    } catch (err) {
       setIsLoading(false);
-      setStep('otp');
+      setErrorMsg(err?.message || 'Could not send OTP. Please try again.');
     }
   };
 
@@ -197,13 +188,12 @@ export default function LoginPage() {
     
     if (res.success) {
       setSuccessMsg('New OTP sent successfully!');
+      setOtpDigits(['', '', '', '', '', '']);
+      setTimeout(() => setSuccessMsg(''), 3000);
     } else {
-      const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
-      setGeneratedOtp(randomCode);
-      setSuccessMsg('New OTP sent to your phone!');
+      setErrorMsg(res.message || 'Could not resend OTP. Please try again.');
+      setCanResend(true);
     }
-    setOtpDigits(['', '', '', '', '', '']);
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   return (

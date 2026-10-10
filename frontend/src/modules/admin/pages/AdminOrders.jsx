@@ -190,18 +190,27 @@ export default function AdminOrders() {
     setOrdersList(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, ...extraData } : o));
 
     try {
-      // 1. If dispatch info provided, update dispatch
-      if (extraData.courierName || extraData.awbNumber || extraData.rider) {
-        await adminOrderApi.dispatchOrder(orderId, {
+      const isDispatchTarget =
+        newStatus === 'Ready for Dispatch' ||
+        newStatus === 'SHIPPED' ||
+        String(newStatus).toUpperCase() === 'SHIPPED';
+
+      // Only call dispatch when moving to Ready for Dispatch — never before Accept/Pack
+      let res;
+      if (
+        isDispatchTarget &&
+        (extraData.courierName || extraData.awbNumber || extraData.rider)
+      ) {
+        res = await adminOrderApi.dispatchOrder(orderId, {
           courierName: extraData.courierName,
           awbNumber: extraData.awbNumber,
           rider: extraData.rider,
           deliveryNotes: extraData.deliveryNotes
         });
+      } else {
+        res = await adminOrderApi.updateStatus(orderId, newStatus, extraData.note);
       }
 
-      // 2. Update status
-      const res = await adminOrderApi.updateStatus(orderId, newStatus, extraData.note);
       if (res && res.data && res.data.order) {
         const formatted = formatOrder(res.data.order);
         setOrdersList(prev => prev.map(o => o.id === orderId ? formatted : o));

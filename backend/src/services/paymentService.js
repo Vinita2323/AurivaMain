@@ -437,28 +437,53 @@ class PaymentService {
       throw err;
     }
 
-    const { placeOrder } = await import('./orderService.js');
-    const order = await placeOrder(userId, {
-      addressId: intent.addressId,
-      paymentMethod: intent.paymentMethod || payment.paymentMethod || 'UPI',
-      paymentStatus: 'PAID',
-      paymentDetails: {
-        transactionId: razorpayPaymentId,
-        upiApp: ''
-      },
-      couponCode: intent.couponCode || null,
-      guestId: intent.guestId || null,
-      items: intent.items || null,
-      idempotencyKey: `paid_${razorpayPaymentId}`
-    });
-
-    payment.order = order._id;
-    payment.status = 'PAID';
+    // Mark gateway refs before placeOrder so webhook/retry can reconcile if place fails
     payment.gatewayPaymentId = razorpayPaymentId;
     payment.gatewaySignature = razorpaySignature;
     payment.transactionId = razorpayPaymentId;
+
+    const { placeOrder } = await import('./orderService.js');
+    let order;
+    try {
+      order = await placeOrder(userId, {
+        addressId: intent.addressId,
+        paymentMethod: intent.paymentMethod || payment.paymentMethod || 'UPI',
+        paymentStatus: 'PAID',
+        paymentDetails: {
+          transactionId: razorpayPaymentId,
+          upiApp: ''
+        },
+        couponCode: intent.couponCode || null,
+        guestId: intent.guestId || null,
+        items: intent.items || null,
+        idempotencyKey: `paid_${razorpayPaymentId}`
+      });
+    } catch (placeErr) {
+      payment.status = 'PAID';
+      payment.paidAt = new Date();
+      payment.metadata = {
+        ...payment.metadata,
+        needsReconciliation: true,
+        fulfillmentError: placeErr.message || 'placeOrder failed after valid payment'
+      };
+      await payment.save();
+      const err = new Error(
+        placeErr.message ||
+          'Payment succeeded but order could not be created. Our team will reconcile shortly.'
+      );
+      err.statusCode = placeErr.statusCode || 500;
+      throw err;
+    }
+
+    payment.order = order._id;
+    payment.status = 'PAID';
     payment.paidAt = new Date();
     payment.failureReason = '';
+    payment.metadata = {
+      ...payment.metadata,
+      needsReconciliation: false,
+      fulfillmentError: ''
+    };
     await payment.save();
 
     // Ensure order payment fields are paid (placeOrder may have set them)
@@ -606,8 +631,14 @@ class PaymentService {
    * Handle Razorpay Webhooks idempotently.
    */
   static async handleWebhookEvent({ rawBody, signature, eventPayload }) {
-    // 1. Signature Verification
-    if (env.RAZORPAY.WEBHOOK_SECRET) {
+    // 1. Signature Verification — fail closed in production
+    if (!env.RAZORPAY.WEBHOOK_SECRET) {
+      if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+        const err = new Error('Webhook secret not configured on server');
+        err.statusCode = 503;
+        throw err;
+      }
+    } else {
       const isValid = verifyWebhookSignature({
         rawBody,
         signature,
@@ -648,12 +679,51 @@ class PaymentService {
           payment.metadata = { ...payment.metadata, webhookCaptured: true };
           await payment.save();
 
-          await Order.findByIdAndUpdate(payment.order, {
-            $set: {
-              'payment.status': 'PAID',
-              'payment.transactionId': gatewayPaymentId
+          if (payment.order) {
+            await Order.findByIdAndUpdate(payment.order, {
+              $set: {
+                'payment.status': 'PAID',
+                'payment.transactionId': gatewayPaymentId
+              }
+            });
+          } else if (payment.user && payment.metadata?.checkoutIntent?.addressId) {
+            // Prepaid-before-order: customer paid but closed tab before /verify —
+            // create the Auriva order from the stored checkout intent (idempotent).
+            try {
+              const intent = payment.metadata.checkoutIntent;
+              const { placeOrder } = await import('./orderService.js');
+              const order = await placeOrder(payment.user, {
+                addressId: intent.addressId,
+                paymentMethod: intent.paymentMethod || payment.paymentMethod || 'UPI',
+                paymentStatus: 'PAID',
+                paymentDetails: {
+                  transactionId: gatewayPaymentId,
+                  upiApp: ''
+                },
+                couponCode: intent.couponCode || null,
+                guestId: intent.guestId || null,
+                items: intent.items || null,
+                idempotencyKey: `paid_${gatewayPaymentId}`
+              });
+              payment.order = order._id;
+              payment.metadata = {
+                ...payment.metadata,
+                webhookFulfilledOrder: true
+              };
+              await payment.save();
+            } catch (fulfillErr) {
+              console.error(
+                '[Webhook] payment.captured order fulfillment failed:',
+                fulfillErr.message
+              );
+              payment.metadata = {
+                ...payment.metadata,
+                needsReconciliation: true,
+                fulfillmentError: fulfillErr.message
+              };
+              await payment.save();
             }
-          });
+          }
 
           // Shiprocket deferred until admin "Ready for Dispatch"
         }
