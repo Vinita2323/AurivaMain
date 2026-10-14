@@ -26,7 +26,42 @@ const INITIAL_SETTINGS = {
   warehousePincode: "131001",
   warehousePhone: "+91 76781 54795",
   lowStockThreshold: 30,
-  currency: "₹"
+  currency: "₹",
+  helpSupport: {
+    title: 'Help & Support',
+    subtitle:
+      'Reach customer care or browse quick answers about orders, shipping, and payments.',
+    phone: '+91 76781 54795',
+    phoneHours: 'Mon–Sat, 9 AM – 6 PM',
+    email: 'supportauriva77@gmail.com',
+    emailNote: 'Reply within 24 hours',
+    writeTitle: 'Write to us',
+    writeLink: '/contact',
+    writeNote: 'Orders, refunds & feedback',
+    fullHelpLink: '/help-support',
+    faqs: [
+      {
+        q: 'How do I track my order?',
+        a: 'Open My Orders and tap Track, or use the tracking link from your confirmation message.'
+      },
+      {
+        q: 'What payment methods do you accept?',
+        a: 'Pay online with UPI, cards, or net banking (Razorpay), or choose Cash on Delivery where available.'
+      },
+      {
+        q: 'Can I cancel an order?',
+        a: 'You can cancel from the order tracking page while the order is still Received, Accepted, or Packed.'
+      },
+      {
+        q: 'How do I update my delivery address?',
+        a: 'Go to Saved Addresses to add, edit, or set a default address before placing your next order.'
+      },
+      {
+        q: 'My payment succeeded but I do not see an order.',
+        a: 'Wait a few minutes and refresh My Orders. If it still does not appear, email support with your payment ID.'
+      }
+    ]
+  }
 };
 
 const SETTINGS_UPDATE_KEYS = [
@@ -49,7 +84,8 @@ const SETTINGS_UPDATE_KEYS = [
   'supportPhone',
   'currency',
   'storeAddress',
-  'timezone'
+  'timezone',
+  'helpSupport'
 ];
 
 function sanitizeSettingsPayload(raw = {}) {

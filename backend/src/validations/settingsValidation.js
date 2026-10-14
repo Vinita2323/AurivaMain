@@ -24,7 +24,8 @@ export const ALLOWED_SETTINGS_FIELDS = [
   'supportPhone',
   'currency',
   'storeAddress',
-  'timezone'
+  'timezone',
+  'helpSupport'
 ];
 
 /**
@@ -110,6 +111,33 @@ export const validateUpdateSettings = (req, res, next) => {
   if (body.supportEmail !== undefined && body.supportEmail !== '') {
     if (!emailRegex.test(String(body.supportEmail).trim())) {
       errors.push({ field: 'supportEmail', message: 'Support email must be a valid email address' });
+    }
+  }
+
+  if (body.helpSupport !== undefined) {
+    if (!body.helpSupport || typeof body.helpSupport !== 'object' || Array.isArray(body.helpSupport)) {
+      errors.push({ field: 'helpSupport', message: 'Help & Support must be an object' });
+    } else {
+      const hs = body.helpSupport;
+      if (hs.email !== undefined && hs.email !== '' && !emailRegex.test(String(hs.email).trim())) {
+        errors.push({ field: 'helpSupport.email', message: 'Help & Support email must be a valid email address' });
+      }
+      if (hs.faqs !== undefined) {
+        if (!Array.isArray(hs.faqs)) {
+          errors.push({ field: 'helpSupport.faqs', message: 'FAQs must be an array' });
+        } else if (hs.faqs.length > 20) {
+          errors.push({ field: 'helpSupport.faqs', message: 'Maximum 20 FAQs allowed' });
+        } else {
+          hs.faqs.forEach((f, i) => {
+            if (!f || typeof f !== 'object' || !String(f.q || '').trim() || !String(f.a || '').trim()) {
+              errors.push({
+                field: `helpSupport.faqs[${i}]`,
+                message: 'Each FAQ needs a non-empty question and answer'
+              });
+            }
+          });
+        }
+      }
     }
   }
 

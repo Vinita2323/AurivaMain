@@ -165,24 +165,9 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStoredUserSession().user);
   const [token, setToken] = useState(() => readStoredUserSession().token);
 
-  const [orders, setOrders] = useState(() => {
-    try {
-      const saved = localStorage.getItem('auriva_orders');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Never hydrate demo/seed orders for a real session
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const looksLikeDemo = parsed.some(
-            (o) => o?.id === 'AV10294' || o?.customer === 'Vini Sharma'
-          );
-          if (!looksLikeDemo) return parsed;
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return [];
-  });
+  // Always start empty — orders are loaded from the API for the current JWT only
+  // (never hydrate another account's orders from localStorage)
+  const [orders, setOrders] = useState([]);
 
   const [customers, setCustomers] = useState(() => {
     try {
@@ -256,11 +241,23 @@ export function AuthProvider({ children }) {
     }
   }, [customers]);
 
+  const clearUserScopedState = () => {
+    setAddresses([]);
+    setSelectedAddressId(null);
+    setOrders([]);
+    try {
+      localStorage.setItem('auriva_orders', '[]');
+    } catch {
+      // ignore
+    }
+  };
+
   // Clear React auth state when API detects an expired/invalid user JWT
   useEffect(() => {
     const onExpired = () => {
       setToken(null);
       setUser(null);
+      clearUserScopedState();
     };
     window.addEventListener('auriva:auth-expired', onExpired);
     return () => window.removeEventListener('auriva:auth-expired', onExpired);
@@ -269,6 +266,8 @@ export function AuthProvider({ children }) {
   // Synchronize addresses and orders with backend whenever user is authenticated
   useEffect(() => {
     if (!token || isJwtExpired(token)) {
+      // Never keep another account's addresses/orders in memory when logged out
+      clearUserScopedState();
       if (token && isJwtExpired(token)) {
         setToken(null);
         setUser(null);
@@ -282,8 +281,16 @@ export function AuthProvider({ children }) {
       return;
     }
 
+    // Reset immediately so a previous account never flashes for the new login
+    setAddresses([]);
+    setSelectedAddressId(null);
+    setOrders([]);
+
+    let cancelled = false;
+
     addressApi.getAddresses()
       .then(res => {
+        if (cancelled) return;
         const list = Array.isArray(res?.data?.addresses) ? res.data.addresses : [];
         const formatted = list.map(formatAddress);
         setAddresses(formatted);
@@ -295,27 +302,40 @@ export function AuthProvider({ children }) {
         }
       })
       .catch(err => {
+        if (cancelled) return;
         if (err?.status === 401) {
           setToken(null);
           setUser(null);
+          clearUserScopedState();
         } else {
+          // Keep empty list — do not leave previous user's addresses on screen
+          setAddresses([]);
+          setSelectedAddressId(null);
           console.warn('[AuthContext] Backend addresses load note:', err.message);
         }
       });
 
     orderApi.getUserOrders()
       .then(res => {
+        if (cancelled) return;
         const list = Array.isArray(res?.data?.orders) ? res.data.orders : [];
         setOrders(list.map(formatOrder));
       })
       .catch(err => {
+        if (cancelled) return;
         if (err?.status === 401) {
           setToken(null);
           setUser(null);
+          clearUserScopedState();
         } else {
+          setOrders([]);
           console.warn('[AuthContext] Backend orders load note:', err.message);
         }
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   /**
@@ -383,7 +403,9 @@ export function AuthProvider({ children }) {
         }
 
         setUser(formattedUser);
-        // Drop any leftover demo order history from localStorage
+        // Drop any leftover addresses/orders from a previous session immediately
+        setAddresses([]);
+        setSelectedAddressId(null);
         setOrders([]);
         try {
           localStorage.setItem('auriva_orders', '[]');
@@ -459,6 +481,7 @@ export function AuthProvider({ children }) {
 
     setUser(null);
     setToken(null);
+    clearUserScopedState();
     try {
       localStorage.removeItem('auriva_user');
       localStorage.removeItem('auriva_user_token');

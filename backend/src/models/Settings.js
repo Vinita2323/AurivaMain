@@ -120,6 +120,92 @@ const settingsSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: 'Asia/Kolkata'
+    },
+
+    // 6. Help & Support page (admin-managed, shown on Account + /help-support)
+    helpSupport: {
+      title: {
+        type: String,
+        trim: true,
+        default: 'Help & Support'
+      },
+      subtitle: {
+        type: String,
+        trim: true,
+        default:
+          'Reach customer care or browse quick answers about orders, shipping, and payments.'
+      },
+      phone: {
+        type: String,
+        trim: true,
+        default: '+91 76781 54795'
+      },
+      phoneHours: {
+        type: String,
+        trim: true,
+        default: 'Mon–Sat, 9 AM – 6 PM'
+      },
+      email: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: 'supportauriva77@gmail.com'
+      },
+      emailNote: {
+        type: String,
+        trim: true,
+        default: 'Reply within 24 hours'
+      },
+      writeTitle: {
+        type: String,
+        trim: true,
+        default: 'Write to us'
+      },
+      writeLink: {
+        type: String,
+        trim: true,
+        default: '/contact'
+      },
+      writeNote: {
+        type: String,
+        trim: true,
+        default: 'Orders, refunds & feedback'
+      },
+      fullHelpLink: {
+        type: String,
+        trim: true,
+        default: '/help-support'
+      },
+      faqs: {
+        type: [
+          {
+            q: { type: String, trim: true, required: true },
+            a: { type: String, trim: true, required: true }
+          }
+        ],
+        default: () => [
+          {
+            q: 'How do I track my order?',
+            a: 'Open My Orders and tap Track, or use the tracking link from your confirmation message.'
+          },
+          {
+            q: 'What payment methods do you accept?',
+            a: 'Pay online with UPI, cards, or net banking (Razorpay), or choose Cash on Delivery where available.'
+          },
+          {
+            q: 'Can I cancel an order?',
+            a: 'You can cancel from the order tracking page while the order is still Received, Accepted, or Packed.'
+          },
+          {
+            q: 'How do I update my delivery address?',
+            a: 'Go to Saved Addresses to add, edit, or set a default address before placing your next order.'
+          },
+          {
+            q: 'My payment succeeded but I do not see an order.',
+            a: 'Wait a few minutes and refresh My Orders. If it still does not appear, email support with your payment ID.'
+          }
+        ]
+      }
     }
   },
   {

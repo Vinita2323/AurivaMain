@@ -18,41 +18,8 @@ import {
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import AnnouncementBar from '../components/AnnouncementBar';
-
-const faqs = [
-  {
-    q: 'Do I need an account to place an order?',
-    a: 'You can browse freely without login. To place an order you need to verify your mobile number with OTP so we can save your address and send delivery updates.'
-  },
-  {
-    q: 'How do I track my order?',
-    a: 'Go to Account → Orders, or open the order tracking link from your confirmation message. Tracking updates appear as the courier picks up and moves your shipment.'
-  },
-  {
-    q: 'What payment methods do you accept?',
-    a: 'You can pay online (UPI, cards, net banking via Razorpay) or choose Cash on Delivery where available. For online payments, your Auriva order is created only after payment succeeds.'
-  },
-  {
-    q: 'How is shipping calculated?',
-    a: 'Delivery charges are based on live courier rates for your pincode and payment type (prepaid vs COD). Orders above the free-delivery threshold shown at checkout ship free.'
-  },
-  {
-    q: 'How long does delivery take?',
-    a: 'Most metro and major city pincodes receive orders in about 2–7 days depending on the courier. Exact estimates appear at checkout once your address pincode is selected.'
-  },
-  {
-    q: 'Can I cancel or return an order?',
-    a: 'You can request cancellation from your order page while the order is still being processed / packed. For returns or damaged items, contact support with your order number and photos within 48 hours of delivery.'
-  },
-  {
-    q: 'My payment succeeded but I do not see an order.',
-    a: 'Rarely, network issues delay confirmation. Wait a few minutes and refresh My Orders. If it still does not appear, email Supportauriva77@gmail.com with your Razorpay payment ID — we will resolve it priority.'
-  },
-  {
-    q: 'How do I update my delivery address?',
-    a: 'After login, open Account → Addresses to add, edit, or set a default address before checkout.'
-  }
-];
+import { useAdmin } from '../../../context/AdminContext';
+import { resolveHelpSupport } from '../../../utils/helpSupport';
 
 const topics = [
   {
@@ -83,6 +50,9 @@ const topics = [
 
 export default function HelpSupportPage() {
   const [openFaq, setOpenFaq] = useState(0);
+  const { settings } = useAdmin();
+  const help = resolveHelpSupport(settings);
+  const writeTo = help.writeLink.startsWith('/') ? help.writeLink : '/contact';
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -112,9 +82,9 @@ export default function HelpSupportPage() {
                 Customer Care
               </span>
             </div>
-            <h1 className="font-serif text-3xl sm:text-5xl font-bold mb-4">Help & Support</h1>
+            <h1 className="font-serif text-3xl sm:text-5xl font-bold mb-4">{help.title}</h1>
             <p className="text-sm sm:text-base text-[#A2B5A8] max-w-2xl mx-auto leading-relaxed">
-              FAQs, shipping help, and ways to reach us — available publicly, even if you are not logged in.
+              {help.subtitle}
             </p>
           </div>
         </div>
@@ -142,11 +112,11 @@ export default function HelpSupportPage() {
               </div>
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">Call us</h3>
-                <a href="tel:+917678154795" className="text-sm font-bold text-[#0E2A1B] hover:text-[#C89038]">
-                  +91 76781 54795
+                <a href={`tel:${help.phoneTel}`} className="text-sm font-bold text-[#0E2A1B] hover:text-[#C89038]">
+                  {help.phone}
                 </a>
                 <p className="text-[11px] text-stone-500 mt-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Mon–Sat, 9 AM – 6 PM IST
+                  <Clock className="w-3 h-3" /> {help.phoneHours}
                 </p>
               </div>
             </div>
@@ -157,12 +127,12 @@ export default function HelpSupportPage() {
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">Email</h3>
                 <a
-                  href="mailto:Supportauriva77@gmail.com"
+                  href={`mailto:${help.email}`}
                   className="text-sm font-bold text-[#0E2A1B] hover:text-[#C89038] break-all"
                 >
-                  Supportauriva77@gmail.com
+                  {help.email}
                 </a>
-                <p className="text-[11px] text-stone-500 mt-1">We reply within 24 hours</p>
+                <p className="text-[11px] text-stone-500 mt-1">{help.emailNote}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -170,15 +140,15 @@ export default function HelpSupportPage() {
                 <MessageCircle className="w-5 h-5 text-[#C89038]" />
               </div>
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">Write to us</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">{help.writeTitle}</h3>
                 <Link
-                  to="/contact"
+                  to={writeTo}
                   className="inline-flex items-center gap-1 text-sm font-bold text-[#0E2A1B] hover:text-[#C89038]"
                 >
                   Contact form <ChevronRight className="w-4 h-4" />
                 </Link>
                 <p className="text-[11px] text-stone-500 mt-1 flex items-center gap-1">
-                  <MapPin className="w-3 h-3" /> Based in Indore / Sonipat hub
+                  <MapPin className="w-3 h-3" /> {help.writeNote}
                 </p>
               </div>
             </div>
@@ -191,11 +161,11 @@ export default function HelpSupportPage() {
               <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#0E2A1B]">Frequently asked questions</h2>
             </div>
             <div className="space-y-2">
-              {faqs.map((item, idx) => {
+              {help.faqs.map((item, idx) => {
                 const open = openFaq === idx;
                 return (
                   <div
-                    key={item.q}
+                    key={`${item.q}-${idx}`}
                     className={`rounded-2xl border transition-colors ${
                       open ? 'border-[#0E2A1B]/30 bg-[#FAF7F2]' : 'border-stone-200 bg-white'
                     }`}
@@ -263,7 +233,7 @@ export default function HelpSupportPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
-                to="/contact"
+                to={writeTo}
                 className="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-[#D4AF37] text-[#0E2A1B] text-xs font-extrabold uppercase tracking-wider"
               >
                 Contact us

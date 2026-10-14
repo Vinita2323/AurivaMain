@@ -1,8 +1,12 @@
 import React from 'react';
 import { Leaf, LayoutDashboard } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAdmin } from '../../../context/AdminContext';
 
 export default function AnnouncementBar() {
+  const { settings } = useAdmin();
+  const threshold = Number(settings?.freeDeliveryThreshold ?? 499);
+
   return (
     <aside 
       aria-label="Announcement" 
@@ -14,7 +18,9 @@ export default function AnnouncementBar() {
         <div className="flex items-center justify-center gap-2 text-center">
           <Leaf className="w-3.5 h-3.5 text-[#C89038] fill-[#C89038]/30 shrink-0" />
           <p className="truncate sm:overflow-visible flex items-center gap-1.5 sm:gap-2">
-            <span className="font-semibold text-white/95">FREE SHIPPING ON ORDERS ABOVE ₹499</span>
+            <span className="font-semibold text-white/95">
+              FREE SHIPPING ON ORDERS ABOVE ₹{Number.isFinite(threshold) ? threshold : 499}
+            </span>
             <span className="opacity-40 hidden sm:inline">|</span>
             <span className="hidden sm:inline text-white/85">PREMIUM MAKHANA, DELIVERED FRESH TO YOUR DOORSTEP</span>
           </p>
@@ -36,4 +42,3 @@ export default function AnnouncementBar() {
     </aside>
   );
 }
-

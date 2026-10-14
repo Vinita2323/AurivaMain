@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Check, Truck, AlertCircle } from 'lucide-react';
+import { Save, Check, Truck, AlertCircle, Plus, Trash2, LifeBuoy } from 'lucide-react';
 
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
 import { useAdmin } from '../../../context/AdminContext';
+import { DEFAULT_HELP_SUPPORT } from '../../../utils/helpSupport';
 
 const EMPTY_FORM = {
   storeName: '',
@@ -21,7 +22,8 @@ const EMPTY_FORM = {
   warehousePincode: '',
   warehousePhone: '',
   lowStockThreshold: 30,
-  currency: '₹'
+  currency: '₹',
+  helpSupport: { ...DEFAULT_HELP_SUPPORT, faqs: [...DEFAULT_HELP_SUPPORT.faqs] }
 };
 
 export default function AdminSettings() {
@@ -37,7 +39,21 @@ export default function AdminSettings() {
   useEffect(() => {
     if (!settings || typeof settings !== 'object') return;
     if (hydratedRef.current) return;
-    setFormData((prev) => ({ ...prev, ...settings }));
+    const hs = settings.helpSupport && typeof settings.helpSupport === 'object'
+      ? {
+          ...DEFAULT_HELP_SUPPORT,
+          ...settings.helpSupport,
+          faqs: Array.isArray(settings.helpSupport.faqs) && settings.helpSupport.faqs.length
+            ? settings.helpSupport.faqs.map((f) => ({ q: f.q || '', a: f.a || '' }))
+            : [...DEFAULT_HELP_SUPPORT.faqs]
+        }
+      : { ...DEFAULT_HELP_SUPPORT, faqs: [...DEFAULT_HELP_SUPPORT.faqs] };
+
+    // Prefer dedicated helpSupport contacts; fall back to store support fields
+    if (!hs.phone) hs.phone = settings.supportPhone || settings.storePhone || DEFAULT_HELP_SUPPORT.phone;
+    if (!hs.email) hs.email = settings.supportEmail || settings.storeEmail || DEFAULT_HELP_SUPPORT.email;
+
+    setFormData((prev) => ({ ...prev, ...settings, helpSupport: hs }));
     hydratedRef.current = true;
   }, [settings]);
 
@@ -47,16 +63,71 @@ export default function AdminSettings() {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
+  const setHelpField = (key, value) => {
+    setSaved(false);
+    setError('');
+    setFormData((prev) => ({
+      ...prev,
+      helpSupport: { ...(prev.helpSupport || DEFAULT_HELP_SUPPORT), [key]: value }
+    }));
+  };
+
+  const setFaqField = (index, key, value) => {
+    setSaved(false);
+    setError('');
+    setFormData((prev) => {
+      const faqs = [...(prev.helpSupport?.faqs || [])];
+      faqs[index] = { ...(faqs[index] || { q: '', a: '' }), [key]: value };
+      return { ...prev, helpSupport: { ...(prev.helpSupport || DEFAULT_HELP_SUPPORT), faqs } };
+    });
+  };
+
+  const addFaq = () => {
+    setSaved(false);
+    setFormData((prev) => {
+      const faqs = [...(prev.helpSupport?.faqs || [])];
+      if (faqs.length >= 20) return prev;
+      faqs.push({ q: '', a: '' });
+      return { ...prev, helpSupport: { ...(prev.helpSupport || DEFAULT_HELP_SUPPORT), faqs } };
+    });
+  };
+
+  const removeFaq = (index) => {
+    setSaved(false);
+    setFormData((prev) => {
+      const faqs = (prev.helpSupport?.faqs || []).filter((_, i) => i !== index);
+      return { ...prev, helpSupport: { ...(prev.helpSupport || DEFAULT_HELP_SUPPORT), faqs } };
+    });
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError('');
     setSaved(false);
     try {
+      const hs = formData.helpSupport || DEFAULT_HELP_SUPPORT;
+      const helpSupport = {
+        title: String(hs.title || '').trim(),
+        subtitle: String(hs.subtitle || '').trim(),
+        phone: String(hs.phone || '').trim(),
+        phoneHours: String(hs.phoneHours || '').trim(),
+        email: String(hs.email || '').trim(),
+        emailNote: String(hs.emailNote || '').trim(),
+        writeTitle: String(hs.writeTitle || '').trim(),
+        writeLink: String(hs.writeLink || '').trim(),
+        writeNote: String(hs.writeNote || '').trim(),
+        fullHelpLink: String(hs.fullHelpLink || '').trim(),
+        faqs: (Array.isArray(hs.faqs) ? hs.faqs : [])
+          .map((f) => ({ q: String(f?.q || '').trim(), a: String(f?.a || '').trim() }))
+          .filter((f) => f.q && f.a)
+          .slice(0, 20)
+      };
+
       const result = await updateSettings({
         storeName: String(formData.storeName || '').trim(),
-        supportEmail: String(formData.supportEmail || '').trim(),
-        supportPhone: String(formData.supportPhone || '').trim(),
+        supportEmail: helpSupport.email || String(formData.supportEmail || '').trim(),
+        supportPhone: helpSupport.phone || String(formData.supportPhone || '').trim(),
         freeDeliveryThreshold: Number(formData.freeDeliveryThreshold) || 0,
         standardDeliveryFee: Number(formData.standardDeliveryFee) || 0,
         codDeliveryFee: Number(formData.codDeliveryFee) || 0,
@@ -69,10 +140,20 @@ export default function AdminSettings() {
         warehousePincode: String(formData.warehousePincode || '').trim(),
         warehousePhone: String(formData.warehousePhone || '').trim(),
         lowStockThreshold: Number(formData.lowStockThreshold) || 0,
-        currency: formData.currency || '₹'
+        currency: formData.currency || '₹',
+        helpSupport
       });
       if (result?.settings) {
-        setFormData((prev) => ({ ...prev, ...result.settings }));
+        const nextHs = result.settings.helpSupport || helpSupport;
+        setFormData((prev) => ({
+          ...prev,
+          ...result.settings,
+          helpSupport: {
+            ...DEFAULT_HELP_SUPPORT,
+            ...nextHs,
+            faqs: Array.isArray(nextHs.faqs) ? nextHs.faqs : helpSupport.faqs
+          }
+        }));
       }
       hydratedRef.current = true;
       setSaved(true);
@@ -83,6 +164,8 @@ export default function AdminSettings() {
       setSaving(false);
     }
   };
+
+  const hs = formData.helpSupport || DEFAULT_HELP_SUPPORT;
 
   const inputClass =
     'w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 bg-white text-[#0E2A1B] focus:outline-none focus:border-[#0E2A1B] focus:ring-1 focus:ring-[#0E2A1B]/20 disabled:opacity-60';
@@ -277,6 +360,207 @@ export default function AdminSettings() {
                   onChange={(e) => setField('lowStockThreshold', e.target.value === '' ? '' : Number(e.target.value))}
                   className={`${inputClass} w-48`}
                 />
+              </div>
+            </div>
+
+            {/* Help & Support CMS */}
+            <div className="border-t border-stone-200 pt-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                  <LifeBuoy className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#0E2A1B]">Help & Support Page</h3>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    Controls Account → Help & Support and the public /help-support page (contacts, copy, FAQs).
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="hsTitle">
+                    Page Title
+                  </label>
+                  <input
+                    id="hsTitle"
+                    type="text"
+                    value={hs.title || ''}
+                    onChange={(e) => setHelpField('title', e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="hsFullLink">
+                    Full Help Centre Path
+                  </label>
+                  <input
+                    id="hsFullLink"
+                    type="text"
+                    value={hs.fullHelpLink || ''}
+                    onChange={(e) => setHelpField('fullHelpLink', e.target.value)}
+                    className={inputClass}
+                    placeholder="/help-support"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="hsSubtitle">
+                  Intro / Subtitle
+                </label>
+                <textarea
+                  id="hsSubtitle"
+                  rows={2}
+                  value={hs.subtitle || ''}
+                  onChange={(e) => setHelpField('subtitle', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8E2D5]">
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1" htmlFor="hsPhone">
+                    Call Us — Phone
+                  </label>
+                  <input
+                    id="hsPhone"
+                    type="text"
+                    value={hs.phone || ''}
+                    onChange={(e) => setHelpField('phone', e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1" htmlFor="hsPhoneHours">
+                    Call Us — Hours
+                  </label>
+                  <input
+                    id="hsPhoneHours"
+                    type="text"
+                    value={hs.phoneHours || ''}
+                    onChange={(e) => setHelpField('phoneHours', e.target.value)}
+                    className={inputClass}
+                    placeholder="Mon–Sat, 9 AM – 6 PM"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1" htmlFor="hsEmail">
+                    Email Address
+                  </label>
+                  <input
+                    id="hsEmail"
+                    type="email"
+                    value={hs.email || ''}
+                    onChange={(e) => setHelpField('email', e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1" htmlFor="hsEmailNote">
+                    Email Response Note
+                  </label>
+                  <input
+                    id="hsEmailNote"
+                    type="text"
+                    value={hs.emailNote || ''}
+                    onChange={(e) => setHelpField('emailNote', e.target.value)}
+                    className={inputClass}
+                    placeholder="Reply within 24 hours"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="hsWriteTitle">
+                    Write-to-us Title
+                  </label>
+                  <input
+                    id="hsWriteTitle"
+                    type="text"
+                    value={hs.writeTitle || ''}
+                    onChange={(e) => setHelpField('writeTitle', e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="hsWriteLink">
+                    Contact Form Path / URL
+                  </label>
+                  <input
+                    id="hsWriteLink"
+                    type="text"
+                    value={hs.writeLink || ''}
+                    onChange={(e) => setHelpField('writeLink', e.target.value)}
+                    className={inputClass}
+                    placeholder="/contact"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="hsWriteNote">
+                    Write-to-us Note
+                  </label>
+                  <input
+                    id="hsWriteNote"
+                    type="text"
+                    value={hs.writeNote || ''}
+                    onChange={(e) => setHelpField('writeNote', e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-stone-600">FAQs</h4>
+                  <button
+                    type="button"
+                    onClick={addFaq}
+                    disabled={(hs.faqs || []).length >= 20}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#0E2A1B]/20 text-[11px] font-bold text-[#0E2A1B] hover:bg-[#FAF7F2] disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add FAQ
+                  </button>
+                </div>
+                {(hs.faqs || []).map((faq, idx) => (
+                  <div
+                    key={`faq-${idx}`}
+                    className="p-3.5 rounded-2xl border border-stone-200 bg-white space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                        FAQ {idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFaq(idx)}
+                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50"
+                        aria-label={`Remove FAQ ${idx + 1}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={faq.q || ''}
+                      onChange={(e) => setFaqField(idx, 'q', e.target.value)}
+                      className={inputClass}
+                      placeholder="Question"
+                    />
+                    <textarea
+                      rows={2}
+                      value={faq.a || ''}
+                      onChange={(e) => setFaqField(idx, 'a', e.target.value)}
+                      className={inputClass}
+                      placeholder="Answer"
+                    />
+                  </div>
+                ))}
+                {!(hs.faqs || []).length && (
+                  <p className="text-xs text-stone-500">No FAQs yet — add at least one for the help pages.</p>
+                )}
               </div>
             </div>
 

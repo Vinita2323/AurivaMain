@@ -1,230 +1,134 @@
-import React, { useEffect, useState } from 'react';
-import { Mail, Phone, MapPin, Send, Clock, Leaf } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Mail, Phone, MapPin, Leaf, Clock, LifeBuoy, ChevronRight } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import AnnouncementBar from '../components/AnnouncementBar';
+import { useAdmin } from '../../../context/AdminContext';
+import { resolveHelpSupport } from '../../../utils/helpSupport';
+
+const INSTAGRAM_URL = 'https://www.instagram.com/aurivabites.in';
+const INSTAGRAM_HANDLE = '@aurivabites.in';
 
 export default function ContactPage() {
+  const { settings } = useAdmin();
+  const help = resolveHelpSupport(settings);
+  const officeAddress =
+    settings?.storeAddress ||
+    settings?.hubAddress ||
+    'House no. 1213, Sector 15, Sonipat, Haryana - 131001';
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: ''
-  });
-  
-  const [submitted, setSubmitted] = useState(false);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Simulate sending
-    setTimeout(() => {
-      setSubmitted(true);
-      setFormData({ name: '', email: '', subject: '', message: '' });
-      setTimeout(() => setSubmitted(false), 5000);
-    }, 1000);
-  };
-
   return (
     <div className="min-h-screen bg-[#FAF7F2] font-sans text-[#182019]">
+      <AnnouncementBar />
       <Header />
 
-      <main className="pb-16 sm:pb-24">
-        {/* Page Hero */}
-        <div className="bg-[#0E2A1B] text-[#F7F3E9] py-16 sm:py-20 text-center relative overflow-hidden">
-          {/* Decorative Background */}
+      <main className="pb-28 md:pb-14">
+        <div className="bg-[#0E2A1B] text-[#F7F3E9] py-8 sm:py-10 text-center relative overflow-hidden">
           <div className="absolute inset-0 opacity-10 pointer-events-none">
-            <div className="absolute top-10 left-10 w-64 h-64 bg-[#D4AF37] rounded-full blur-[100px]"></div>
-            <div className="absolute bottom-10 right-10 w-64 h-64 bg-[#143B24] rounded-full blur-[100px]"></div>
+            <div className="absolute top-6 left-8 w-40 h-40 bg-[#D4AF37] rounded-full blur-[80px]" />
+            <div className="absolute bottom-4 right-8 w-40 h-40 bg-[#143B24] rounded-full blur-[80px]" />
           </div>
-          
-          <div className="relative z-10 max-w-4xl mx-auto px-4">
-            <div className="inline-flex items-center justify-center gap-2 mb-4">
-              <Leaf className="w-5 h-5 text-[#D4AF37]" />
-              <span className="text-[#D4AF37] font-bold tracking-[0.2em] uppercase text-xs sm:text-sm">Get in Touch</span>
+          <div className="relative z-10 max-w-2xl mx-auto px-4">
+            <div className="inline-flex items-center justify-center gap-2 mb-2">
+              <Leaf className="w-4 h-4 text-[#D4AF37]" />
+              <span className="text-[#D4AF37] font-bold tracking-[0.18em] uppercase text-[10px] sm:text-xs">
+                Get in Touch
+              </span>
             </div>
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-bold mb-6">Contact Us</h1>
-            <p className="text-sm sm:text-base text-[#A2B5A8] max-w-2xl mx-auto leading-relaxed">
-              Have a question about our premium makhana, your recent order, or wholesale inquiries? We'd love to hear from you.
+            <h1 className="font-serif text-2xl sm:text-3xl font-bold mb-2">Contact Us</h1>
+            <p className="text-xs sm:text-sm text-[#A2B5A8] leading-relaxed">
+              {help.subtitle}
             </p>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 mt-[-30px] sm:mt-[-50px] relative z-20">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-            
-            {/* Left: Contact Info */}
-            <div className="lg:col-span-5 space-y-6">
-              
-              <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-lg border border-[#E8E2D5] flex flex-col h-full">
-                <h3 className="font-serif text-2xl font-bold text-[#0E2A1B] mb-8">Contact Information</h3>
-                
-                <div className="space-y-8 flex-grow">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#F7F3E9] flex items-center justify-center shrink-0 border border-[#D4AF37]/30">
-                      <Phone className="w-5 h-5 text-[#C89038]" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-[#5A6B60] uppercase tracking-wider mb-1">Phone</h4>
-                      <a href="tel:+917678154795" className="text-[#182019] font-medium hover:text-[#C89038] transition-colors">+91 76781 54795</a>
-                      <p className="text-[#5A6B60] text-sm mt-1">Mon-Sat, 9AM to 6PM</p>
-                    </div>
-                  </div>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 -mt-4 sm:-mt-5 relative z-20 space-y-3">
+          <div className="bg-white rounded-2xl border border-[#E8E2D5] shadow-sm p-4 sm:p-5">
+            <h2 className="font-serif text-lg font-bold text-[#0E2A1B] mb-3">Contact Information</h2>
 
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#F7F3E9] flex items-center justify-center shrink-0 border border-[#D4AF37]/30">
-                      <Mail className="w-5 h-5 text-[#C89038]" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-[#5A6B60] uppercase tracking-wider mb-1">Email</h4>
-                      <a href="mailto:Supportauriva77@gmail.com" className="text-[#182019] font-medium hover:text-[#C89038] transition-colors break-all">Supportauriva77@gmail.com</a>
-                      <p className="text-[#5A6B60] text-sm mt-1">We reply within 24 hours</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#F7F3E9] flex items-center justify-center shrink-0 border border-[#D4AF37]/30">
-                      <svg className="w-5 h-5 text-[#C89038]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                      </svg>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-[#5A6B60] uppercase tracking-wider mb-1">Instagram</h4>
-                      <a
-                        href="https://www.instagram.com/aurivabites.in"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#182019] font-medium hover:text-[#C89038] transition-colors"
-                      >
-                        @aurivabites.in
-                      </a>
-                      <p className="text-[#5A6B60] text-sm mt-1">Follow for recipes, tips & offers</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#F7F3E9] flex items-center justify-center shrink-0 border border-[#D4AF37]/30">
-                      <MapPin className="w-5 h-5 text-[#C89038]" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-[#5A6B60] uppercase tracking-wider mb-1">Office</h4>
-                      <p className="text-[#182019] font-medium leading-relaxed">
-                        Aurivá Headquarters<br/>
-                        123 Premium Park, Industrial Area<br/>
-                        Indore, Madhya Pradesh 452001<br/>
-                        India
-                      </p>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <a
+                href={`tel:${help.phoneTel}`}
+                className="flex items-start gap-3 p-3 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] hover:border-[#0E2A1B]/30 transition-colors"
+              >
+                <div className="w-9 h-9 rounded-full bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                  <Phone className="w-4 h-4" />
                 </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Phone</p>
+                  <p className="text-sm font-bold text-[#0E2A1B] truncate">{help.phone}</p>
+                  <p className="text-[10px] text-stone-500 mt-0.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> {help.phoneHours}
+                  </p>
+                </div>
+              </a>
 
+              <a
+                href={`mailto:${help.email}`}
+                className="flex items-start gap-3 p-3 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] hover:border-[#0E2A1B]/30 transition-colors"
+              >
+                <div className="w-9 h-9 rounded-full bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Email</p>
+                  <p className="text-sm font-bold text-[#0E2A1B] break-all">{help.email}</p>
+                  <p className="text-[10px] text-stone-500 mt-0.5">{help.emailNote}</p>
+                </div>
+              </a>
+
+              <a
+                href={INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] hover:border-[#0E2A1B]/30 transition-colors"
+              >
+                <div className="w-9 h-9 rounded-full bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Instagram</p>
+                  <p className="text-sm font-bold text-[#0E2A1B]">{INSTAGRAM_HANDLE}</p>
+                  <p className="text-[10px] text-stone-500 mt-0.5">Recipes, tips & offers</p>
+                </div>
+              </a>
+
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5]">
+                <div className="w-9 h-9 rounded-full bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Office</p>
+                  <p className="text-sm font-bold text-[#0E2A1B] leading-snug">{officeAddress}</p>
+                </div>
               </div>
             </div>
-
-            {/* Right: Contact Form */}
-            <div className="lg:col-span-7">
-              <div className="bg-white rounded-3xl p-8 sm:p-10 shadow-lg border border-[#E8E2D5]">
-                <h3 className="font-serif text-2xl font-bold text-[#0E2A1B] mb-2">Send us a Message</h3>
-                <p className="text-[#5A6B60] text-sm mb-8">Fill out the form below and our team will get back to you within 24 hours.</p>
-
-                {submitted ? (
-                  <div className="bg-[#EAF5ED] border border-[#A2CBAF] text-[#133E28] p-6 rounded-2xl flex flex-col items-center text-center py-12">
-                    <div className="w-16 h-16 bg-[#133E28] rounded-full flex items-center justify-center mb-4">
-                      <Send className="w-8 h-8 text-[#EAF5ED]" />
-                    </div>
-                    <h4 className="text-xl font-bold mb-2">Message Sent Successfully!</h4>
-                    <p className="text-sm">Thank you for reaching out. We will get back to you soon.</p>
-                  </div>
-                ) : (
-                  <form onSubmit={handleSubmit} className="space-y-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-[#3A4B41] uppercase tracking-wider" htmlFor="name">
-                          Full Name <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          id="name"
-                          name="name"
-                          value={formData.name}
-                          onChange={handleChange}
-                          required
-                          className="w-full px-4 py-3 rounded-xl border border-[#E8E2D5] bg-[#FAF7F2] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C89038]/50 focus:border-[#C89038] transition-colors text-sm"
-                          placeholder="John Doe"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-[#3A4B41] uppercase tracking-wider" htmlFor="email">
-                          Email Address <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="email"
-                          id="email"
-                          name="email"
-                          value={formData.email}
-                          onChange={handleChange}
-                          required
-                          className="w-full px-4 py-3 rounded-xl border border-[#E8E2D5] bg-[#FAF7F2] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C89038]/50 focus:border-[#C89038] transition-colors text-sm"
-                          placeholder="john@example.com"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-[#3A4B41] uppercase tracking-wider" htmlFor="subject">
-                        Subject <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="subject"
-                        name="subject"
-                        value={formData.subject}
-                        onChange={handleChange}
-                        required
-                        className="w-full px-4 py-3 rounded-xl border border-[#E8E2D5] bg-[#FAF7F2] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C89038]/50 focus:border-[#C89038] transition-colors text-sm"
-                        placeholder="How can we help you?"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-[#3A4B41] uppercase tracking-wider" htmlFor="message">
-                        Message <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        id="message"
-                        name="message"
-                        value={formData.message}
-                        onChange={handleChange}
-                        required
-                        rows="5"
-                        className="w-full px-4 py-3 rounded-xl border border-[#E8E2D5] bg-[#FAF7F2] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C89038]/50 focus:border-[#C89038] transition-colors text-sm resize-none"
-                        placeholder="Write your message here..."
-                      ></textarea>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full sm:w-auto bg-[#0E2A1B] hover:bg-[#143B24] text-[#D4AF37] font-bold text-xs uppercase tracking-widest px-8 py-4 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 group"
-                    >
-                      <span>Send Message</span>
-                      <Send className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
-            
           </div>
+
+          <Link
+            to={help.fullHelpLink.startsWith('/') ? help.fullHelpLink : '/help-support'}
+            className="flex items-center justify-between gap-3 w-full p-3.5 sm:p-4 rounded-2xl bg-white border border-[#E8E2D5] shadow-sm hover:border-[#0E2A1B]/30 transition-colors"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                <LifeBuoy className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="text-sm font-bold text-[#0E2A1B]">Help & Support</p>
+                <p className="text-[10px] text-stone-500 mt-0.5">Order help, FAQs & more</p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[#C89038] shrink-0" />
+          </Link>
         </div>
       </main>
 
