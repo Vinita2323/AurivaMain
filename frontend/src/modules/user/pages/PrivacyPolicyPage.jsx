@@ -96,8 +96,9 @@ const sections = [
     title: '11. Contact Us',
     body: [
       'For privacy requests or questions, reach our support team:',
-      'Email: care@aurivafoods.com',
-      'Phone: +91 98765 43210',
+      'Email: Supportauriva77@gmail.com',
+      'Phone: +91 76781 54795',
+      'Instagram: @aurivabites.in (https://www.instagram.com/aurivabites.in)',
       'You can also visit our Help & Support page for FAQs and order help.'
     ]
   }

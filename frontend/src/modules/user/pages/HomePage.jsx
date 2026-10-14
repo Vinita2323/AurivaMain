@@ -336,7 +336,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] pb-20 md:pb-0">
+    <div className="min-h-screen bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B]">
 
       {/* 1. TOP ANNOUNCEMENT BAR */}
       <AnnouncementBar />
@@ -603,7 +603,7 @@ export default function HomePage() {
 
 
         {/* 9. WHY CHOOSE AURIVÁ? & BENEFITS SECTION (Compact & Luxury Glassmorphic) */}
-        <section id="benefits" className="py-12 sm:py-16 bg-[#081B11] text-white relative overflow-hidden border-y border-[#D4AF37]/25">
+        <section id="benefits" className="pt-10 pb-24 sm:py-16 bg-[#081B11] text-white relative overflow-hidden border-t sm:border-y border-[#D4AF37]/25">
           {/* Ambient Lighting Orbs */}
           <div className="absolute top-0 right-1/3 w-96 h-96 bg-[#D4AF37]/10 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '7s' }} />
           <div className="absolute bottom-0 left-10 w-80 h-80 bg-[#163E27]/80 rounded-full blur-[100px] pointer-events-none" />

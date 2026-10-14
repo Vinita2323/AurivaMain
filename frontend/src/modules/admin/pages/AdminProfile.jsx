@@ -13,7 +13,7 @@ const SONIPAT_WAREHOUSE = {
   warehouseCity: 'Sonipat',
   warehouseState: 'Haryana',
   warehousePincode: '131001',
-  warehousePhone: '+91 98765 43210',
+  warehousePhone: '+91 76781 54795',
   hubAddress: 'House no. 1213, Sector 15, Sonipat, Haryana - 131001'
 };
 

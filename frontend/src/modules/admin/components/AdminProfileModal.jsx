@@ -11,7 +11,7 @@ export default function AdminProfileModal({ isOpen, onClose }) {
     name: 'Admin Manager',
     role: 'Super Administrator',
     email: 'admin@aurivafoods.com',
-    phone: '+91 98765 43210',
+    phone: '+91 76781 54795',
     hub: 'AURIVÁ Central Fulfillment Hub, Indore, MP',
     department: 'Store Operations & Catalog Logistics',
     accessLevel: 'Tier 1 Executive Clearance'

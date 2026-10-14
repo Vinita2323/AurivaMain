@@ -74,7 +74,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-[#5A6B60] uppercase tracking-wider mb-1">Phone</h4>
-                      <p className="text-[#182019] font-medium">+91 12345 67890</p>
+                      <a href="tel:+917678154795" className="text-[#182019] font-medium hover:text-[#C89038] transition-colors">+91 76781 54795</a>
                       <p className="text-[#5A6B60] text-sm mt-1">Mon-Sat, 9AM to 6PM</p>
                     </div>
                   </div>
@@ -85,8 +85,30 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-[#5A6B60] uppercase tracking-wider mb-1">Email</h4>
-                      <p className="text-[#182019] font-medium">hello@auriva.com</p>
-                      <p className="text-[#182019] font-medium mt-1">support@auriva.com</p>
+                      <a href="mailto:Supportauriva77@gmail.com" className="text-[#182019] font-medium hover:text-[#C89038] transition-colors break-all">Supportauriva77@gmail.com</a>
+                      <p className="text-[#5A6B60] text-sm mt-1">We reply within 24 hours</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[#F7F3E9] flex items-center justify-center shrink-0 border border-[#D4AF37]/30">
+                      <svg className="w-5 h-5 text-[#C89038]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-[#5A6B60] uppercase tracking-wider mb-1">Instagram</h4>
+                      <a
+                        href="https://www.instagram.com/aurivabites.in"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#182019] font-medium hover:text-[#C89038] transition-colors"
+                      >
+                        @aurivabites.in
+                      </a>
+                      <p className="text-[#5A6B60] text-sm mt-1">Follow for recipes, tips & offers</p>
                     </div>
                   </div>
 

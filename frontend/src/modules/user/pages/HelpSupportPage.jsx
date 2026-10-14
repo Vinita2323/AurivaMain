@@ -46,7 +46,7 @@ const faqs = [
   },
   {
     q: 'My payment succeeded but I do not see an order.',
-    a: 'Rarely, network issues delay confirmation. Wait a few minutes and refresh My Orders. If it still does not appear, email care@aurivafoods.com with your Razorpay payment ID — we will resolve it priority.'
+    a: 'Rarely, network issues delay confirmation. Wait a few minutes and refresh My Orders. If it still does not appear, email Supportauriva77@gmail.com with your Razorpay payment ID — we will resolve it priority.'
   },
   {
     q: 'How do I update my delivery address?',
@@ -142,8 +142,8 @@ export default function HelpSupportPage() {
               </div>
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">Call us</h3>
-                <a href="tel:+919876543210" className="text-sm font-bold text-[#0E2A1B] hover:text-[#C89038]">
-                  +91 98765 43210
+                <a href="tel:+917678154795" className="text-sm font-bold text-[#0E2A1B] hover:text-[#C89038]">
+                  +91 76781 54795
                 </a>
                 <p className="text-[11px] text-stone-500 mt-1 flex items-center gap-1">
                   <Clock className="w-3 h-3" /> Mon–Sat, 9 AM – 6 PM IST
@@ -157,10 +157,10 @@ export default function HelpSupportPage() {
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-1">Email</h3>
                 <a
-                  href="mailto:care@aurivafoods.com"
+                  href="mailto:Supportauriva77@gmail.com"
                   className="text-sm font-bold text-[#0E2A1B] hover:text-[#C89038] break-all"
                 >
-                  care@aurivafoods.com
+                  Supportauriva77@gmail.com
                 </a>
                 <p className="text-[11px] text-stone-500 mt-1">We reply within 24 hours</p>
               </div>

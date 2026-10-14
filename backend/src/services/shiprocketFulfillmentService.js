@@ -471,7 +471,7 @@ class ShiprocketFulfillmentService {
       }
     }
     if (!customerEmail || !customerEmail.includes('@')) {
-      customerEmail = 'care@aurivafoods.com';
+      customerEmail = 'Supportauriva77@gmail.com';
     }
 
     const orderDate = order.createdAt

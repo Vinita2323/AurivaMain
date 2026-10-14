@@ -12,8 +12,8 @@ const AdminContext = createContext();
 
 const INITIAL_SETTINGS = {
   storeName: "AURIVÁ Foods Private Limited",
-  supportEmail: "care@aurivafoods.com",
-  supportPhone: "+91 9876543210",
+  supportEmail: "Supportauriva77@gmail.com",
+  supportPhone: "+91 76781 54795",
   freeDeliveryThreshold: 499,
   standardDeliveryFee: 40,
   codDeliveryFee: 60,
@@ -24,7 +24,7 @@ const INITIAL_SETTINGS = {
   warehouseCity: "Sonipat",
   warehouseState: "Haryana",
   warehousePincode: "131001",
-  warehousePhone: "+91 98765 43210",
+  warehousePhone: "+91 76781 54795",
   lowStockThreshold: 30,
   currency: "₹"
 };

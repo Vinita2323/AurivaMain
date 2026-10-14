@@ -195,8 +195,8 @@ class InvoiceService {
 
     const storeName = settings.storeName || 'AURIVÁ Foods Private Limited';
     const hubAddr = settings.hubAddress || settings.warehouseAddress || 'Plot 14, Sanwer Road Industrial Area, Indore, MP - 452015';
-    const storeEmail = settings.storeEmail || settings.supportEmail || 'care@aurivafoods.com';
-    const storePhone = settings.storePhone || settings.supportPhone || '+91 9876543210';
+    const storeEmail = settings.storeEmail || settings.supportEmail || 'Supportauriva77@gmail.com';
+    const storePhone = settings.storePhone || settings.supportPhone || '+91 76781 54795';
 
     doc
       .fillColor(textDark)
@@ -414,7 +414,7 @@ class InvoiceService {
       .text(
         '1. This is a computer-generated invoice and does not require a physical signature.\n' +
         '2. All disputes are subject to the exclusive jurisdiction of courts in Indore, Madhya Pradesh.\n' +
-        '3. For returns, refund status, or corporate gifting inquiries, please write to care@aurivafoods.com.',
+        '3. For returns, refund status, or corporate gifting inquiries, please write to Supportauriva77@gmail.com.',
         40,
         footerY + 18,
         { width: 360, lineGap: 2 }

@@ -70,7 +70,7 @@ const settingsSchema = new mongoose.Schema(
     warehousePhone: {
       type: String,
       trim: true,
-      default: '+91 98765 43210'
+      default: '+91 76781 54795'
     },
     hubAddress: {
       type: String,
@@ -88,23 +88,23 @@ const settingsSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
-      default: 'care@aurivafoods.com'
+      default: 'Supportauriva77@gmail.com'
     },
     supportEmail: {
       type: String,
       trim: true,
       lowercase: true,
-      default: 'care@aurivafoods.com'
+      default: 'Supportauriva77@gmail.com'
     },
     storePhone: {
       type: String,
       trim: true,
-      default: '+91 9876543210'
+      default: '+91 76781 54795'
     },
     supportPhone: {
       type: String,
       trim: true,
-      default: '+91 9876543210'
+      default: '+91 76781 54795'
     },
     storeAddress: {
       type: String,
