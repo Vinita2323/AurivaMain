@@ -459,10 +459,15 @@ export function AdminProvider({ children }) {
     setCategoriesError(null);
     try {
       let res;
-      try {
-        res = await categoryApi.getCategories();
-      } catch (adminErr) {
-        console.warn('[AdminContext] Admin categories endpoint error, trying public endpoint:', adminErr.message);
+      // Admin list requires JWT — use public catalog when logged out (login / forgot-password)
+      if (isAdminAuthenticated) {
+        try {
+          res = await categoryApi.getCategories();
+        } catch (adminErr) {
+          console.warn('[AdminContext] Admin categories endpoint error, trying public endpoint:', adminErr.message);
+          res = await categoryApi.getActiveCategories();
+        }
+      } else {
         res = await categoryApi.getActiveCategories();
       }
       const rawList = Array.isArray(res?.data)
@@ -523,6 +528,10 @@ export function AdminProvider({ children }) {
   const [reviewsStats, setReviewsStats] = useState(null);
 
   const refreshReviews = async (params = {}) => {
+    if (!isAdminAuthenticated) {
+      setReviewsLoading(false);
+      return null;
+    }
     setReviewsLoading(true);
     try {
       const res = await adminReviewApi.getAllReviews(params);
@@ -546,8 +555,10 @@ export function AdminProvider({ children }) {
     refreshProducts();
     refreshCategories();
     refreshSettings();
-    refreshReviews();
-  }, []);
+    if (isAdminAuthenticated) {
+      refreshReviews();
+    }
+  }, [isAdminAuthenticated]);
 
   // Product Actions - MongoDB API backed
   const addProduct = async (productData) => {
@@ -795,6 +806,7 @@ export function AdminProvider({ children }) {
 
   // Coupon Actions (Backend API Integration)
   const refreshCoupons = useCallback(async () => {
+    if (!isAdminAuthenticated) return;
     try {
       const res = await adminCouponApi.getCoupons({ limit: 100 });
       if (res && res.data && Array.isArray(res.data.coupons)) {
@@ -807,11 +819,12 @@ export function AdminProvider({ children }) {
     } catch (err) {
       console.warn('[AdminContext] Could not fetch coupons from backend:', err.message);
     }
-  }, []);
+  }, [isAdminAuthenticated]);
 
   useEffect(() => {
+    if (!isAdminAuthenticated) return;
     refreshCoupons();
-  }, [refreshCoupons]);
+  }, [isAdminAuthenticated, refreshCoupons]);
 
   const addCoupon = async (couponData) => {
     const rawType = (couponData.discountType || (couponData.type === 'Flat' ? 'FIXED' : 'PERCENTAGE')).toUpperCase();

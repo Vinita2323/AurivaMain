@@ -1,10 +1,219 @@
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Admin from '../models/Admin.js';
 import { generateToken } from '../utils/generateToken.js';
 import { ROLES } from '../constants/roles.js';
 import { ACCOUNT_STATUS, HTTP_STATUS } from '../constants/status.js';
+import env from '../config/env.js';
+import {
+  isSmtpConfigured,
+  getMissingEmailConfigKeys,
+  sendAdminPasswordResetEmail
+} from './emailService.js';
+
+const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+const GENERIC_FORGOT_MESSAGE =
+  'If this account is authorized for recovery, a password reset link has been sent to the configured recovery email.';
+
+function hashResetToken(rawToken) {
+  return crypto.createHash('sha256').update(String(rawToken)).digest('hex');
+}
+
+function normalizeAdminEmail(raw) {
+  const trimmed = String(raw || '').trim().toLowerCase();
+  if (trimmed === 'admin') return env.ADMIN_LOGIN_EMAIL || 'admin@aurivafoods.com';
+  return trimmed;
+}
 
 class AdminAuthService {
+  /**
+   * Resolve the single recoverable admin account (login email → recovery inbox mapping).
+   */
+  getRecoveryMapping() {
+    return {
+      loginEmail: env.ADMIN_LOGIN_EMAIL || 'admin@aurivafoods.com',
+      recoveryEmail: env.ADMIN_RECOVERY_EMAIL || ''
+    };
+  }
+
+  /**
+   * Request password reset for the mapped admin account.
+   * Always returns a generic message; never returns the raw token.
+   */
+  /**
+   * Prefer the browser Origin (localhost while testing), then FRONTEND_URL.
+   */
+  resolvePasswordResetFrontendBase(requestOrigin) {
+    const allowed = new Set(
+      String(env.CLIENT_URL || '')
+        .split(',')
+        .map((s) => s.trim().replace(/\/$/, ''))
+        .filter((s) => s && s !== '*')
+    );
+    // Always allow local Vite during development
+    allowed.add('http://localhost:5173');
+    allowed.add('http://127.0.0.1:5173');
+
+    let origin = String(requestOrigin || '').trim();
+    // Referer may be a full path — keep only scheme://host[:port]
+    try {
+      if (origin && !/^https?:\/\/[^/]+$/i.test(origin)) {
+        origin = new URL(origin).origin;
+      }
+    } catch {
+      origin = '';
+    }
+    origin = origin.replace(/\/$/, '');
+
+    if (origin && allowed.has(origin)) {
+      return origin;
+    }
+
+    return String(env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+  }
+
+  async forgotPassword({ email, requestOrigin } = {}) {
+    if (!isSmtpConfigured() || !env.ADMIN_RECOVERY_EMAIL) {
+      const missing = getMissingEmailConfigKeys();
+      const err = new Error(
+        `Password recovery email is not configured. Set these environment variables on the backend: ${missing.join(', ')}.`
+      );
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      err.code = 'SMTP_NOT_CONFIGURED';
+      throw err;
+    }
+
+    const submitted = normalizeAdminEmail(email);
+    const { loginEmail, recoveryEmail } = this.getRecoveryMapping();
+
+    // Form email only gates whether we process the mapped admin — delivery is ALWAYS to ADMIN_RECOVERY_EMAIL
+    const isAuthorizedRequest =
+      submitted === loginEmail ||
+      (recoveryEmail && submitted === recoveryEmail.toLowerCase());
+
+    if (!isAuthorizedRequest) {
+      return { message: GENERIC_FORGOT_MESSAGE, emailed: false };
+    }
+
+    const admin = await Admin.findOne({ email: loginEmail }).select(
+      '+password +passwordResetTokenHash +passwordResetExpires'
+    );
+
+    if (!admin || admin.status === ACCOUNT_STATUS.BLOCKED) {
+      return { message: GENERIC_FORGOT_MESSAGE, emailed: false };
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashResetToken(rawToken);
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+    admin.passwordResetTokenHash = tokenHash;
+    admin.passwordResetExpires = expiresAt;
+    await admin.save({ validateBeforeSave: false });
+
+    const frontendBase = this.resolvePasswordResetFrontendBase(requestOrigin);
+    const resetUrl = `${frontendBase}/admin/reset-password?token=${encodeURIComponent(rawToken)}`;
+
+    try {
+      // Destination is always the configured recovery inbox (ignore form destination)
+      await sendAdminPasswordResetEmail({
+        to: recoveryEmail,
+        resetUrl,
+        expiresMinutes: 15
+      });
+    } catch (sendErr) {
+      // Clear token so a failed send cannot leave a usable reset dangling without email
+      admin.passwordResetTokenHash = null;
+      admin.passwordResetExpires = null;
+      await admin.save({ validateBeforeSave: false });
+      throw sendErr;
+    }
+
+    return { message: GENERIC_FORGOT_MESSAGE, emailed: true };
+  }
+
+  /**
+   * Verify a reset token is present, unused, and unexpired.
+   */
+  async verifyResetToken({ token } = {}) {
+    const raw = String(token || '').trim();
+    if (!raw || raw.length < 32) {
+      const err = new Error('Invalid or expired reset link.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      err.code = 'INVALID_TOKEN';
+      throw err;
+    }
+
+    const tokenHash = hashResetToken(raw);
+    const admin = await Admin.findOne({
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpires: { $gt: new Date() }
+    }).select('+passwordResetTokenHash +passwordResetExpires');
+
+    if (!admin) {
+      const err = new Error('Invalid or expired reset link.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      err.code = 'INVALID_TOKEN';
+      throw err;
+    }
+
+    return {
+      valid: true,
+      email: admin.email,
+      expiresAt: admin.passwordResetExpires
+    };
+  }
+
+  /**
+   * Consume reset token atomically and set a new password.
+   */
+  async resetPassword({ token, newPassword } = {}) {
+    const raw = String(token || '').trim();
+    const next = String(newPassword || '');
+
+    if (!raw || raw.length < 32) {
+      const err = new Error('Invalid or expired reset link.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      err.code = 'INVALID_TOKEN';
+      throw err;
+    }
+
+    if (next.length < 8) {
+      const err = new Error('New password must be at least 8 characters long.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      err.code = 'WEAK_PASSWORD';
+      throw err;
+    }
+
+    const tokenHash = hashResetToken(raw);
+    const now = new Date();
+
+    // Atomic claim: only one concurrent request can consume this token
+    const claimed = await Admin.findOneAndUpdate(
+      {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpires: { $gt: now }
+      },
+      {
+        $unset: { passwordResetTokenHash: 1, passwordResetExpires: 1 },
+        $set: { passwordChangedAt: now }
+      },
+      { new: true }
+    ).select('+password');
+
+    if (!claimed) {
+      const err = new Error('Invalid or expired reset link.');
+      err.statusCode = HTTP_STATUS.BAD_REQUEST;
+      err.code = 'INVALID_TOKEN';
+      throw err;
+    }
+
+    claimed.password = next;
+    await claimed.save();
+
+    return { message: 'Password has been reset successfully. You can now sign in with your new password.' };
+  }
+
   /**
    * Authenticate admin with email and password
    * @param {object} credentials
@@ -19,22 +228,23 @@ class AdminAuthService {
       throw err;
     }
 
+    const configuredLogin = (env.ADMIN_LOGIN_EMAIL || 'admin@aurivafoods.com').toLowerCase();
     const normalizedEmail =
       email.trim().toLowerCase() === 'admin'
-        ? 'admin@aurivafoods.com'
+        ? configuredLogin
         : email.trim().toLowerCase();
 
     // Offline / Disconnected development fallback
     if (mongoose.connection.readyState !== 1) {
       if (
-        normalizedEmail === 'admin@aurivafoods.com' &&
+        (normalizedEmail === configuredLogin || normalizedEmail === 'admin@aurivafoods.com') &&
         (password === 'Admin@123456' || password === 'admin' || password === 'auriva@2026')
       ) {
         const fallbackAdmin = {
           _id: 'admin-fallback-001',
           id: 'admin-fallback-001',
           name: 'Super Admin',
-          email: 'admin@aurivafoods.com',
+          email: configuredLogin,
           role: ROLES.ADMIN,
           status: ACCOUNT_STATUS.ACTIVE,
           permissions: ['SUPER_ADMIN']
@@ -207,6 +417,9 @@ class AdminAuthService {
     }
 
     admin.password = next;
+    admin.passwordChangedAt = new Date();
+    admin.passwordResetTokenHash = undefined;
+    admin.passwordResetExpires = undefined;
     await admin.save();
     return { message: 'Password updated successfully.' };
   }
@@ -217,7 +430,8 @@ class AdminAuthService {
    * password to Admin@123456 so local login always works with documented credentials.
    */
   async ensureDefaultAdmin() {
-    const defaultEmail = 'admin@aurivafoods.com';
+    const defaultEmail = (env.ADMIN_LOGIN_EMAIL || 'admin@aurivafoods.com').toLowerCase();
+    const legacyEmail = 'admin@aurivafoods.com';
     const defaultPassword = 'Admin@123456';
     const shouldResetPassword =
       String(process.env.RESET_DEFAULT_ADMIN_PASSWORD || '').toLowerCase() === 'true' ||
@@ -225,6 +439,17 @@ class AdminAuthService {
 
     try {
       let admin = await Admin.findOne({ email: defaultEmail }).select('+password');
+
+      // Migrate legacy login email → configured ADMIN_LOGIN_EMAIL (keeps same password)
+      if (!admin && defaultEmail !== legacyEmail) {
+        const legacy = await Admin.findOne({ email: legacyEmail }).select('+password');
+        if (legacy) {
+          legacy.email = defaultEmail;
+          await legacy.save();
+          admin = legacy;
+          console.log(`[Admin Seeding] Migrated Super Admin email: ${legacyEmail} → ${defaultEmail}`);
+        }
+      }
 
       if (!admin) {
         await Admin.create({

@@ -17,6 +17,8 @@ import AdminSettings from '../pages/AdminSettings';
 import AdminRecipes from '../pages/AdminRecipes';
 import AdminProfile from '../pages/AdminProfile';
 import AdminLogin from '../pages/AdminLogin';
+import AdminForgotPassword from '../pages/AdminForgotPassword';
+import AdminResetPassword from '../pages/AdminResetPassword';
 
 function ProtectedAdminRoute({ children }) {
   const { isAdminAuthenticated } = useAdmin();
@@ -32,8 +34,10 @@ function ProtectedAdminRoute({ children }) {
 export default function AdminRoutes() {
   return (
     <Routes>
-      {/* Public Admin Login Route */}
+      {/* Public Admin auth routes */}
       <Route path="/login" element={<AdminLogin />} />
+      <Route path="/forgot-password" element={<AdminForgotPassword />} />
+      <Route path="/reset-password" element={<AdminResetPassword />} />
 
       {/* Protected Admin Subpages */}
       <Route path="/" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />

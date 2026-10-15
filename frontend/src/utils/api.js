@@ -1,4 +1,4 @@
-const LOCAL_API_BASE = 'http://localhost:5000/api/v1';
+const LOCAL_API_BASE = 'http://localhost:7000/api/v1';
 
 function resolveApiBase() {
   // Always use local backend while Vite is in development — avoids hitting
@@ -227,6 +227,21 @@ export const adminAuthApi = {
   }),
 
   changePassword: (data) => apiRequest('/auth/admin/change-password', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
+  forgotPassword: (email) => apiRequest('/auth/admin/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  }),
+
+  verifyResetToken: (token) => apiRequest('/auth/admin/verify-reset-token', {
+    method: 'POST',
+    body: JSON.stringify({ token })
+  }),
+
+  resetPassword: (data) => apiRequest('/auth/admin/reset-password', {
     method: 'POST',
     body: JSON.stringify(data)
   })

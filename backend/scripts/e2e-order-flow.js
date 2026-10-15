@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const API = process.env.E2E_API_BASE || 'http://localhost:5000/api/v1';
+const API = process.env.E2E_API_BASE || 'http://localhost:7000/api/v1';
 const PHONE = '9876543210';
 const OTP = '123456';
 

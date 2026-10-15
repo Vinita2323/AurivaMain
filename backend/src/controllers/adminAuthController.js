@@ -79,6 +79,81 @@ class AdminAuthController {
       next(error);
     }
   }
+
+  /**
+   * Request admin password reset email
+   * POST /api/v1/auth/admin/forgot-password (Public, rate-limited)
+   */
+  async forgotPassword(req, res, next) {
+    try {
+      const result = await adminAuthService.forgotPassword({
+        email: req.body?.email,
+        // Local Vite → localhost reset links; production Origin → live site links
+        requestOrigin: req.get('origin') || req.get('referer')
+      });
+      return sendSuccess(res, result.message, {});
+    } catch (error) {
+      if (error.statusCode) {
+        return sendError(
+          res,
+          error.message,
+          error.code ? { reason: error.code } : {},
+          error.statusCode
+        );
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Verify admin password reset token
+   * POST /api/v1/auth/admin/verify-reset-token (Public, rate-limited)
+   */
+  async verifyResetToken(req, res, next) {
+    try {
+      const result = await adminAuthService.verifyResetToken({
+        token: req.body?.token
+      });
+      return sendSuccess(res, 'Reset link is valid.', {
+        valid: result.valid,
+        email: result.email
+      });
+    } catch (error) {
+      if (error.statusCode) {
+        return sendError(
+          res,
+          error.message,
+          error.code ? { reason: error.code } : {},
+          error.statusCode
+        );
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Reset admin password with a one-time token
+   * POST /api/v1/auth/admin/reset-password (Public, rate-limited)
+   */
+  async resetPassword(req, res, next) {
+    try {
+      const result = await adminAuthService.resetPassword({
+        token: req.body?.token,
+        newPassword: req.body?.newPassword
+      });
+      return sendSuccess(res, result.message, {});
+    } catch (error) {
+      if (error.statusCode) {
+        return sendError(
+          res,
+          error.message,
+          error.code ? { reason: error.code } : {},
+          error.statusCode
+        );
+      }
+      next(error);
+    }
+  }
 }
 
 export const adminAuthController = new AdminAuthController();

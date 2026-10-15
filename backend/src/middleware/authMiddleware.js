@@ -76,6 +76,19 @@ export const authMiddleware = async (req, res, next) => {
       );
     }
 
+    // Invalidate JWTs issued before a password change / reset
+    if (account.passwordChangedAt && decoded.iat) {
+      const changedAtSec = Math.floor(new Date(account.passwordChangedAt).getTime() / 1000);
+      if (decoded.iat < changedAtSec) {
+        return sendError(
+          res,
+          'Your session is no longer valid. Please log in again.',
+          { reason: 'PASSWORD_CHANGED' },
+          HTTP_STATUS.UNAUTHORIZED
+        );
+      }
+    }
+
     // Check account status
     if (account.status === ACCOUNT_STATUS.BLOCKED) {
       return sendError(

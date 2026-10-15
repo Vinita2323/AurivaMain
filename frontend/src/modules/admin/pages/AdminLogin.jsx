@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Mail, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Logo from '../../user/components/Logo';
 import { useAdmin } from '../../../context/AdminContext';
@@ -67,37 +67,54 @@ export default function AdminLogin() {
               </div>
             )}
 
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-4.5">
+            {/* Login Form — autocomplete off so the browser does not prefill saved credentials */}
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4.5"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+            >
+              {/* Hidden decoy fields absorb Chrome autofill */}
+              <input type="text" name="prevent_autofill_user" autoComplete="username" tabIndex={-1} aria-hidden="true" className="hidden" />
+              <input type="password" name="prevent_autofill_pass" autoComplete="current-password" tabIndex={-1} aria-hidden="true" className="hidden" />
+
               <div>
-                <label className="block text-xs sm:text-sm font-semibold text-stone-700 mb-1.5">
+                <label className="block text-xs sm:text-sm font-semibold text-stone-700 mb-1.5" htmlFor="adminLoginEmail">
                   Username or Email
                 </label>
                 <div className="relative">
                   <Mail className="w-4.5 h-4.5 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
+                    id="adminLoginEmail"
+                    name="admin_login_email"
                     type="text"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@aurivafoods.com"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    placeholder="Enter admin email"
                     className="w-full pl-11 pr-4 py-3 text-sm sm:text-base rounded-xl border border-stone-300 focus:outline-none focus:border-[#0E2A1B] focus:ring-2 focus:ring-[#0E2A1B]/10 text-stone-800 font-medium placeholder:text-stone-400 transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs sm:text-sm font-semibold text-stone-700 mb-1.5">
+                <label className="block text-xs sm:text-sm font-semibold text-stone-700 mb-1.5" htmlFor="adminLoginPassword">
                   Password
                 </label>
                 <div className="relative">
                   <Lock className="w-4.5 h-4.5 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
+                    id="adminLoginPassword"
+                    name="admin_login_password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    placeholder="Enter password"
                     className="w-full pl-11 pr-11 py-3 text-sm sm:text-base rounded-xl border border-stone-300 focus:outline-none focus:border-[#0E2A1B] focus:ring-2 focus:ring-[#0E2A1B]/10 text-stone-800 font-medium placeholder:text-stone-400 transition-all"
                   />
                   <button
@@ -112,9 +129,15 @@ export default function AdminLogin() {
 
               <div className="flex items-center justify-between text-xs sm:text-sm text-stone-600 pt-0.5">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" defaultChecked className="w-4 h-4 accent-[#0E2A1B] rounded cursor-pointer" />
+                  <input type="checkbox" className="w-4 h-4 accent-[#0E2A1B] rounded cursor-pointer" />
                   <span>Remember me</span>
                 </label>
+                <Link
+                  to="/admin/forgot-password"
+                  className="font-semibold text-[#0E2A1B] hover:text-[#C89038] transition-colors"
+                >
+                  Forgot Password?
+                </Link>
               </div>
 
               <button

@@ -105,9 +105,37 @@ export const adminLoginLimiter = createRateLimiter({
   }
 });
 
+/**
+ * Admin Forgot Password (Max 5 requests per 15 minutes per IP)
+ */
+export const adminForgotPasswordLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: 'Too many password reset requests. Please try again after 15 minutes.',
+  keyGenerator: (req) => {
+    const ip = req.ip || 'ip';
+    return `admin-forgot-${ip}`;
+  }
+});
+
+/**
+ * Admin Reset / Verify Token (Max 10 attempts per 15 minutes per IP)
+ */
+export const adminResetPasswordLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many password reset attempts. Please try again after 15 minutes.',
+  keyGenerator: (req) => {
+    const ip = req.ip || 'ip';
+    return `admin-reset-${ip}`;
+  }
+});
+
 export default {
   createRateLimiter,
   otpRequestLimiter,
   otpVerifyLimiter,
-  adminLoginLimiter
+  adminLoginLimiter,
+  adminForgotPasswordLimiter,
+  adminResetPasswordLimiter
 };

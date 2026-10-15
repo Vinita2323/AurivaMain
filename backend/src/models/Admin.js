@@ -61,6 +61,22 @@ const adminSchema = new mongoose.Schema(
       default: '',
       maxlength: [20, 'Phone cannot exceed 20 characters']
     },
+    // Password reset (store SHA-256 hash only — never the raw token)
+    passwordResetTokenHash: {
+      type: String,
+      select: false,
+      default: null
+    },
+    passwordResetExpires: {
+      type: Date,
+      select: false,
+      default: null
+    },
+    // Used to invalidate JWTs issued before a password change / reset
+    passwordChangedAt: {
+      type: Date,
+      default: null
+    }
   },
   {
     timestamps: true,

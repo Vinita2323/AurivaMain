@@ -128,8 +128,92 @@ export const validateAdminChangePassword = (req, res, next) => {
   next();
 };
 
+/**
+ * Validate forgot-password payload
+ */
+export const validateAdminForgotPassword = (req, res, next) => {
+  const { email } = req.body || {};
+
+  if (!email || typeof email !== 'string' || !String(email).trim()) {
+    return sendError(
+      res,
+      'Email is required.',
+      { field: 'email', reason: 'REQUIRED' },
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  const normalized = String(email).trim().toLowerCase();
+  if (normalized === 'admin') {
+    req.body.email = String(process.env.ADMIN_LOGIN_EMAIL || 'Indgroup26@gmail.com')
+      .trim()
+      .toLowerCase();
+    return next();
+  }
+
+  const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/;
+  if (!emailRegex.test(normalized)) {
+    return sendError(
+      res,
+      'Please enter a valid email address.',
+      { field: 'email', reason: 'INVALID_FORMAT' },
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  req.body.email = normalized;
+  next();
+};
+
+/**
+ * Validate verify-reset-token payload
+ */
+export const validateAdminVerifyResetToken = (req, res, next) => {
+  const { token } = req.body || {};
+  if (!token || typeof token !== 'string' || String(token).trim().length < 32) {
+    return sendError(
+      res,
+      'Reset token is required.',
+      { field: 'token', reason: 'REQUIRED' },
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  req.body.token = String(token).trim();
+  next();
+};
+
+/**
+ * Validate reset-password payload
+ */
+export const validateAdminResetPassword = (req, res, next) => {
+  const { token, newPassword, confirmPassword } = req.body || {};
+  const errors = [];
+
+  if (!token || typeof token !== 'string' || String(token).trim().length < 32) {
+    errors.push({ field: 'token', message: 'Reset token is required.' });
+  }
+
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+    errors.push({ field: 'newPassword', message: 'New password must be at least 8 characters.' });
+  }
+
+  if (confirmPassword !== undefined && confirmPassword !== newPassword) {
+    errors.push({ field: 'confirmPassword', message: 'Password confirmation does not match.' });
+  }
+
+  if (errors.length > 0) {
+    return sendError(res, 'Password reset validation failed.', { errors }, HTTP_STATUS.BAD_REQUEST);
+  }
+
+  req.body.token = String(token).trim();
+  next();
+};
+
 export default {
   validateAdminLogin,
   validateAdminProfileUpdate,
-  validateAdminChangePassword
+  validateAdminChangePassword,
+  validateAdminForgotPassword,
+  validateAdminVerifyResetToken,
+  validateAdminResetPassword
 };

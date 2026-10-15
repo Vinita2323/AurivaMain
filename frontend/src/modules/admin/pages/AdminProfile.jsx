@@ -32,7 +32,7 @@ export default function AdminProfile() {
   const [profile, setProfile] = useState({
     name: adminUser?.name || 'Admin Manager',
     role: adminUser?.role === 'ADMIN' ? 'Super Administrator' : (adminUser?.role || 'Super Administrator'),
-    email: adminUser?.email || 'admin@aurivafoods.com',
+    email: adminUser?.email || 'Indgroup26@gmail.com',
     phone: adminUser?.phone || '',
     accessLevel: 'Tier 1 Executive Clearance',
     warehouseName: SONIPAT_WAREHOUSE.warehouseName,

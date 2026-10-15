@@ -8,13 +8,58 @@ const __dirname = path.dirname(__filename);
 // Load .env from backend root
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+function resolveFrontendUrl() {
+  const explicit = String(process.env.FRONTEND_URL || '').trim().replace(/\/$/, '');
+  if (explicit) return explicit;
+
+  const clients = String(process.env.CLIENT_URL || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s && s !== '*');
+
+  // Prefer production HTTPS origin from the CORS allowlist
+  const httpsProd = clients.find((s) => /^https:\/\//i.test(s));
+  if (httpsProd) return httpsProd.replace(/\/$/, '');
+
+  const firstClient = clients[0];
+  if (firstClient) return firstClient.replace(/\/$/, '');
+  // Local default when FRONTEND_URL / CLIENT_URL are unset
+  return 'http://localhost:5173';
+}
+
+function resolveSmtpSecure() {
+  const explicit = String(process.env.SMTP_SECURE || '').trim().toLowerCase();
+  if (explicit === 'true' || explicit === '1') return true;
+  if (explicit === 'false' || explicit === '0') return false;
+  return Number(process.env.SMTP_PORT || 465) === 465;
+}
+
 const env = {
-  PORT: process.env.PORT || 5000,
+  PORT: process.env.PORT || 7000,
   NODE_ENV: process.env.NODE_ENV || 'development',
   MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/auriva_db',
   JWT_SECRET: process.env.JWT_SECRET || 'auriva_default_dev_jwt_secret_key_change_me',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5173',
+  FRONTEND_URL: resolveFrontendUrl(),
+  // Recovery inbox — forgot-password emails are ALWAYS sent here
+  ADMIN_RECOVERY_EMAIL: String(process.env.ADMIN_RECOVERY_EMAIL || 'Indgroup26@gmail.com')
+    .trim()
+    .toLowerCase(),
+  // Login identity for the recoverable super-admin account
+  ADMIN_LOGIN_EMAIL: String(process.env.ADMIN_LOGIN_EMAIL || 'Indgroup26@gmail.com')
+    .trim()
+    .toLowerCase(),
+  SMTP: {
+    HOST: process.env.SMTP_HOST || 'smtp.gmail.com',
+    PORT: process.env.SMTP_PORT || '465',
+    SECURE: resolveSmtpSecure(),
+    USER: process.env.SMTP_USER || '',
+    // Gmail App Passwords are often pasted with spaces — strip them for SMTP auth
+    PASS: String(process.env.SMTP_PASS || '').replace(/\s+/g, ''),
+    FROM: process.env.SMTP_FROM || process.env.SMTP_USER || ''
+  },
+
   SMS: {
     API_KEY: process.env.SMS_API_KEY || '',
     SENDER_ID: process.env.SMS_SENDER_ID || 'AURIVA',

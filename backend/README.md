@@ -107,7 +107,7 @@ cp .env.example .env
 Configure your environment variables:
 
 ```env
-PORT=5000
+PORT=7000
 NODE_ENV=development
 CLIENT_URL=http://localhost:5173
 
