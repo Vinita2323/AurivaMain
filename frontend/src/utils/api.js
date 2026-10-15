@@ -1,14 +1,19 @@
 const LOCAL_API_BASE = 'http://localhost:7000/api/v1';
 
 function resolveApiBase() {
-  // Always use local backend while Vite is in development — avoids hitting
-  // production (aurivabites.in) where new routes are not deployed yet.
+  // Local Vite dev server → local backend
   if (import.meta.env.DEV) {
     return LOCAL_API_BASE;
   }
 
-  const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) return String(envUrl).replace(/\/$/, '');
+  const envUrl = import.meta.env.VITE_API_URL
+    ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '')
+    : '';
+
+  // Never ship a localhost API URL in a production build (breaks aurivabites.in)
+  if (envUrl && !/localhost|127\.0\.0\.1/i.test(envUrl)) {
+    return envUrl;
+  }
 
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
