@@ -30,16 +30,32 @@ class UserAuthService {
     }
 
     // Generate, hash, and store OTP with cooldown & TTL
-    const { otp, retryAfterSeconds } = await otpService.generateAndSaveOtp(phone);
+    const { otp, retryAfterSeconds, demoMode } = await otpService.generateAndSaveOtp(phone);
 
-    // Send OTP via SMS gateway (or dev console)
-    await smsService.sendOtpSms(phone, otp);
+    // Send OTP via SMS gateway (or console/demo mode)
+    const smsResult = await smsService.sendOtpSms(phone, otp);
+
+    if (!smsResult.success) {
+      const err = new Error(
+        smsResult.error
+          ? `Unable to send OTP SMS: ${smsResult.error}`
+          : 'Unable to send OTP SMS. Please try again shortly.'
+      );
+      err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+      err.reason = 'SMS_SEND_FAILED';
+      throw err;
+    }
+
+    const inDemo = Boolean(demoMode || smsResult.demoMode);
 
     return {
-      message: 'OTP sent successfully to your mobile number.',
+      message: inDemo
+        ? 'OTP ready. SMS gateway is in demo mode — use code 123456.'
+        : 'OTP sent successfully to your mobile number.',
       phone,
       isNewUser: !existingUser,
-      retryAfterSeconds
+      retryAfterSeconds,
+      demoMode: inDemo
     };
   }
 

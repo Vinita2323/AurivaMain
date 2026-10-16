@@ -61,10 +61,14 @@ const env = {
   },
 
   SMS: {
+    // fast2sms | console (console = no real SMS; OTP logged / demo mode)
+    PROVIDER: String(process.env.SMS_PROVIDER || 'fast2sms').trim().toLowerCase(),
     API_KEY: process.env.SMS_API_KEY || '',
     SENDER_ID: process.env.SMS_SENDER_ID || 'AURIVA',
     TEMPLATE_ID: process.env.SMS_TEMPLATE_ID || ''
   },
+  // true|false — when unset, demo OTP auto-enables if SMS_API_KEY is missing/placeholder
+  OTP_DEMO_MODE: String(process.env.OTP_DEMO_MODE || '').trim().toLowerCase(),
   CLOUDINARY: {
     CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
     API_KEY: process.env.CLOUDINARY_API_KEY || '',

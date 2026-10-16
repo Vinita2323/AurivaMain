@@ -23,9 +23,10 @@ export default function LoginPage() {
   const [step, setStep] = useState('phone'); // 'phone' or 'otp'
   const [phone, setPhone] = useState('');
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
-  const [generatedOtp, setGeneratedOtp] = useState('123456');
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
+  // Show demo OTP UI only in Vite DEV or when API reports SMS demo mode
+  const [demoMode, setDemoMode] = useState(Boolean(import.meta.env.DEV));
 
   // Feedback & Loading States
   const [errorMsg, setErrorMsg] = useState('');
@@ -88,6 +89,8 @@ export default function LoginPage() {
       setIsLoading(false);
 
       if (res.success) {
+        const isDemo = Boolean(res.data?.demoMode) || Boolean(import.meta.env.DEV);
+        setDemoMode(isDemo);
         setStep('otp');
         setOtpDigits(['', '', '', '', '', '']);
         setTimer(res.data?.retryAfterSeconds || 30);
@@ -187,7 +190,8 @@ export default function LoginPage() {
     const res = await requestOtp(cleanPhone);
     
     if (res.success) {
-      setSuccessMsg('New OTP sent successfully!');
+      setDemoMode(Boolean(res.data?.demoMode) || Boolean(import.meta.env.DEV));
+      setSuccessMsg(res.message || 'New OTP sent successfully!');
       setOtpDigits(['', '', '', '', '', '']);
       setTimeout(() => setSuccessMsg(''), 3000);
     } else {
@@ -301,34 +305,36 @@ export default function LoginPage() {
                     </button>
                   </form>
 
-                  {/* Client Demo Credentials Box */}
-                  <div className="p-3.5 rounded-2xl bg-[#FAF7F2] border border-[#D4AF37]/50 flex items-center justify-between gap-3 shadow-xs">
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#0E2A1B] bg-[#D4AF37]/20 px-2 py-0.5 rounded-md">
-                          Client Demo Account
-                        </span>
+                  {/* Client Demo Credentials Box — only when SMS is in demo mode / local DEV */}
+                  {demoMode && (
+                    <div className="p-3.5 rounded-2xl bg-[#FAF7F2] border border-[#D4AF37]/50 flex items-center justify-between gap-3 shadow-xs">
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#0E2A1B] bg-[#D4AF37]/20 px-2 py-0.5 rounded-md">
+                            Client Demo Account
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-700 font-semibold">
+                          Mobile: <span className="font-mono text-[#0E2A1B] font-bold">9876543210</span>
+                        </p>
+                        <p className="text-[11px] text-stone-500">
+                          Default OTP: <span className="font-mono text-[#0E2A1B] font-bold">123456</span>
+                        </p>
                       </div>
-                      <p className="text-xs text-stone-700 font-semibold">
-                        Mobile: <span className="font-mono text-[#0E2A1B] font-bold">9876543210</span>
-                      </p>
-                      <p className="text-[11px] text-stone-500">
-                        Default OTP: <span className="font-mono text-[#0E2A1B] font-bold">123456</span>
-                      </p>
-                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPhone('9876543210');
-                        setErrorMsg('');
-                        setSuccessMsg('Demo number filled! Click "Get OTP" or enter OTP 123456');
-                      }}
-                      className="px-3 py-2 text-[11px] font-bold text-[#0E2A1B] bg-[#D4AF37] hover:bg-[#E5C358] rounded-xl uppercase tracking-wider shrink-0 transition-all shadow-xs active:scale-95 cursor-pointer"
-                    >
-                      Auto-Fill
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhone('9876543210');
+                          setErrorMsg('');
+                          setSuccessMsg('Demo number filled! Click "Get OTP" or enter OTP 123456');
+                        }}
+                        className="px-3 py-2 text-[11px] font-bold text-[#0E2A1B] bg-[#D4AF37] hover:bg-[#E5C358] rounded-xl uppercase tracking-wider shrink-0 transition-all shadow-xs active:scale-95 cursor-pointer"
+                      >
+                        Auto-Fill
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -336,26 +342,28 @@ export default function LoginPage() {
               {step === 'otp' && (
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
                   
-                  {/* Default Demo OTP Hint Box */}
-                  <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#D4AF37]/60 flex items-center justify-between gap-2 shadow-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">🔑</span>
-                      <div>
-                        <span className="text-[11px] text-stone-600 block">Default Demo OTP:</span>
-                        <span className="text-xs font-mono font-extrabold text-[#0E2A1B]">123456</span>
+                  {/* Default Demo OTP Hint Box — only when SMS is in demo mode / local DEV */}
+                  {demoMode && (
+                    <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#D4AF37]/60 flex items-center justify-between gap-2 shadow-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">🔑</span>
+                        <div>
+                          <span className="text-[11px] text-stone-600 block">Default Demo OTP:</span>
+                          <span className="text-xs font-mono font-extrabold text-[#0E2A1B]">123456</span>
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOtpDigits(['1', '2', '3', '4', '5', '6']);
+                          setErrorMsg('');
+                        }}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-[#0E2A1B] bg-[#D4AF37] hover:bg-[#E5C358] rounded-xl uppercase tracking-wider shrink-0 transition-all shadow-xs active:scale-95 cursor-pointer"
+                      >
+                        Fill 123456
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOtpDigits(['1', '2', '3', '4', '5', '6']);
-                        setErrorMsg('');
-                      }}
-                      className="px-2.5 py-1.5 text-[11px] font-bold text-[#0E2A1B] bg-[#D4AF37] hover:bg-[#E5C358] rounded-xl uppercase tracking-wider shrink-0 transition-all shadow-xs active:scale-95 cursor-pointer"
-                    >
-                      Fill 123456
-                    </button>
-                  </div>
+                  )}
 
                   {/* Change Phone Number */}
                   <div className="flex items-center justify-between text-xs text-stone-500 px-1">

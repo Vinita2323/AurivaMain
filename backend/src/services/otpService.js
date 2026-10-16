@@ -1,11 +1,13 @@
 import crypto from 'crypto';
 import env from '../config/env.js';
 import Otp from '../models/Otp.js';
-import { normalizePhone } from './smsService.js';
+import { normalizePhone, isOtpDemoMode } from './smsService.js';
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_RESEND_COOLDOWN_SECONDS = 30;
 const MAX_VERIFY_ATTEMPTS = 5;
+const DEMO_OTP = '123456';
+const DEMO_PHONES = ['9876543210', '9822334455', '9999999999'];
 
 /**
  * Hash an OTP string with HMAC-SHA256 to ensure raw OTP is never stored in plain text
@@ -55,8 +57,10 @@ class OtpService {
       }
     }
 
-    // Generate secure 6-digit OTP
-    const otp = generate6DigitOtp();
+    // When SMS is not configured (or OTP_DEMO_MODE=true), use fixed demo OTP so
+    // production Hostinger matches local behaviour until a real SMS key is set.
+    const demoMode = isOtpDemoMode();
+    const otp = demoMode ? DEMO_OTP : generate6DigitOtp();
     const otpHash = hashOtp(otp);
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
@@ -76,6 +80,7 @@ class OtpService {
     return {
       otp,
       expiresAt,
+      demoMode,
       retryAfterSeconds: OTP_RESEND_COOLDOWN_SECONDS
     };
   }
@@ -92,9 +97,16 @@ class OtpService {
 
     const otpDoc = await Otp.findOne({ phone: normalizedPhone, expiresAt: { $gt: now } });
 
-    // Allow default master demo OTP for designated test numbers or in non-production
-    const DEMO_PHONES = ['9876543210', '9822334455', '9999999999'];
-    if (String(candidateOtp).trim() === '123456' && (DEMO_PHONES.includes(normalizedPhone) || env.NODE_ENV !== 'production')) {
+    // Demo OTP bypass:
+    // - always for designated demo phones
+    // - any phone in non-production
+    // - any phone when SMS gateway is not configured / OTP_DEMO_MODE=true
+    const allowDemoOtp =
+      DEMO_PHONES.includes(normalizedPhone) ||
+      env.NODE_ENV !== 'production' ||
+      isOtpDemoMode();
+
+    if (String(candidateOtp).trim() === DEMO_OTP && allowDemoOtp) {
       if (otpDoc) {
         await Otp.deleteOne({ _id: otpDoc._id });
       }

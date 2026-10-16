@@ -16,7 +16,8 @@ class UserAuthController {
       return sendSuccess(res, result.message, {
         phone: result.phone,
         isNewUser: result.isNewUser,
-        retryAfterSeconds: result.retryAfterSeconds
+        retryAfterSeconds: result.retryAfterSeconds,
+        demoMode: Boolean(result.demoMode)
       });
     } catch (error) {
       if (error.statusCode) {
