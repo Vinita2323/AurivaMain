@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Tag, AlertCircle } from 'lucide-react';
 
+// yyyy-mm-dd in the admin's LOCAL timezone (toISOString would shift the day for IST)
+const toLocalDateInput = (value) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 export default function CreateCouponModal({ isOpen, onClose, onSave, couponToEdit = null }) {
   const [code, setCode] = useState('');
   const [discountType, setDiscountType] = useState('PERCENTAGE');
@@ -29,12 +37,12 @@ export default function CreateCouponModal({ isOpen, onClose, onSave, couponToEdi
       setUsageLimit(couponToEdit.usageLimit || 0);
       setStartDate(
         couponToEdit.startDate
-          ? new Date(couponToEdit.startDate).toISOString().split('T')[0]
+          ? toLocalDateInput(couponToEdit.startDate)
           : ''
       );
       setEndDate(
         couponToEdit.endDate
-          ? new Date(couponToEdit.endDate).toISOString().split('T')[0]
+          ? toLocalDateInput(couponToEdit.endDate)
           : ''
       );
       setStatus(
@@ -50,7 +58,7 @@ export default function CreateCouponModal({ isOpen, onClose, onSave, couponToEdi
       setMinOrderValue(499);
       setMaxDiscount(0);
       setUsageLimit(0);
-      setStartDate(new Date().toISOString().split('T')[0]);
+      setStartDate(toLocalDateInput(new Date()));
       setEndDate('');
       setStatus('ACTIVE');
       setDescription('');
@@ -92,8 +100,22 @@ export default function CreateCouponModal({ isOpen, onClose, onSave, couponToEdi
       return;
     }
 
-    if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
-      setErrorMessage('End date must be strictly after start date');
+    // Dates that have already passed can't be used (unchanged dates on an existing coupon are left alone)
+    const todayStr = toLocalDateInput(new Date());
+    const origStart = couponToEdit?.startDate ? toLocalDateInput(couponToEdit.startDate) : '';
+    const origEnd = couponToEdit?.endDate ? toLocalDateInput(couponToEdit.endDate) : null;
+    if (startDate && startDate < todayStr && startDate !== origStart) {
+      setErrorMessage('Start date cannot be in the past. Choose today or a future date.');
+      return;
+    }
+    if (endDate && endDate < todayStr && endDate !== origEnd) {
+      setErrorMessage('End date cannot be in the past. Choose today or a future date.');
+      return;
+    }
+
+    // Same-day coupons are allowed: only an end date BEFORE the start date is invalid
+    if (startDate && endDate && endDate < startDate) {
+      setErrorMessage('End date cannot be before the start date');
       return;
     }
 
@@ -111,8 +133,14 @@ export default function CreateCouponModal({ isOpen, onClose, onSave, couponToEdi
         minOrder: Number(minOrderValue) || 0,
         maxDiscount: Number(maxDiscount) || 0,
         usageLimit: Number(usageLimit) || 0,
-        startDate: startDate ? new Date(startDate) : new Date(),
-        endDate: endDate ? new Date(endDate) : null,
+        // Start = beginning of the chosen day, end = last moment of the chosen day (local time)
+        // When editing, leave dates the admin did not change untouched (so expired coupons stay editable)
+        ...(couponToEdit && startDate === origStart
+          ? {}
+          : { startDate: startDate ? new Date(`${startDate}T00:00:00`) : new Date() }),
+        ...(couponToEdit && endDate === (origEnd || '')
+          ? {}
+          : { endDate: endDate ? new Date(`${endDate}T23:59:59.999`) : null }),
         status,
         description: description.trim()
       });
@@ -236,6 +264,7 @@ export default function CreateCouponModal({ isOpen, onClose, onSave, couponToEdi
               <input
                 type="date"
                 value={startDate}
+                min={couponToEdit ? undefined : toLocalDateInput(new Date())}
                 onChange={e => setStartDate(e.target.value)}
                 className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none"
               />
@@ -246,6 +275,7 @@ export default function CreateCouponModal({ isOpen, onClose, onSave, couponToEdi
               <input
                 type="date"
                 value={endDate}
+                min={(couponToEdit ? startDate : [startDate, toLocalDateInput(new Date())].sort().pop()) || undefined}
                 onChange={e => setEndDate(e.target.value)}
                 className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 focus:outline-none"
               />

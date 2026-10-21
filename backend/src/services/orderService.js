@@ -766,7 +766,7 @@ export const getAllOrdersAdmin = async (filters = {}) => {
 /**
  * Admin: Update order fulfillment status with lifecycle validation and timeline tracking
  */
-export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy = 'Admin', note = '' } = {}) => {
+export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy = 'Admin', note = '', rider = null } = {}) => {
   const query = mongoose.Types.ObjectId.isValid(orderId)
     ? { _id: orderId }
     : { orderNumber: orderId };
@@ -816,6 +816,7 @@ export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy 
     ).catch(() => {});
   } else if (newStatus === 'OUT_FOR_DELIVERY') {
     order.delivery.status = 'Out for Delivery';
+    applyRiderDetails(order, rider);
   } else if (newStatus === 'SHIPPED') {
     order.delivery.status = 'In Transit';
     if (!order.dispatchedAt) {
@@ -901,6 +902,27 @@ export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy 
 };
 
 /**
+ * Merge admin-entered delivery partner details into the order.
+ * Only real values are stored — never placeholder defaults.
+ */
+const applyRiderDetails = (order, rider) => {
+  if (!rider || typeof rider !== 'object') return;
+  const text = (v) => (typeof v === 'string' ? v.trim() : '');
+  const num = (v) => (v === undefined || v === null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+  const current = order.rider?.toObject ? order.rider.toObject() : (order.rider || {});
+  order.rider = {
+    name: text(rider.name) || current.name || '',
+    phone: text(rider.phone) || current.phone || '',
+    rating: num(rider.rating) ?? current.rating ?? null,
+    vehicle: text(rider.vehicle) || current.vehicle || '',
+    eta: text(rider.eta) || current.eta || '',
+    distance: text(rider.distance) || current.distance || '',
+    lat: num(rider.lat) ?? current.lat ?? null,
+    lng: num(rider.lng) ?? current.lng ?? null
+  };
+};
+
+/**
  * Admin: Dispatch order with courier, AWB, and delivery partner tracking
  */
 export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
@@ -941,18 +963,7 @@ export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
   order.dispatchedAt = dispatchDate ? new Date(dispatchDate) : new Date();
   order.delivery.status = 'In Transit';
 
-  if (rider && typeof rider === 'object') {
-    order.rider = {
-      name: rider.name || order.rider?.name || 'Rohan Kumar',
-      phone: rider.phone || order.rider?.phone || '+91 9811122334',
-      rating: rider.rating || order.rider?.rating || 4.9,
-      vehicle: rider.vehicle || order.rider?.vehicle || 'MP09-AB-1234',
-      eta: rider.eta || order.rider?.eta || '25 mins',
-      distance: rider.distance || order.rider?.distance || '2.5 km away',
-      lat: rider.lat || order.rider?.lat || 22.7196,
-      lng: rider.lng || order.rider?.lng || 75.8577
-    };
-  }
+  applyRiderDetails(order, rider);
 
   // Advance status to SHIPPED if still in warehouse stages
   const becameShipped = ['CONFIRMED', 'ACCEPTED', 'PACKED', 'PROCESSING'].includes(order.status);

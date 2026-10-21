@@ -587,7 +587,14 @@ export const orderApi = {
 
 // Admin Order Management API
 export const adminDashboardApi = {
-  getSummary: () => apiRequest('/admin/dashboard', { method: 'GET' })
+  getSummary: () => apiRequest('/admin/dashboard', { method: 'GET' }),
+  getAnalytics: ({ range = 'monthly', from = '', to = '' } = {}) => {
+    const query = new URLSearchParams();
+    if (from) query.append('from', from);
+    if (to) query.append('to', to);
+    if (!from) query.append('range', range);
+    return apiRequest(`/admin/analytics?${query.toString()}`, { method: 'GET' });
+  }
 };
 
 export const adminOrderApi = {
@@ -604,9 +611,9 @@ export const adminOrderApi = {
     return apiRequest(`/admin/orders${qs ? `?${qs}` : ''}`, { method: 'GET' });
   },
   getOrderById: (id) => apiRequest(`/admin/orders/${id}`, { method: 'GET' }),
-  updateStatus: (id, status, note = '') => apiRequest(`/admin/orders/${id}/status`, {
+  updateStatus: (id, status, note = '', rider = null) => apiRequest(`/admin/orders/${id}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status, note })
+    body: JSON.stringify(rider ? { status, note, rider } : { status, note })
   }),
   dispatchOrder: (id, dispatchData = {}) => apiRequest(`/admin/orders/${id}/dispatch`, {
     method: 'PATCH',

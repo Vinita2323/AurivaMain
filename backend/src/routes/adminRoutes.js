@@ -37,6 +37,7 @@ router.get('/profile', adminController.getProfile);
 router.patch('/profile', validateAdminProfileUpdate, adminController.updateProfile);
 router.put('/profile', validateAdminProfileUpdate, adminController.updateProfile);
 router.get('/dashboard', adminController.getDashboard);
+router.get('/analytics', adminController.getAnalytics);
 router.get('/users', adminController.getAllUsers);
 router.patch('/users/:id/status', validateUserStatusUpdate, adminController.updateUserStatus);
 

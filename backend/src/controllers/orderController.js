@@ -73,9 +73,9 @@ export const getAllOrdersAdmin = async (req, res, next) => {
 export const updateOrderStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status, note } = req.body;
+    const { status, note, rider } = req.body;
     const updatedBy = req.user?.name ? `${req.user.name} (Admin)` : 'Admin';
-    const order = await orderService.updateOrderStatusAdmin(id, status, { updatedBy, note });
+    const order = await orderService.updateOrderStatusAdmin(id, status, { updatedBy, note, rider });
     return sendSuccess(res, `Order status updated to ${order.status}`, { order }, HTTP_STATUS.OK);
   } catch (error) {
     if (error.statusCode) {

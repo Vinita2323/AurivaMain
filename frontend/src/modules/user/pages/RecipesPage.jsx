@@ -27,10 +27,11 @@ export default function RecipesPage() {
     }
   }, [location.state, recipes]);
 
-  const categories = ['All', 'Healthy Snacks', 'Quick Bites', 'Desserts', 'Savory Chaats', 'Fitness & Protein'];
-
   // Only display published active recipes to customers
   const activeRecipes = recipes.filter(r => r.status === 'ACTIVE' || !r.status);
+
+  // Filter chips come from the categories recipes actually use
+  const categories = ['All', ...Array.from(new Set(activeRecipes.map(r => String(r.category || '').trim()).filter(Boolean)))];
 
   const filteredRecipes = activeRecipes.filter(r => {
     const matchesCategory = selectedCategory === 'All' || r.category === selectedCategory;

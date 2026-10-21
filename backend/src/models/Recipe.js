@@ -23,9 +23,11 @@ const recipeSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    // Free-form: recipes use the store's real category names (managed in Admin > Categories)
     category: {
       type: String,
-      enum: ['Healthy Snacks', 'Quick Bites', 'Desserts', 'Savory Chaats', 'Fitness & Protein'],
+      trim: true,
+      maxlength: [100, 'Category cannot exceed 100 characters'],
       default: 'Healthy Snacks'
     },
     prepTime: {

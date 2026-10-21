@@ -1,5 +1,5 @@
 import adminAuthService from '../services/adminAuthService.js';
-import { getDashboardSummary } from '../services/dashboardService.js';
+import { getDashboardSummary, getAnalyticsSummary } from '../services/dashboardService.js';
 import User from '../models/User.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/status.js';
@@ -65,6 +65,20 @@ export const getDashboard = async (req, res, next) => {
   try {
     const summary = await getDashboardSummary({ adminId: req.user?._id || null });
     return sendSuccess(res, 'Dashboard summary fetched successfully', summary, HTTP_STATUS.OK);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Admin analytics (live, date-ranged)
+ * GET /api/v1/admin/analytics?range=weekly|monthly|quarterly|yearly&from=YYYY-MM-DD&to=YYYY-MM-DD
+ */
+export const getAnalytics = async (req, res, next) => {
+  try {
+    const { range, from, to } = req.query;
+    const summary = await getAnalyticsSummary({ range, from, to });
+    return sendSuccess(res, 'Analytics fetched successfully', summary, HTTP_STATUS.OK);
   } catch (error) {
     next(error);
   }
@@ -143,6 +157,7 @@ export default {
   login,
   getProfile,
   getDashboard,
+  getAnalytics,
   getAllUsers,
   updateUserStatus
 };

@@ -29,7 +29,21 @@ export default function SmoothScroll({ children }) {
 
     const animId = requestAnimationFrame(raf);
 
+    // Modals lock page scroll with body { overflow: hidden }. Lenis scrolls the window itself and
+    // ignores that, so pause it while the body is locked and resume when it is released.
+    const syncWithBodyLock = () => {
+      if (document.body.style.overflow === 'hidden') {
+        lenis.stop();
+      } else {
+        lenis.start();
+      }
+    };
+    syncWithBodyLock();
+    const bodyObserver = new MutationObserver(syncWithBodyLock);
+    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+
     return () => {
+      bodyObserver.disconnect();
       cancelAnimationFrame(animId);
       lenis.destroy();
       lenisRef.current = null;

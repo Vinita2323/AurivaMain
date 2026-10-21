@@ -112,14 +112,15 @@ const timelineStepSchema = new mongoose.Schema(
 
 const riderSchema = new mongoose.Schema(
   {
-    name: { type: String, default: 'Rohan Kumar' },
-    phone: { type: String, default: '+91 9811122334' },
-    rating: { type: Number, default: 4.9 },
-    vehicle: { type: String, default: 'MP09-AB-1234' },
-    eta: { type: String, default: '25 mins' },
-    distance: { type: String, default: '2.5 km away' },
-    lat: { type: Number, default: 22.7196 },
-    lng: { type: Number, default: 75.8577 }
+    // Real delivery partner details entered by admin — no placeholder defaults
+    name: { type: String, default: '', trim: true },
+    phone: { type: String, default: '', trim: true },
+    rating: { type: Number, default: null },
+    vehicle: { type: String, default: '', trim: true },
+    eta: { type: String, default: '', trim: true },
+    distance: { type: String, default: '', trim: true },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null }
   },
   { _id: false }
 );

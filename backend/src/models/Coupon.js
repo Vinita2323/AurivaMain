@@ -91,8 +91,8 @@ couponSchema.pre('save', function (next) {
     return next(new Error('Percentage discount cannot exceed 100%'));
   }
 
-  if (this.endDate && this.startDate && new Date(this.endDate) <= new Date(this.startDate)) {
-    return next(new Error('End date must be strictly after start date'));
+  if (this.endDate && this.startDate && new Date(this.endDate) < new Date(this.startDate)) {
+    return next(new Error('End date cannot be before the start date'));
   }
 
   next();

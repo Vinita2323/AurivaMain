@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   ChefHat, Plus, Search, Edit3, Trash2, CheckCircle2, 
   Clock, Flame, Users, Sparkles, X, Eye, EyeOff, AlertCircle,
@@ -17,7 +17,8 @@ export default function AdminRecipes() {
     updateRecipe, 
     deleteRecipe, 
     toggleRecipeFeatured, 
-    toggleRecipeStatus 
+    toggleRecipeStatus,
+    categories: storeCategories = []
   } = useAdmin();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,7 +44,7 @@ export default function AdminRecipes() {
   // Form State
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formCategory, setFormCategory] = useState('Healthy Snacks');
+  const [formCategory, setFormCategory] = useState('');
   const [formImage, setFormImage] = useState('');
   const [imagePreview, setImagePreview] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -61,7 +62,21 @@ export default function AdminRecipes() {
   const [formIngredients, setFormIngredients] = useState(['']);
   const [formInstructions, setFormInstructions] = useState(['']);
 
-  const categories = ['All', 'Healthy Snacks', 'Quick Bites', 'Desserts', 'Savory Chaats', 'Fitness & Protein'];
+  // Real store categories (Admin > Categories) + any category already used by existing recipes (so none are lost)
+  const categories = useMemo(() => {
+    const names = [];
+    const add = (n) => {
+      const v = String(n || '').trim();
+      if (v && !names.some((x) => x.toLowerCase() === v.toLowerCase())) names.push(v);
+    };
+    [...storeCategories]
+      .filter((c) => !c.status || String(c.status).toLowerCase() === 'active')
+      .sort((a, b) => Number(a.sortOrder ?? a.order ?? 0) - Number(b.sortOrder ?? b.order ?? 0))
+      .forEach((c) => add(c.name));
+    recipes.forEach((r) => add(r.category));
+    return ['All', ...names];
+  }, [storeCategories, recipes]);
+  const defaultCategory = categories[1] || 'Healthy Snacks';
 
   // Handle Gallery Image File Selection
   const handleImageFileChange = async (e) => {
@@ -124,7 +139,7 @@ export default function AdminRecipes() {
     setEditingRecipe(null);
     setFormTitle('');
     setFormDescription('');
-    setFormCategory('Healthy Snacks');
+    setFormCategory(defaultCategory);
     setFormImage('');
     setImagePreview('');
     setShowUrlOption(false);
@@ -146,7 +161,7 @@ export default function AdminRecipes() {
     setEditingRecipe(recipe);
     setFormTitle(recipe.title || '');
     setFormDescription(recipe.description || '');
-    setFormCategory(recipe.category || 'Healthy Snacks');
+    setFormCategory(recipe.category || defaultCategory);
     setFormImage(recipe.image || '');
     setImagePreview(recipe.image || '');
     setShowUrlOption(false);
@@ -174,7 +189,7 @@ export default function AdminRecipes() {
     const payload = {
       title: formTitle.trim(),
       description: formDescription.trim(),
-      category: formCategory,
+      category: formCategory || defaultCategory,
       image: formImage.trim(),
       prepTime: formPrepTime.trim(),
       cookTime: formCookTime.trim(),

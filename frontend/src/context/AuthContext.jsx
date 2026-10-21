@@ -83,6 +83,18 @@ export const formatAddress = (a) => ({
   name: a.fullName || a.name || ''
 });
 
+// Orders created before real rider data existed stored this placeholder — treat it as "not assigned"
+const isPlaceholderRider = (r) =>
+  String(r?.name || '').trim() === 'Rohan Kumar' && String(r?.phone || '').replace(/s/g, '') === '+919811122334';
+
+export const getRealRider = (r) => {
+  if (!r || typeof r !== 'object') return null;
+  const name = String(r.name || '').trim();
+  const phone = String(r.phone || '').trim();
+  if ((!name && !phone) || isPlaceholderRider(r)) return null;
+  return { ...r, name, phone };
+};
+
 export const formatOrder = (o) => {
   const mapStatusToDisplay = (s) => {
     if (!s) return 'Order Received';
@@ -139,16 +151,8 @@ export const formatOrder = (o) => {
       { status: "Out for Delivery", time: "Live", done: false, current: false },
       { status: "Delivered", time: "Estimated", done: false, current: false }
     ],
-    rider: o.rider || {
-      name: "Rohan Kumar",
-      phone: "+91 9811122334",
-      rating: 4.9,
-      vehicle: "MP09-AB-1234",
-      eta: "25 mins",
-      distance: "2.5 km away",
-      lat: 22.7196,
-      lng: 75.8577
-    },
+    // Real delivery partner only (null until admin assigns one)
+    rider: getRealRider(o.rider),
     address: o.shippingAddress ? {
       type: o.shippingAddress.addressType ? (o.shippingAddress.addressType.charAt(0).toUpperCase() + o.shippingAddress.addressType.slice(1)) : 'Home',
       street: o.shippingAddress.addressLine1 + (o.shippingAddress.addressLine2 ? `, ${o.shippingAddress.addressLine2}` : '') + (o.shippingAddress.landmark ? `, Near ${o.shippingAddress.landmark}` : ''),

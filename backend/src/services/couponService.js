@@ -2,6 +2,39 @@ import mongoose from 'mongoose';
 import Coupon from '../models/Coupon.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
+/**
+ * Parse a coupon date. A bare "YYYY-MM-DD" means the whole day: start -> 00:00:00.000, end -> 23:59:59.999,
+ * so a coupon whose end date is today stays valid until the end of today (same-day coupons work).
+ * Full timestamps (as sent by the admin form) are used as-is.
+ */
+const parseCouponDate = (value, edge) => {
+  if (typeof value === 'string' && /^d{4}-d{2}-d{2}$/.test(value.trim())) {
+    return new Date(`${value.trim()}T${edge === 'end' ? '23:59:59.999' : '00:00:00.000'}Z`);
+  }
+  return new Date(value);
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Reject dates that have already passed. End must still be in the future; start may be anywhere
+ * within the last day to tolerate client/server timezone differences (the form sends local midnight).
+ */
+const assertDatesNotPast = ({ startDate, endDate }) => {
+  const now = Date.now();
+  const bad = (message) => {
+    const err = new Error(message);
+    err.statusCode = HTTP_STATUS.BAD_REQUEST;
+    throw err;
+  };
+  if (startDate && startDate.getTime() < now - DAY_MS) {
+    bad('Start date cannot be in the past.');
+  }
+  if (endDate && endDate.getTime() < now) {
+    bad('End date cannot be in the past.');
+  }
+};
+
 class CouponService {
   /**
    * Admin: Create a new promotional Coupon rule
@@ -13,6 +46,11 @@ class CouponService {
       err.statusCode = HTTP_STATUS.BAD_REQUEST;
       throw err;
     }
+
+    assertDatesNotPast({
+      startDate: payload.startDate ? parseCouponDate(payload.startDate, 'start') : null,
+      endDate: payload.endDate ? parseCouponDate(payload.endDate, 'end') : null
+    });
 
     const existing = await Coupon.findOne({ code: cleanCode });
     if (existing) {
@@ -28,8 +66,8 @@ class CouponService {
       discountValue: Number(payload.discountValue || 0),
       minOrderValue: Number(payload.minOrderValue || 0),
       maxDiscount: Number(payload.maxDiscount || 0),
-      startDate: payload.startDate ? new Date(payload.startDate) : new Date(),
-      endDate: payload.endDate ? new Date(payload.endDate) : null,
+      startDate: payload.startDate ? parseCouponDate(payload.startDate, 'start') : new Date(),
+      endDate: payload.endDate ? parseCouponDate(payload.endDate, 'end') : null,
       usageLimit: Number(payload.usageLimit || 0),
       status: (payload.status || 'ACTIVE').toUpperCase()
     };
@@ -144,8 +182,18 @@ class CouponService {
     if (updateData.discountValue !== undefined) coupon.discountValue = Number(updateData.discountValue);
     if (updateData.minOrderValue !== undefined) coupon.minOrderValue = Number(updateData.minOrderValue);
     if (updateData.maxDiscount !== undefined) coupon.maxDiscount = Number(updateData.maxDiscount);
-    if (updateData.startDate !== undefined) coupon.startDate = updateData.startDate ? new Date(updateData.startDate) : coupon.startDate;
-    if (updateData.endDate !== undefined) coupon.endDate = updateData.endDate ? new Date(updateData.endDate) : null;
+    // Only validate dates the admin is actually changing — keep legacy / expired coupons editable
+    {
+      const sameTime = (a, b) => a && b && new Date(a).getTime() === new Date(b).getTime();
+      const nextStart = updateData.startDate ? parseCouponDate(updateData.startDate, 'start') : null;
+      const nextEnd = updateData.endDate ? parseCouponDate(updateData.endDate, 'end') : null;
+      assertDatesNotPast({
+        startDate: nextStart && !sameTime(nextStart, coupon.startDate) ? nextStart : null,
+        endDate: nextEnd && !sameTime(nextEnd, coupon.endDate) ? nextEnd : null
+      });
+    }
+    if (updateData.startDate !== undefined) coupon.startDate = updateData.startDate ? parseCouponDate(updateData.startDate, 'start') : coupon.startDate;
+    if (updateData.endDate !== undefined) coupon.endDate = updateData.endDate ? parseCouponDate(updateData.endDate, 'end') : null;
     if (updateData.usageLimit !== undefined) coupon.usageLimit = Number(updateData.usageLimit);
     if (updateData.status) coupon.status = updateData.status.toUpperCase();
 

@@ -208,7 +208,14 @@ export default function AdminOrders() {
           deliveryNotes: extraData.deliveryNotes
         });
       } else {
-        res = await adminOrderApi.updateStatus(orderId, newStatus, extraData.note);
+        const riderName = extraData.rider?.name?.trim();
+        const riderPhone = extraData.rider?.phone?.trim();
+        res = await adminOrderApi.updateStatus(
+          orderId,
+          newStatus,
+          extraData.note,
+          riderName || riderPhone ? { name: riderName, phone: riderPhone } : null
+        );
       }
 
       if (res && res.data && res.data.order) {

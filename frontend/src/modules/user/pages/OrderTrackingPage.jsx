@@ -14,7 +14,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 
-import { useAuth, formatOrder } from '../../../context/AuthContext';
+import { useAuth, formatOrder, getRealRider } from '../../../context/AuthContext';
 import { orderApi } from '../../../utils/api';
 
 export default function OrderTrackingPage() {
@@ -73,6 +73,10 @@ export default function OrderTrackingPage() {
     liveOrder ||
     orders.find((o) => o.id === orderId || o.orderNumber === orderId) ||
     null;
+
+  // Delivery partner info is real data only: shown while out for delivery, never placeholders
+  const isOutForDelivery = order?.status === 'Out for Delivery';
+  const rider = getRealRider(order?.rider);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -257,16 +261,34 @@ export default function OrderTrackingPage() {
                   Delivery Partner
                 </h3>
 
-                <div className="flex items-center gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-stone-200 shadow-2xs mb-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#1B3B29] text-[#D4AF37] font-serif font-bold text-sm sm:text-lg flex items-center justify-center border border-[#D4AF37]/40 shrink-0">
-                    RK
+                {/* Rider details — real data only, shown while the order is out for delivery */}
+                {isOutForDelivery && rider && (
+                  <div className="flex items-center gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-stone-200 shadow-2xs mb-3">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#1B3B29] text-[#D4AF37] font-serif font-bold text-sm sm:text-lg flex items-center justify-center border border-[#D4AF37]/40 shrink-0">
+                      {(rider.name || '?').split(/s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-serif text-xs sm:text-sm font-bold text-[#0E2A1B] truncate">{rider.name || 'Delivery partner'}</h4>
+                      {rider.phone && (
+                        <p className="text-[11px] sm:text-xs text-stone-500">{rider.phone}</p>
+                      )}
+                      {Number.isFinite(Number(rider.rating)) && Number(rider.rating) > 0 && (
+                        <p className="text-[11px] sm:text-xs text-stone-500">★ {Number(rider.rating).toFixed(1)}</p>
+                      )}
+                      {rider.vehicle && (
+                        <p className="text-[10.5px] sm:text-[11px] text-stone-400 mt-0.5">Vehicle: <strong className="text-stone-700">{rider.vehicle}</strong></p>
+                      )}
+                      {rider.eta && (
+                        <p className="text-[10.5px] sm:text-[11px] text-stone-400 mt-0.5">ETA: <strong className="text-stone-700">{rider.eta}</strong></p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-serif text-xs sm:text-sm font-bold text-[#0E2A1B]">{order.rider?.name || 'Rohan Kumar'}</h4>
-                    <p className="text-[11px] sm:text-xs text-stone-500">★ {order.rider?.rating || '4.9'} • 1,240 deliveries</p>
-                    <p className="text-[10.5px] sm:text-[11px] text-stone-400 mt-0.5">Vehicle: <strong className="text-stone-700">{order.rider?.vehicle || 'MP09-AB-1234'}</strong></p>
+                )}
+                {isOutForDelivery && !rider && (
+                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-stone-200 shadow-2xs mb-3 text-xs text-stone-600">
+                    Your order is out for delivery. Rider details will appear here as soon as they are assigned.
                   </div>
-                </div>
+                )}
 
                 {/* Delivery Address Target */}
                 <div className="space-y-0.5 text-xs text-stone-600 bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200">
@@ -274,7 +296,7 @@ export default function OrderTrackingPage() {
                     <MapPin className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                     <span>Delivering to: {order.address?.type || 'Home'}</span>
                   </p>
-                  <p className="text-[11px] sm:text-xs text-stone-600">{order.address?.street || '502 Lotus Orchid, Vijay Nagar'}, {order.address?.city || 'Indore'} - {order.address?.pincode || '452010'}</p>
+                  <p className="text-[11px] sm:text-xs text-stone-600">{[order.address?.street, order.address?.city].filter(Boolean).join(', ')}{order.address?.pincode ? ` - ${order.address.pincode}` : ''}</p>
                 </div>
 
                 {/* Shipment tracking (from backend / Shiprocket — no direct Shiprocket calls) */}
@@ -313,9 +335,10 @@ export default function OrderTrackingPage() {
               </div>
 
               {/* Contact Actions */}
+              {isOutForDelivery && rider?.phone && (
               <div className="grid grid-cols-2 gap-2 pt-1 sm:pt-2">
                 <a
-                  href={`tel:${order.rider?.phone || '+919876543210'}`}
+                  href={`tel:${rider.phone}`}
                   className="py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl bg-[#0E2A1B] text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 hover:bg-[#1B3B29] transition-colors shadow-2xs min-h-[38px] sm:min-h-[44px]"
                 >
                   <Phone className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -323,13 +346,14 @@ export default function OrderTrackingPage() {
                 </a>
                 <button
                   type="button"
-                  onClick={() => alert(`Chat with rider ${order.rider?.name || 'Rohan'} opened.`)}
+                  onClick={() => alert(`Chat with rider ${rider.name || ''} opened.`)}
                   className="py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl border border-stone-300 bg-white text-stone-800 text-[11px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 hover:bg-stone-50 transition-colors min-h-[38px] sm:min-h-[44px]"
                 >
                   <MessageSquare className="w-3.5 h-3.5 text-[#0E2A1B]" />
                   <span>Message</span>
                 </button>
               </div>
+              )}
 
             </div>
           </div>

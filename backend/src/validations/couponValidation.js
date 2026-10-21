@@ -67,8 +67,8 @@ export const validateCreateCoupon = (req, res, next) => {
   }
 
   if (startDate && endDate && !isNaN(Date.parse(startDate)) && !isNaN(Date.parse(endDate))) {
-    if (new Date(endDate) <= new Date(startDate)) {
-      errors.push({ field: 'endDate', message: 'End date must be strictly after start date' });
+    if (new Date(endDate) < new Date(startDate)) {
+      errors.push({ field: 'endDate', message: 'End date cannot be before the start date' });
     }
   }
 
@@ -164,8 +164,8 @@ export const validateUpdateCoupon = (req, res, next) => {
   }
 
   if (startDate && endDate && !isNaN(Date.parse(startDate)) && !isNaN(Date.parse(endDate))) {
-    if (new Date(endDate) <= new Date(startDate)) {
-      errors.push({ field: 'endDate', message: 'End date must be strictly after start date' });
+    if (new Date(endDate) < new Date(startDate)) {
+      errors.push({ field: 'endDate', message: 'End date cannot be before the start date' });
     }
   }
 

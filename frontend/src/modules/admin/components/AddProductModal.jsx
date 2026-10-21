@@ -342,6 +342,19 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
       alert('Please enter a valid selling price greater than 0.');
       return;
     }
+    // Original price must be >= selling price (blank / 0 = no strike-through price)
+    const originalNum = Number(formData.oldPrice);
+    if (formData.oldPrice !== '' && formData.oldPrice !== undefined && originalNum > 0 && originalNum < priceNum) {
+      alert('Original price must be greater than or equal to the selling price.');
+      return;
+    }
+    const badVariant = (formData.variants || []).find(
+      (v) => Number(v.oldPrice) > 0 && Number(v.price || priceNum) > 0 && Number(v.oldPrice) < Number(v.price || priceNum)
+    );
+    if (badVariant) {
+      alert(`Pack "${badVariant.name || badVariant.weight || 'variant'}": original price must be greater than or equal to its selling price.`);
+      return;
+    }
     if (isUploadingImage) {
       alert('Please wait for photo upload to finish before saving.');
       return;
@@ -530,8 +543,17 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                         value={formData.oldPrice}
                         onChange={e => setFormData({ ...formData, oldPrice: e.target.value })}
                         placeholder="299"
-                        className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 bg-white focus:outline-none focus:border-[#0E2A1B]"
+                        className={`w-full px-3 py-2 text-xs sm:text-sm rounded-lg border bg-white focus:outline-none ${
+                          Number(formData.oldPrice) > 0 && Number(formData.price) > 0 && Number(formData.oldPrice) < Number(formData.price)
+                            ? 'border-rose-400 focus:border-rose-500'
+                            : 'border-stone-300 focus:border-[#0E2A1B]'
+                        }`}
                       />
+                      {Number(formData.oldPrice) > 0 && Number(formData.price) > 0 && Number(formData.oldPrice) < Number(formData.price) && (
+                        <p className="mt-1 text-[10.5px] text-rose-600">
+                          Original price must be greater than or equal to the selling price.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-[11.5px] font-bold text-stone-700 mb-1">

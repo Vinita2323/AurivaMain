@@ -223,6 +223,19 @@ export const INITIAL_PRODUCTS_SEED = [
   }
 ];
 
+/**
+ * Original (MRP) price must be >= selling price. A missing / 0 original price means "no strike-through price".
+ */
+const assertPriceOrder = (price, oldPrice, label = 'Product') => {
+  const sell = Number(price);
+  const original = Number(oldPrice);
+  if (original > 0 && sell > 0 && original < sell) {
+    const err = new Error(`${label}: original price (₹${original}) must be greater than or equal to the selling price (₹${sell}).`);
+    err.statusCode = HTTP_STATUS.BAD_REQUEST;
+    throw err;
+  }
+};
+
 class ProductService {
   /**
    * Get all active store products with query filtering
@@ -360,6 +373,14 @@ class ProductService {
     // Calculate prices with intelligent fallbacks
     const priceNum = Number(data.price || data.variants?.[0]?.price || 249);
     const oldPriceNum = Number(data.oldPrice || data.variants?.[0]?.oldPrice || (priceNum > 0 ? Math.round(priceNum * 1.2) : 299));
+
+    assertPriceOrder(priceNum, data.oldPrice ? oldPriceNum : 0);
+    (Array.isArray(data.variants) ? data.variants : []).forEach((v) => {
+      assertPriceOrder(v.price || priceNum, v.oldPrice, `Variant ${v.weight || ''}`.trim());
+    });
+    (Array.isArray(data.weightOptions) ? data.weightOptions : []).forEach((w) => {
+      assertPriceOrder(w.price, w.oldPrice, `Pack ${w.weight || ''}`.trim());
+    });
 
     // Map weight options from variants or default
     let weightOptions = data.weightOptions;
@@ -528,6 +549,13 @@ class ProductService {
 
     const nextPrice = safeUpdate.price !== undefined ? safeUpdate.price : product.price;
     const nextOldPrice = safeUpdate.oldPrice !== undefined ? safeUpdate.oldPrice : product.oldPrice;
+    // Only enforce when the admin is actually changing prices (don't block unrelated edits on legacy data)
+    if (safeUpdate.price !== undefined || safeUpdate.oldPrice !== undefined) {
+      assertPriceOrder(nextPrice, nextOldPrice);
+    }
+    if (Array.isArray(safeUpdate.weightOptions)) {
+      safeUpdate.weightOptions.forEach((w) => assertPriceOrder(w.price, w.oldPrice, `Pack ${w.weight || ''}`.trim()));
+    }
     if (
       nextPrice &&
       nextOldPrice &&
