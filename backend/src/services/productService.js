@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 import Bestseller from '../models/Bestseller.js';
+import Review from '../models/Review.js';
 import notificationService from './notificationService.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
@@ -226,7 +227,7 @@ class ProductService {
   /**
    * Get all active store products with query filtering
    */
-  async getAllProducts(filters = {}) {
+  async getAllProducts(filters = {}, { publicOnly = false } = {}) {
     if (mongoose.connection.readyState !== 1) {
       const err = new Error('Database connection is not available. Cannot fetch products while database is offline.');
       err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
@@ -235,7 +236,10 @@ class ProductService {
 
     const query = { status: { $ne: 'ARCHIVED' } };
 
-    if (filters.status && filters.status !== 'all') {
+    if (publicOnly) {
+      // Storefront: only ACTIVE products — never inactive/archived, regardless of query params
+      query.status = 'ACTIVE';
+    } else if (filters.status && filters.status !== 'all') {
       query.status = filters.status;
     }
     if (filters.inStock !== undefined) {
@@ -248,6 +252,13 @@ class ProductService {
       const regex = new RegExp(filters.search, 'i');
       query.$or = [{ name: regex }, { flavor: regex }, { tags: regex }, { subtitle: regex }];
     }
+
+    // Live rating aggregates from APPROVED reviews (stored Product.rating / reviewsCount can be stale seed data)
+    const ratingStats = await Review.aggregate([
+      { $match: { status: 'APPROVED' } },
+      { $group: { _id: '$product', avgRating: { $avg: '$rating' }, reviewsCount: { $sum: 1 } } }
+    ]);
+    const ratingByProduct = new Map(ratingStats.map((r) => [String(r._id), r]));
 
     return await Product.find(query)
       .select(
@@ -266,8 +277,11 @@ class ProductService {
           const gallery = Array.isArray(p.gallery)
             ? p.gallery.filter((g) => typeof g === 'string' && g && !g.startsWith('data:')).slice(0, 4)
             : [];
+          const live = ratingByProduct.get(String(p._id));
           return {
             ...p,
+            rating: live ? Math.round(live.avgRating * 10) / 10 : 0,
+            reviewsCount: live ? live.reviewsCount : 0,
             _id: p._id?.toString?.() || p._id,
             id: p._id?.toString?.() || p._id,
             image,
@@ -296,7 +310,7 @@ class ProductService {
   /**
    * Get product by MongoDB ID or slug
    */
-  async getProductById(idOrSlug) {
+  async getProductById(idOrSlug, { publicOnly = false } = {}) {
     if (mongoose.connection.readyState !== 1) {
       const err = new Error('Database connection is not available. Cannot fetch product while database is offline.');
       err.statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
@@ -304,7 +318,7 @@ class ProductService {
     }
 
     const product = await this._findProductByIdOrSlug(idOrSlug);
-    if (!product) {
+    if (!product || (publicOnly && product.status !== 'ACTIVE')) {
       const err = new Error('Product not found.');
       err.statusCode = HTTP_STATUS.NOT_FOUND;
       throw err;

@@ -252,6 +252,12 @@ export const adminAuthApi = {
   })
 };
 
+// Admin screens need inactive products too; the storefront endpoint only returns ACTIVE ones
+const productsBase = () =>
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+    ? '/admin/products'
+    : '/products';
+
 // Product Catalog API
 export const productApi = {
   getAllProducts: (params = {}) => {
@@ -261,9 +267,9 @@ export const productApi = {
     if (params.search) query.append('search', params.search);
     if (params.inStock !== undefined) query.append('inStock', params.inStock);
     const qs = query.toString();
-    return apiRequest(`/products${qs ? `?${qs}` : ''}`, { method: 'GET' });
+    return apiRequest(`${productsBase()}${qs ? `?${qs}` : ''}`, { method: 'GET' });
   },
-  getProductById: (id) => apiRequest(`/products/${id}`, { method: 'GET' }),
+  getProductById: (id) => apiRequest(`${productsBase()}/${id}`, { method: 'GET' }),
   createProduct: (productData) => apiRequest('/admin/products', {
     method: 'POST',
     body: JSON.stringify(productData)
@@ -530,14 +536,19 @@ export async function fetchPdfBlob(url) {
 }
 
 export function downloadBlobFile(blob, filename = 'Invoice.pdf') {
-  const blobUrl = window.URL.createObjectURL(blob);
+  // Force a PDF-typed blob so browsers always treat it as a file download
+  const typed = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+  const blobUrl = window.URL.createObjectURL(typed);
   const link = document.createElement('a');
   link.href = blobUrl;
   link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+  // Keep the URL alive long enough for slow / mobile browsers to start saving
+  setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
 }
 
 export async function downloadPdfBlob(url, fallbackFilename = 'Invoice.pdf') {

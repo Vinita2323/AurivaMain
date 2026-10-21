@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Home, ShoppingBag, LayoutGrid, ShoppingCart, User } from 'lucide-react';
 import { useCart } from '../../../context/CartContext';
@@ -10,6 +10,26 @@ export default function MobileBottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Hide the nav while a text field is focused so it never floats above the on-screen keyboard
+  const [isTyping, setIsTyping] = useState(false);
+  useEffect(() => {
+    const isTextField = (el) =>
+      Boolean(el) &&
+      (el.tagName === 'TEXTAREA' ||
+        el.tagName === 'SELECT' ||
+        el.isContentEditable ||
+        (el.tagName === 'INPUT' &&
+          !['checkbox', 'radio', 'button', 'submit', 'range', 'file', 'color'].includes(el.type)));
+    const onFocusIn = (e) => setIsTyping(isTextField(e.target));
+    const onFocusOut = () => setIsTyping(false);
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
+
   // Check active routes
   const isHome = location.pathname === '/';
   const isShop = location.pathname === '/shop' && !location.search.includes('categories');
@@ -20,7 +40,7 @@ export default function MobileBottomNav() {
   const isAccountSubpage = location.pathname === '/account' && location.search.includes('tab=');
 
   // Hide mobile bottom nav on Cart and Checkout pages so sticky action bar is displayed instead
-  if (isCart || isCheckout || isAccountSubpage) {
+  if (isCart || isCheckout || isAccountSubpage || isTyping) {
     return null;
   }
 

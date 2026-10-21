@@ -15,7 +15,18 @@ import { FLAVORS } from '../../../data/flavors';
 import { useAdmin } from '../../../context/AdminContext';
 
 export default function ShopPage() {
-  const { products: PRODUCTS, categories: CATEGORIES, refreshProducts } = useAdmin();
+  const { products: PRODUCTS, categories: RAW_CATEGORIES, refreshProducts } = useAdmin();
+
+  // Show categories in the order the admin configured (order / sortOrder), then by name for ties
+  const CATEGORIES = useMemo(() => {
+    const rank = (c) => {
+      const n = Number(c.sortOrder ?? c.order);
+      return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+    };
+    return [...(RAW_CATEGORIES || [])].sort(
+      (a, b) => rank(a) - rank(b) || String(a.name || '').localeCompare(String(b.name || ''))
+    );
+  }, [RAW_CATEGORIES]);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const activeCategoryParam = searchParams.get('category') || 'all';

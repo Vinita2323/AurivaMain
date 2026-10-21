@@ -20,6 +20,38 @@ class ProductController {
   }
 
   /**
+   * Storefront: ACTIVE products only
+   * GET /api/v1/products
+   */
+  async getPublicProducts(req, res, next) {
+    try {
+      const products = await productService.getAllProducts(req.query, { publicOnly: true });
+      return sendSuccess(res, 'Products retrieved successfully', { products });
+    } catch (error) {
+      if (error.statusCode) {
+        return sendError(res, error.message, {}, error.statusCode);
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Storefront: single ACTIVE product by ID or Slug
+   * GET /api/v1/products/:id
+   */
+  async getPublicProductById(req, res, next) {
+    try {
+      const product = await productService.getProductById(req.params.id, { publicOnly: true });
+      return sendSuccess(res, 'Product retrieved successfully', { product });
+    } catch (error) {
+      if (error.statusCode) {
+        return sendError(res, error.message, {}, error.statusCode);
+      }
+      next(error);
+    }
+  }
+
+  /**
    * Get single product by ID or Slug
    * GET /api/v1/products/:id
    */

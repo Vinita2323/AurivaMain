@@ -108,12 +108,18 @@ export default function ProductCard({ product, priority = false }) {
         {/* Rating Stars (5 filled stars) + count */}
         <div className="flex items-center gap-1 mb-0.5 sm:mb-1 text-amber-500">
           <div className="flex items-center gap-0.5">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-amber-400 text-amber-400" />
-            ))}
+            {[...Array(5)].map((_, i) => {
+              const filled = (product.reviewsCount || 0) > 0 && i < Math.round(Number(product.rating) || 0);
+              return (
+                <Star
+                  key={i}
+                  className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${filled ? 'fill-amber-400 text-amber-400' : 'fill-transparent text-stone-300'}`}
+                />
+              );
+            })}
           </div>
           <span className="text-[9.5px] sm:text-[11px] text-stone-500 font-medium ml-0.5">
-            ({product.reviewsCount ?? 0})
+            {(product.reviewsCount || 0) > 0 ? `(${product.reviewsCount})` : 'No reviews yet'}
           </span>
         </div>
 

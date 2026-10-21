@@ -191,7 +191,11 @@ export default function AdminRecipes() {
     if (editingRecipe) {
       await updateRecipe(editingRecipe.id || editingRecipe._id, payload);
     } else {
-      await addRecipe(payload);
+      const result = await addRecipe(payload);
+      if (!result?.success) {
+        alert(`Recipe was not saved: ${result?.error || 'unknown error'}`);
+        return; // keep the form open so nothing is lost
+      }
     }
 
     setIsModalOpen(false);

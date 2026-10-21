@@ -14,6 +14,8 @@ import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
+import CancellationNotice from '../components/CancellationNotice';
+import RateReviewButton from '../components/RateReviewButton';
 
 import { useAuth } from '../../../context/AuthContext';
 import { useWishlist } from '../../../context/WishlistContext';
@@ -279,8 +281,8 @@ export default function AccountPage() {
 
   const openAddAddressModal = () => {
     setEditingAddressId(null);
-    setAddrName(user?.name || 'Vini Sharma');
-    setAddrPhone(user?.phone || '9876543210');
+    setAddrName(user?.name || '');
+    setAddrPhone(user?.phone || '');
     setAddrType('Home');
     setAddrStreet('');
     setAddrCity('Indore');
@@ -474,7 +476,7 @@ export default function AccountPage() {
     },
     { 
       id: 'profile', 
-      label: 'Profile & Security', 
+      label: 'Profile', 
       desc: 'Personal details & password', 
       icon: User 
     },
@@ -490,10 +492,37 @@ export default function AccountPage() {
 
   return (
     <div className="min-h-screen flex flex-col justify-between bg-[#FAF7F2] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] font-sans">
-      <div>
+      {/* Site header: on mobile sub-pages it is replaced by the dedicated sticky header below */}
+      <div className={!isMobileMenu ? 'hidden lg:block' : ''}>
         <AnnouncementBar />
         <Header />
       </div>
+
+      {/* DEDICATED MOBILE SUB-PAGE HEADER (same design as My Wishlist) — direct child so sticky spans the page */}
+      {!isMobileMenu && (
+        <header className="lg:hidden sticky top-0 z-40 bg-[#0E2A1B] text-white px-3.5 py-3 shadow-md border-b border-[#D4AF37]/30 flex items-center">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              onClick={handleBackToMenu}
+              className="w-8 h-8 shrink-0 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center text-white transition-all"
+              aria-label="Back to account menu"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <currentTabObj.icon className="w-4 h-4 text-[#D4AF37] shrink-0" />
+                <h1 className="font-serif text-base font-bold text-[#E8DFC8] tracking-tight leading-tight truncate">
+                  {currentTabObj.label}
+                </h1>
+              </div>
+              <p className="text-[10px] text-[#D4AF37] font-medium leading-none mt-0.5 truncate">
+                {currentTabObj.desc}
+              </p>
+            </div>
+          </div>
+        </header>
+      )}
 
       <main className={`flex-1 py-4 sm:py-8 md:py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full ${
         !isMobileMenu ? 'pb-8 md:pb-12' : 'pb-24 md:pb-12'
@@ -619,22 +648,6 @@ export default function AccountPage() {
           </div>
         )}
 
-        {/* MOBILE SUB-PAGE BACK BUTTON (Shown on Mobile when a tab is active) */}
-        {!isMobileMenu && (
-          <div className="lg:hidden mb-4 flex items-center justify-between bg-white p-2.5 rounded-2xl border border-[#E8E2D5] shadow-xs font-sans">
-            <button
-              onClick={handleBackToMenu}
-              className="flex items-center gap-1.5 text-xs font-bold text-[#0E2A1B] hover:text-[#C89038] py-1 px-2 rounded-xl active:bg-stone-100 min-h-[36px]"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Account Menu</span>
-            </button>
-            <span className="text-[11px] font-bold text-[#C89038] bg-[#FAF7F2] px-2.5 py-1 rounded-lg border border-[#D4AF37]/30">
-              {currentTabObj.label}
-            </span>
-          </div>
-        )}
-
         {/* 2-Column Account Layout (Desktop always displays sidebar + tab content; Mobile displays tab content only when tab is selected) */}
         <div className={`grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start font-sans ${isMobileMenu ? 'hidden lg:grid' : 'grid'}`}>
           
@@ -700,21 +713,21 @@ export default function AccountPage() {
                   {displayOrders.map((ord) => (
                     <div key={ord.id} className="p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-stone-200 bg-[#FAF7F2] space-y-3 shadow-2xs">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-200 pb-2.5">
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-sm text-[#0E2A1B]">Order #{ord.id}</span>
                             <span className="text-xs text-stone-500">• {ord.date}</span>
                           </div>
                           <p className="text-[11px] text-stone-500 mt-0.5">Payment: {ord.paymentMethod} • Total: <strong className="text-stone-900">₹{ord.total}</strong></p>
                           {(ord.awbNumber || ord.shiprocket?.awbCode || ord.courierName || ord.shiprocket?.courierName) && (
-                            <p className="text-[11px] text-stone-500 mt-0.5">
+                            <p className="text-[11px] text-stone-500 mt-0.5 break-words">
                               {ord.shiprocket?.courierName || ord.courierName ? `Courier: ${ord.shiprocket?.courierName || ord.courierName}` : ''}
                               {(ord.awbNumber || ord.shiprocket?.awbCode) ? ` • AWB: ${ord.shiprocket?.awbCode || ord.awbNumber}` : ''}
                             </p>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
                           <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
                             ord.status === 'Delivered' ? 'bg-emerald-100 text-emerald-800'
                             : ord.status === 'Cancelled' ? 'bg-rose-100 text-rose-800'
@@ -759,6 +772,8 @@ export default function AccountPage() {
                         </div>
                       </div>
 
+                      <CancellationNotice order={ord} compact />
+
                       {/* Items list */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                         {(ord.items || []).map((item, i) => (
@@ -767,6 +782,7 @@ export default function AccountPage() {
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-bold text-stone-900 truncate">{item.name}</p>
                               <p className="text-[10px] text-stone-500">{item.weight} • Qty {item.qty}</p>
+                              <RateReviewButton order={ord} item={item} className="mt-1" />
                             </div>
                           </div>
                         ))}

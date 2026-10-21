@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Download, Printer, X, Loader2, AlertCircle, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
+import InvoicePdfPages from './InvoicePdfPages';
 import { orderApi, adminOrderApi, downloadBlobFile } from '../../../utils/api';
 
 export default function InvoicePreviewModal({ isOpen, onClose, order, isAdmin = false }) {
@@ -8,7 +9,6 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, isAdmin = 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
-  const iframeRef = useRef(null);
 
   const orderId = order?.id || order?.orderNumber || (typeof order === 'string' ? order : '');
   const displayOrderNumber = order?.orderNumber || order?.id || (typeof order === 'string' ? order : '');
@@ -75,27 +75,29 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, isAdmin = 
   }, [isOpen, onClose]);
 
   // Download action
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const filename = `Invoice-${displayOrderNumber || 'Order'}.pdf`;
-    if (blobData) {
-      downloadBlobFile(blobData, filename);
+    try {
+      if (blobData) {
+        downloadBlobFile(blobData, filename);
+      } else if (orderId) {
+        const api = isAdmin ? adminOrderApi : orderApi;
+        await api.downloadInvoice(orderId);
+      } else {
+        return;
+      }
       setDownloadSuccess(true);
       setTimeout(() => setDownloadSuccess(false), 3000);
-    } else if (orderId) {
-      const api = isAdmin ? adminOrderApi : orderApi;
-      api.downloadInvoice(orderId);
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 3000);
+    } catch (err) {
+      console.error('[InvoicePreviewModal] Download failed:', err);
+      setError(err.message || 'Could not download the invoice. Please try again.');
     }
   };
 
   // Print action
   const handlePrint = () => {
     try {
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.focus();
-        iframeRef.current.contentWindow.print();
-      } else if (blobUrl) {
+      if (blobUrl) {
         window.open(blobUrl, '_blank');
       }
     } catch (err) {
@@ -108,7 +110,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, isAdmin = 
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/65 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/65 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
@@ -181,7 +183,7 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, isAdmin = 
         </div>
 
         {/* Content Body / PDF Viewer */}
-        <div className="flex-1 bg-[#4A4A4A] relative overflow-hidden flex items-center justify-center">
+        <div className="flex-1 min-h-0 bg-[#4A4A4A] relative overflow-hidden flex items-center justify-center">
           {loading && (
             <div className="absolute inset-0 z-10 bg-white/90 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center">
               <div className="w-12 h-12 rounded-2xl bg-[#0E2A1B]/10 flex items-center justify-center mb-3">
@@ -218,12 +220,13 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, isAdmin = 
                 </button>
               </div>
             </div>
-          ) : blobUrl ? (
-            <iframe
-              ref={iframeRef}
-              src={`${blobUrl}#toolbar=1&navpanes=0`}
-              title={`Invoice-${displayOrderNumber}`}
-              className="w-full h-full border-0 bg-stone-100"
+          ) : blobData ? (
+            <InvoicePdfPages
+              blob={blobData}
+              onError={(err) => {
+                console.error('[InvoicePreviewModal] Render failed:', err);
+                setError('Could not display the invoice preview. You can still download it.');
+              }}
             />
           ) : null}
         </div>

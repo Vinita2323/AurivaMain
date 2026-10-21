@@ -7,10 +7,10 @@ import {
 import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { useAdmin } from '../../../context/AdminContext';
+import usePublicRecipes from '../../../hooks/usePublicRecipes';
 
 export default function RecipesPage() {
-  const { recipes = [] } = useAdmin();
+  const { recipes } = usePublicRecipes();
   const location = useLocation();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');

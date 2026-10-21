@@ -200,15 +200,23 @@ class ReviewService {
     else if (query.sort === 'rating_high') sort = { rating: -1, createdAt: -1 };
     else if (query.sort === 'rating_low') sort = { rating: 1, createdAt: -1 };
 
-    const [reviews, totalCount] = await Promise.all([
+    const [reviews, totalCount, statsAgg] = await Promise.all([
       Review.find(filter)
         .sort(sort)
         .skip(skip)
         .limit(limit)
         .populate('user', 'name avatar') // Safe user fields only
         .lean(),
-      Review.countDocuments(filter)
+      Review.countDocuments(filter),
+      // Live aggregate of ALL approved reviews (ignores the rating filter and never trusts stale Product fields)
+      Review.aggregate([
+        { $match: { product: product._id, status: 'APPROVED' } },
+        { $group: { _id: '$product', avgRating: { $avg: '$rating' }, reviewsCount: { $sum: 1 } } }
+      ])
     ]);
+    const liveStats = statsAgg[0]
+      ? { averageRating: Math.round(statsAgg[0].avgRating * 10) / 10, reviewsCount: statsAgg[0].reviewsCount }
+      : { averageRating: 0, reviewsCount: 0 };
 
     // Format reviews for consistent storefront consumption
     const formattedReviews = reviews.map((r) => ({
@@ -237,10 +245,7 @@ class ReviewService {
         limit,
         totalPages: Math.ceil(totalCount / limit) || 1
       },
-      stats: {
-        averageRating: product.rating || 0,
-        reviewsCount: product.reviewsCount || 0
-      }
+      stats: liveStats
     };
   }
 

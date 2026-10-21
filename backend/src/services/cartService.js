@@ -235,9 +235,9 @@ class CartService {
       product = await Product.findOne({ slug: productId });
     }
 
-    if (!product) {
-      const err = new Error('Product not found in catalog.');
-      err.statusCode = HTTP_STATUS.NOT_FOUND;
+    if (!product || product.status !== 'ACTIVE') {
+      const err = new Error(product ? 'This product is currently unavailable.' : 'Product not found in catalog.');
+      err.statusCode = product ? HTTP_STATUS.BAD_REQUEST : HTTP_STATUS.NOT_FOUND;
       throw err;
     }
 

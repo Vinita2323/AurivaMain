@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Star, Heart, Plus, Minus, Check, ShoppingBag, Zap, Truck, ShieldCheck, 
   Leaf, ChevronRight, Play, HelpCircle, ArrowRight 
@@ -22,6 +22,7 @@ export default function ProductDetailPage() {
   const { id, slug } = useParams();
   const targetKey = (id || slug || '').toString().trim().toLowerCase();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { products: PRODUCTS, reviews: REVIEWS, addReview } = useAdmin();
@@ -64,6 +65,11 @@ export default function ProductDetailPage() {
   const [productReviews, setProductReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsTotal, setReviewsTotal] = useState(0);
+  // Live aggregate from the reviews API (approved reviews only); falls back to product fields until loaded
+  const [reviewStats, setReviewStats] = useState(null);
+  const reviewCountDisplay = reviewStats?.reviewsCount ?? 0;
+  const ratingDisplay = reviewStats?.averageRating ?? 0;
+  const hasReviews = reviewCountDisplay > 0;
   const [reviewEligibility, setReviewEligibility] = useState(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState('');
@@ -75,15 +81,21 @@ export default function ProductDetailPage() {
   const [newReviewContent, setNewReviewContent] = useState('');
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
-  const fetchReviews = async () => {
+  const fetchReviews = async ({ silent = false } = {}) => {
     const pid = product?._id || product?.id;
     if (!pid) return;
-    setReviewsLoading(true);
+    if (!silent) setReviewsLoading(true);
     try {
       const res = await reviewApi.getProductReviews(pid);
       if (res?.data?.reviews) {
         setProductReviews(res.data.reviews);
         setReviewsTotal(res.data.pagination?.total ?? res.data.reviews.length);
+        if (res.data.stats) {
+          setReviewStats({
+            averageRating: Number(res.data.stats.averageRating) || 0,
+            reviewsCount: Number(res.data.stats.reviewsCount) || 0
+          });
+        }
       }
     } catch (e) {
       console.warn('Could not fetch reviews:', e.message);
@@ -108,10 +120,45 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (product?._id || product?.id) {
+      setReviewStats(null);
       fetchReviews();
       checkEligibility();
     }
   }, [product?._id, product?.id, isAuthenticated]);
+
+  // Deep link from an order ("Rate & Review"): open the Reviews tab and, if eligible, the review form
+  useEffect(() => {
+    if (searchParams.get('review') !== '1') return;
+    setActiveTab('reviews');
+    setTimeout(() => document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    if (!isAuthenticated) return;
+    if (reviewEligibility?.canReview) {
+      if (authUser?.name) setNewReviewAuthor((prev) => prev || authUser.name);
+      setIsWriteReviewOpen(true);
+    }
+    if (reviewEligibility) {
+      // Eligibility resolved — consume the flag so closing the form doesn't reopen it
+      const next = new URLSearchParams(searchParams);
+      next.delete('review');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, reviewEligibility, isAuthenticated]);
+
+  // Keep rating / count live: refresh on tab focus and every 30s
+  useEffect(() => {
+    if (!(product?._id || product?.id)) return undefined;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') fetchReviews({ silent: true });
+    };
+    const timer = setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [product?._id, product?.id]);
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
@@ -290,14 +337,19 @@ export default function ProductDetailPage() {
               {/* Rating & Reviews summary */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center text-amber-500">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                  ))}
-                  <span className="font-bold text-sm ml-1.5 text-stone-900">{product.rating}</span>
+                  {[...Array(5)].map((_, i) => {
+                    const filled = hasReviews && i < Math.round(ratingDisplay);
+                    return (
+                      <Star key={i} className={`w-4 h-4 ${filled ? 'fill-amber-400 text-amber-400' : 'fill-transparent text-stone-300'}`} />
+                    );
+                  })}
+                  {hasReviews && (
+                    <span className="font-bold text-sm ml-1.5 text-stone-900">{ratingDisplay.toFixed(1)}</span>
+                  )}
                 </div>
                 <span className="text-xs text-stone-400">•</span>
                 <a href="#reviews" onClick={() => setActiveTab('reviews')} className="text-xs text-[#0E2A1B] underline hover:text-[#D4AF37] font-medium">
-                  ({product.reviewsCount} Customer Reviews)
+                  {hasReviews ? `(${reviewCountDisplay} Customer Reviews)` : 'No reviews yet'}
                 </a>
               </div>
 
@@ -433,7 +485,7 @@ export default function ProductDetailPage() {
             {[
               { id: 'description', label: 'Description' },
               { id: 'details', label: 'Product Details' },
-              { id: 'reviews', label: `Reviews (${reviewsTotal || productReviews.length || (REVIEWS || []).filter(r => r.status === 'Approved').length || product.reviewsCount || 0})` }
+              { id: 'reviews', label: `Reviews (${reviewCountDisplay})` }
             ].map(tab => {
               const isActive = activeTab === tab.id;
               return (
@@ -531,24 +583,32 @@ export default function ProductDetailPage() {
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-[#FAF7F2] rounded-2xl border border-[#E8E2D5]">
                   <div>
                     <h4 className="font-serif text-2xl font-bold text-[#0E2A1B]">
-                      {product.rating ? Number(product.rating).toFixed(1) : '5.0'} Out of 5 Stars
+                      {hasReviews ? `${ratingDisplay.toFixed(1)} Out of 5 Stars` : 'No ratings yet'}
                     </h4>
                     <p className="text-xs text-stone-500">
-                      Based on {reviewsTotal || productReviews.length || product.reviewsCount || 0} verified customer reviews
+                      Based on {reviewCountDisplay} verified customer reviews
                     </p>
                   </div>
-                  <button 
-                    onClick={() => {
-                      setReviewError('');
-                      if (authUser?.name && !newReviewAuthor) {
-                        setNewReviewAuthor(authUser.name);
-                      }
-                      setIsWriteReviewOpen(true);
-                    }}
-                    className="px-5 py-2.5 bg-[#0E2A1B] text-white hover:bg-[#1B3B29] rounded-xl text-xs font-bold uppercase tracking-wider shadow-md cursor-pointer"
-                  >
-                    Write a Review
-                  </button>
+                  {reviewEligibility?.canReview ? (
+                    <button 
+                      onClick={() => {
+                        setReviewError('');
+                        if (authUser?.name && !newReviewAuthor) {
+                          setNewReviewAuthor(authUser.name);
+                        }
+                        setIsWriteReviewOpen(true);
+                      }}
+                      className="px-5 py-2.5 bg-[#0E2A1B] text-white hover:bg-[#1B3B29] rounded-xl text-xs font-bold uppercase tracking-wider shadow-md cursor-pointer"
+                    >
+                      Write a Review
+                    </button>
+                  ) : (
+                    <p className="max-w-xs text-xs text-stone-500 sm:text-right">
+                      {!isAuthenticated
+                        ? 'Log in and purchase this product to write a review.'
+                        : reviewEligibility?.message || 'Only customers who received this product can review it.'}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -558,7 +618,7 @@ export default function ProductDetailPage() {
                     </div>
                   )}
 
-                  {(productReviews.length > 0 ? productReviews : (REVIEWS || []).filter(r => r.status === 'Approved')).map(r => (
+                  {productReviews.map(r => (
                     <div key={r.id || r._id} className="p-4 rounded-xl border border-stone-100 bg-white space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">

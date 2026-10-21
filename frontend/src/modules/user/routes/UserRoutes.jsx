@@ -15,6 +15,7 @@ import PrivacyPolicyPage from '../pages/PrivacyPolicyPage';
 import HelpSupportPage from '../pages/HelpSupportPage';
 import RecipesPage from '../pages/RecipesPage';
 import MobileBottomNav from '../components/MobileBottomNav';
+import RequireAuth from '../components/RequireAuth';
 
 export default function UserRoutes() {
   return (
@@ -24,7 +25,7 @@ export default function UserRoutes() {
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/product/:id" element={<ProductDetailPage />} />
         <Route path="/cart" element={<CartPage />} />
-        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/recipes" element={<RecipesPage />} />
         <Route path="/about" element={<AboutPage />} />

@@ -403,20 +403,18 @@ export function AdminProvider({ children }) {
     }
   }, [recipes]);
 
-  // Sync recipes from backend on mount
+  // Sync recipes from backend on mount — the server is the source of truth.
+  // Admin sessions load every recipe (incl. drafts); storefront loads only published ones.
   useEffect(() => {
-    recipeApi.getRecipes()
+    const isAdminArea = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+    const request = isAdminArea ? adminRecipeApi.getAll() : recipeApi.getRecipes();
+    request
       .then(res => {
-        if (res?.data?.recipes && res.data.recipes.length > 0) {
-          const fetched = res.data.recipes.map(r => ({
+        if (Array.isArray(res?.data?.recipes)) {
+          setRecipes(res.data.recipes.map(r => ({
             ...r,
             id: (r._id || r.id)?.toString()
-          }));
-          setRecipes(prev => {
-            const serverIds = new Set(fetched.map(r => String(r.id || r._id)));
-            const localOnly = (prev || []).filter(r => !serverIds.has(String(r.id || r._id)));
-            return [...localOnly, ...fetched];
-          });
+          })));
         }
       })
       .catch(err => console.warn('[AdminContext] Recipes backend load note:', err.message));
@@ -1101,7 +1099,7 @@ export function AdminProvider({ children }) {
 
     setRecipes(prev => [newRecipe, ...prev]);
 
-    // Also persist to backend if admin token available
+    // Persist to backend; roll the optimistic entry back if the save fails
     try {
       const res = await adminRecipeApi.create(newRecipe);
       if (res?.data?.recipe) {
@@ -1109,10 +1107,12 @@ export function AdminProvider({ children }) {
         setRecipes(prev => prev.map(r => r.id === newRecipe.id ? savedRecipe : r));
         return { success: true, recipe: savedRecipe };
       }
+      throw new Error('Server did not return the saved recipe.');
     } catch (err) {
-      console.warn('[AdminContext] Backend addRecipe note:', err.message);
+      console.warn('[AdminContext] Backend addRecipe failed:', err.message);
+      setRecipes(prev => prev.filter(r => r.id !== newRecipe.id));
+      return { success: false, error: err.message || 'Could not save recipe.' };
     }
-    return { success: true, recipe: newRecipe };
   };
 
   const updateRecipe = async (id, updatedData) => {

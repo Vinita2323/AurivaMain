@@ -8,6 +8,8 @@ import {
 const ORDER_POLL_INTERVAL_MS = 15_000; // Re-fetch order status every 15 seconds
 
 import AnnouncementBar from '../components/AnnouncementBar';
+import CancellationNotice from '../components/CancellationNotice';
+import RateReviewButton from '../components/RateReviewButton';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
@@ -112,10 +114,9 @@ export default function OrderTrackingPage() {
 
   return (
     <div className="min-h-screen flex flex-col justify-between bg-[#F7F3E9] text-[#182019] selection:bg-[#D4AF37] selection:text-[#0E2A1B] font-sans">
-      <div>
-        <AnnouncementBar />
-        <Header />
-      </div>
+      {/* Header must be a direct child of the page wrapper so its sticky positioning spans the whole page */}
+      <AnnouncementBar />
+      <Header />
 
       <main className="flex-1 py-3 sm:py-6 md:py-10 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full pb-28 md:pb-12">
         
@@ -131,6 +132,8 @@ export default function OrderTrackingPage() {
         {/* Tracking Card Container */}
         <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 lg:p-10 border border-[#E8E2D5] shadow-xs space-y-5 sm:space-y-8">
           
+          <CancellationNotice order={order} />
+
           {/* Header Info */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-stone-200 pb-3.5 sm:pb-6">
             <div>
@@ -345,6 +348,7 @@ export default function OrderTrackingPage() {
                     <h4 className="font-serif text-xs font-bold text-[#0E2A1B] truncate">{item.name}</h4>
                     <p className="text-[10px] sm:text-[11px] text-stone-500">{item.weight} • Qty: {item.qty}</p>
                     <p className="text-[11px] sm:text-xs font-bold text-[#0E2A1B] mt-0.5">₹{item.price * item.qty}</p>
+                    <RateReviewButton order={order} item={item} className="mt-1.5" />
                   </div>
                 </div>
               ))}

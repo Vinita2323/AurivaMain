@@ -1,14 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, ChefHat, Sparkles } from 'lucide-react';
-import { useAdmin } from '../../../context/AdminContext';
+import usePublicRecipes from '../../../hooks/usePublicRecipes';
 import chaatImg from '../../../assets/user/Flavored Makhana.jpg'; // Fallback
 import periImg from '../../../assets/user/Premium Makhana.jpg'; // Fallback
 import kheerImg from '../../../assets/user/Classic Makhana.jpg'; // Fallback
 
 export default function RecipesSection() {
   const navigate = useNavigate();
-  const { recipes = [] } = useAdmin();
+  const { recipes } = usePublicRecipes();
 
   // Filter active recipes for display
   const activeRecipes = recipes.filter(r => (r.status === 'ACTIVE' || !r.status));

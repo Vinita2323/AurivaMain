@@ -66,9 +66,9 @@ export default function CheckoutPage() {
   } = useAuth();
 
   const [currentStep, setCurrentStep] = useState(1); // 1: Address, 2: Payment
-  const [name, setName] = useState(user?.name || 'Vini Sharma');
-  const [mobile, setMobile] = useState(user?.phone || '9876543210');
-  const [email, setEmail] = useState(user?.email || 'vini.sharma@gmail.com');
+  const [name, setName] = useState(user?.name || '');
+  const [mobile, setMobile] = useState(user?.phone || '');
+  const [email, setEmail] = useState(user?.email || '');
 
   const [deliveryMethod, setDeliveryMethod] = useState('standard');
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'online' | 'cod'
@@ -903,7 +903,7 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {currentStep === 2 ? (
+              {currentStep === 2 || selectedAddress ? (
                 <div className="space-y-3 sm:space-y-6 animate-fadeIn">
                   
                   {/* Payment Options — Online (Prepaid) vs COD */}
