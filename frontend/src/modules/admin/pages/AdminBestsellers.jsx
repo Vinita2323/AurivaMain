@@ -8,6 +8,8 @@ import {
 
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import AddBestsellerProductModal from '../components/AddBestsellerProductModal';
 import EditBestsellerSectionModal from '../components/EditBestsellerSectionModal';
 import { bestsellerApi } from '../../../utils/api';
@@ -94,6 +96,9 @@ export default function AdminBestsellers() {
       return true;
     });
   }, [bestsellers, statusFilter, searchQuery]);
+
+  // Pagination (rows keep their TRUE position in the list so reordering still works across pages)
+  const pagination = usePagination(filteredBestsellers, { resetKey: `${statusFilter}|${searchQuery}` });
 
   // Statistics
   const totalCount = bestsellers.length;
@@ -449,7 +454,8 @@ export default function AdminBestsellers() {
                 </div>
               ) : (
                 <div className="divide-y divide-stone-100">
-                  {filteredBestsellers.map((item, index) => {
+                  {pagination.pageItems.map((item, pageIdx) => {
+                    const index = pagination.from - 1 + pageIdx;
                     const prod = item.product;
                     if (!prod) return null;
 
@@ -584,6 +590,8 @@ export default function AdminBestsellers() {
                 </div>
               )}
             </div>
+
+            <AdminPagination pagination={pagination} label="bestseller products" />
 
             {/* Table Footer Instructions */}
             <div className="p-4 bg-[#FAF7F2] border-t border-[#E8E2D5] flex items-center justify-between text-xs text-stone-500">

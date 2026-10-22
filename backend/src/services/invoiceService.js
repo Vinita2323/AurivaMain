@@ -57,7 +57,9 @@ class InvoiceService {
     const orderDate = this._formatDate(order.createdAt);
     const invoiceDate = this._formatDate(order.payment?.paidAt || order.createdAt);
     const paymentMethod = order.payment?.method || 'COD';
-    const paymentStatus = (order.payment?.status || 'PENDING').toUpperCase();
+    const isCancelled = String(order.status || '').toUpperCase() === 'CANCELLED';
+    // A cancelled order must read CANCELLED on the invoice, whatever its payment status was
+    const paymentStatus = isCancelled ? 'CANCELLED' : (order.payment?.status || 'PENDING').toUpperCase();
     const transactionId = order.payment?.transactionId || '';
 
     // Locate brand logo
@@ -167,7 +169,7 @@ class InvoiceService {
       .font('Helvetica-Bold')
       .text(`Status: `, { continued: true })
       .font('Helvetica-Bold')
-      .fillColor(paymentStatus === 'PAID' ? '#059669' : '#D97706')
+      .fillColor(isCancelled ? '#DC2626' : paymentStatus === 'PAID' ? '#059669' : '#D97706')
       .text(paymentStatus);
 
     // =========================================================================
@@ -438,6 +440,15 @@ class InvoiceService {
       .fontSize(6.5)
       .font('Helvetica-Oblique')
       .text('Authorised Signatory', 425, footerY + 44, { width: 125, align: 'center' });
+
+    // CANCELLED watermark across the page
+    if (isCancelled) {
+      doc.save();
+      doc.rotate(-35, { origin: [297, 420] });
+      doc.fillColor('#DC2626').opacity(0.14).font('Helvetica-Bold').fontSize(70);
+      doc.text('CANCELLED', 40, 395, { width: 520, align: 'center', lineBreak: false });
+      doc.restore();
+    }
 
     // Finalize PDF Document
     doc.end();

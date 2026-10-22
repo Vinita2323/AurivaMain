@@ -1,4 +1,5 @@
 import * as orderService from '../services/orderService.js';
+import { getOrderDistance } from '../services/distanceService.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
@@ -32,6 +33,22 @@ export const getOrderById = async (req, res, next) => {
     const isAdmin = req.user && req.user.role === 'ADMIN';
     const order = await orderService.getOrderById(req.user._id, req.params.id, isAdmin);
     return sendSuccess(res, 'Order retrieved successfully', { order });
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, null, error.statusCode);
+    }
+    next(error);
+  }
+};
+
+/**
+ * Admin: approximate store -> customer distance for an order
+ * GET /api/v1/admin/orders/:id/distance
+ */
+export const getOrderDistanceAdmin = async (req, res, next) => {
+  try {
+    const distance = await getOrderDistance(req.params.id);
+    return sendSuccess(res, 'Order distance calculated', { distance }, HTTP_STATUS.OK);
   } catch (error) {
     if (error.statusCode) {
       return sendError(res, error.message, null, error.statusCode);
@@ -138,6 +155,7 @@ export const cancelOrderCustomer = async (req, res, next) => {
 export default {
   placeOrder,
   getOrderById,
+  getOrderDistanceAdmin,
   getUserOrders,
   getCheckoutSummary,
   getAllOrdersAdmin,

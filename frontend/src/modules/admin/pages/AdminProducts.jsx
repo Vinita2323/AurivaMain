@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import { Plus, Search, Edit2, Trash2, Flame, CheckCircle2, AlertCircle, Eye, RefreshCw, Image as ImageIcon } from 'lucide-react';
 
 import AdminSidebar from '../components/AdminSidebar';
@@ -63,6 +65,12 @@ export default function AdminProducts() {
       return true;
     });
   }, [products, activeStatusFilter, selectedCategory, searchQuery]);
+
+  // Pagination — back to page 1 whenever the search or filters change
+  const pagination = usePagination(filteredProducts, {
+    initialPageSize: 10,
+    resetKey: `${activeStatusFilter}|${selectedCategory}|${searchQuery}`
+  });
 
   const handleEdit = (prod) => {
     setEditingProduct(prod);
@@ -290,7 +298,7 @@ export default function AdminProducts() {
                       </td>
                     </tr>
                   ) : (
-                    filteredProducts.map((p) => {
+                    pagination.pageItems.map((p) => {
                       const isActive = p.inStock !== false;
                       const displayImage = resolveProductImage(p);
                       return (
@@ -382,11 +390,8 @@ export default function AdminProducts() {
               </table>
             </div>
 
-            {/* Bottom count info */}
-            <div className="p-3.5 border-t border-stone-200 bg-[#FAF7F2] flex items-center justify-between text-xs sm:text-sm text-stone-500">
-              <span className="font-medium">Showing {filteredProducts.length} snack items</span>
-              <span className="text-xs text-stone-400">100% synchronized with live database & storefront</span>
-            </div>
+            {/* Pagination + count info */}
+            <AdminPagination pagination={pagination} label="snack items" />
           </div>
 
         </main>

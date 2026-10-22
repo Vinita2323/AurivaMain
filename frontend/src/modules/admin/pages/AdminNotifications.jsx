@@ -6,6 +6,8 @@ import {
 import { Link } from 'react-router-dom';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import { adminNotificationApi, fcmApi } from '../../../utils/api';
 import pushNotificationService from '../../../services/pushNotificationService';
 
@@ -16,6 +18,9 @@ export default function AdminNotifications() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); // 'all', 'unread', 'read'
+  const [page, setPage] = useState(1);
+  const [pageInfo, setPageInfo] = useState({ total: 0, limit: 10, totalPages: 1 });
+  const PAGE_LIMIT = 10;
   const [actionInProgress, setActionInProgress] = useState(false);
 
   // FCM Push Notifications State
@@ -32,10 +37,18 @@ export default function AdminNotifications() {
       setError(null);
       const res = await adminNotificationApi.getNotifications({
         status: filter !== 'all' ? filter : undefined,
-        limit: 50
+        page,
+        limit: PAGE_LIMIT
       });
       if (res && res.data) {
         setNotifications(res.data.notifications || []);
+        if (res.data.pagination) {
+          setPageInfo(res.data.pagination);
+          // Page no longer exists (e.g. after marking items read in the Unread tab) — step back
+          if (res.data.pagination.page > res.data.pagination.totalPages) {
+            setPage(Math.max(1, res.data.pagination.totalPages));
+          }
+        }
         if (typeof res.data.unreadCount === 'number') {
           setUnreadCount(res.data.unreadCount);
         }
@@ -46,6 +59,11 @@ export default function AdminNotifications() {
     } finally {
       setLoading(false);
     }
+  }, [filter, page]);
+
+  // Switching tabs always starts from page 1
+  useEffect(() => {
+    setPage(1);
   }, [filter]);
 
   // Fetch unread count independently
@@ -463,6 +481,18 @@ export default function AdminNotifications() {
                 );
               })
             )}
+
+            <AdminPagination
+              label="notifications"
+              pagination={{
+                page,
+                setPage,
+                totalItems: pageInfo.total || 0,
+                totalPages: pageInfo.totalPages || 1,
+                from: notifications.length ? (page - 1) * PAGE_LIMIT + 1 : 0,
+                to: notifications.length ? (page - 1) * PAGE_LIMIT + notifications.length : 0
+              }}
+            />
           </div>
 
         </main>

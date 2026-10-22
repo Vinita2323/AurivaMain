@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TrendingUp, TrendingDown, Loader2, AlertCircle, RefreshCw, CalendarDays, X } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
@@ -42,6 +42,42 @@ function Trend({ pct }) {
   );
 }
 
+const addDays = (date, n) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+};
+
+/**
+ * Exact window in the admin's own timezone: [from, to) as ISO instants.
+ * Custom dates win over the preset buttons. Month/quarter/year start on the 1st of the month.
+ */
+function buildRange(timeframe, fromDate, toDate) {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let start;
+  let end = addDays(todayStart, 1); // tomorrow 00:00 -> includes all of today
+
+  if (fromDate) {
+    start = new Date(`${fromDate}T00:00:00`);
+    if (toDate) end = addDays(new Date(`${toDate}T00:00:00`), 1);
+    if (end <= start) end = addDays(start, 1);
+  } else if (timeframe === 'weekly') {
+    start = addDays(end, -7);
+  } else if (timeframe === 'quarterly') {
+    start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  } else if (timeframe === 'yearly') {
+    start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+  } else {
+    start = new Date(now.getFullYear(), now.getMonth(), 1); // month-to-date
+  }
+  return {
+    from: start.toISOString(),
+    to: end.toISOString(),
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+  };
+}
+
 export default function AdminAnalytics() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [timeframe, setTimeframe] = useState('monthly');
@@ -58,9 +94,8 @@ export default function AdminAnalytics() {
     setError('');
     try {
       const res = await adminDashboardApi.getAnalytics({
-        range: timeframe,
-        from: fromDate,
-        to: toDate
+        range: fromDate ? 'custom' : timeframe,
+        ...buildRange(timeframe, fromDate, toDate)
       });
       setData(res?.data || null);
     } catch (err) {
@@ -99,6 +134,42 @@ export default function AdminAnalytics() {
     const labelEvery = Math.max(1, Math.ceil(n / 8));
     return { points, line, area, bottom, labelEvery, max };
   }, [series]);
+
+  // Cursor effect: guide line + highlighted point + tooltip that snap to the nearest data point
+  const chartBoxRef = useRef(null);
+  const [hover, setHover] = useState(null); // { idx, left, top, boxWidth }
+  const VB_W = 600;
+  const VB_H = 220;
+
+  const handleChartMove = (e) => {
+    const box = chartBoxRef.current;
+    const svg = box?.querySelector('svg');
+    if (!box || !svg || chart.points.length === 0) return;
+    const rect = svg.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    // viewBox is letter-boxed (preserveAspectRatio meet) — map pixels back to viewBox units
+    const scale = Math.min(rect.width / VB_W, rect.height / VB_H);
+    const offX = (rect.width - VB_W * scale) / 2;
+    const offY = (rect.height - VB_H * scale) / 2;
+    const vx = (e.clientX - rect.left - offX) / scale;
+
+    let idx = 0;
+    let best = Infinity;
+    chart.points.forEach((pt, i) => {
+      const d = Math.abs(pt.x - vx);
+      if (d < best) {
+        best = d;
+        idx = i;
+      }
+    });
+    const pt = chart.points[idx];
+    setHover({
+      idx,
+      left: rect.left - boxRect.left + offX + pt.x * scale,
+      top: rect.top - boxRect.top + offY + pt.y * scale,
+      boxWidth: boxRect.width
+    });
+  };
 
   const rangeLabel = data?.range
     ? `${new Date(data.range.from).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} – ${new Date(
@@ -259,13 +330,18 @@ export default function AdminAnalytics() {
                     </p>
                   </div>
 
-                  <div className="h-64 w-full pt-4">
+                  <div
+                    ref={chartBoxRef}
+                    className="relative h-64 w-full pt-4"
+                    onPointerMove={handleChartMove}
+                    onPointerLeave={() => setHover(null)}
+                  >
                     {chart.max === 0 ? (
                       <div className="h-full flex items-center justify-center text-xs text-stone-400">
                         No revenue recorded in this period.
                       </div>
                     ) : (
-                      <svg viewBox="0 0 600 220" className="w-full h-full overflow-visible">
+                      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="w-full h-full overflow-visible cursor-crosshair">
                         <defs>
                           <linearGradient id="analyticsChartGrad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#1B3B29" stopOpacity="0.35" />
@@ -285,10 +361,29 @@ export default function AdminAnalytics() {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
+                        {hover && chart.points[hover.idx] && (
+                          <line
+                            x1={chart.points[hover.idx].x}
+                            y1="20"
+                            x2={chart.points[hover.idx].x}
+                            y2={chart.bottom}
+                            stroke="#0E2A1B"
+                            strokeWidth="1"
+                            strokeDasharray="4 4"
+                            opacity="0.5"
+                          />
+                        )}
                         {chart.points.map((pt, i) => (
-                          <g key={i} className="group cursor-pointer">
-                            <title>{`${pt.label}: ${inr(pt.revenue)} • ${pt.orders} orders`}</title>
-                            <circle cx={pt.x} cy={pt.y} r="4.5" fill="#D4AF37" stroke="#0E2A1B" strokeWidth="2" />
+                          <g key={i}>
+                            <circle
+                              cx={pt.x}
+                              cy={pt.y}
+                              r={hover?.idx === i ? 7 : 4.5}
+                              fill={hover?.idx === i ? '#0E2A1B' : '#D4AF37'}
+                              stroke={hover?.idx === i ? '#D4AF37' : '#0E2A1B'}
+                              strokeWidth="2.5"
+                              style={{ transition: 'r 120ms ease' }}
+                            />
                             {i % chart.labelEvery === 0 && (
                               <>
                                 {pt.revenue > 0 && (
@@ -304,6 +399,24 @@ export default function AdminAnalytics() {
                           </g>
                         ))}
                       </svg>
+                    )}
+
+                    {hover && chart.points[hover.idx] && (
+                      <div
+                        className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg bg-[#0E2A1B] px-3 py-2 text-xs text-white shadow-lg whitespace-nowrap"
+                        style={{
+                          left: Math.min(Math.max(hover.left, 70), Math.max(70, hover.boxWidth - 70)),
+                          top: Math.max(hover.top - 12, 8)
+                        }}
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]">
+                          {chart.points[hover.idx].label}
+                        </p>
+                        <p className="font-bold">{inr(chart.points[hover.idx].revenue)}</p>
+                        <p className="text-stone-300">
+                          {chart.points[hover.idx].orders} {chart.points[hover.idx].orders === 1 ? 'order' : 'orders'}
+                        </p>
+                      </div>
                     )}
                   </div>
 

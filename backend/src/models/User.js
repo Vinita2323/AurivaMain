@@ -67,6 +67,11 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    // Set when the customer deletes their own account (personal data is erased, order history is kept)
+    deletedAt: {
+      type: Date,
+      default: null
+    },
     lastLoginAt: {
       type: Date,
       default: Date.now

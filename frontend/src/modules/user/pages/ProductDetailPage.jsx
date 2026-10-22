@@ -23,7 +23,7 @@ export default function ProductDetailPage() {
   const targetKey = (id || slug || '').toString().trim().toLowerCase();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { addToCart } = useCart();
+  const { addToCart, getStockLimit, getRemainingStock } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { products: PRODUCTS, reviews: REVIEWS, addReview } = useAdmin();
 
@@ -224,14 +224,25 @@ export default function ProductDetailPage() {
     }
   }
 
-  const handleAddToCart = (openDrawer = true) => {
-    addToCart(product, selectedWeight, quantity, openDrawer);
+  // Real stock for this product (null = unknown)
+  const productKey = product?._id || product?.id;
+  const stockLimit = getStockLimit(productKey);
+  const remainingStock = getRemainingStock(productKey);
+  const isOutOfStock = stockLimit !== null && stockLimit <= 0;
+  const maxQty = remainingStock === Infinity ? 99 : Math.max(1, remainingStock);
+
+  const handleAddToCart = async (openDrawer = true) => {
+    if (isOutOfStock) return;
+    const added = await addToCart(product, selectedWeight, quantity, openDrawer);
+    if (added === false) return; // blocked by stock limit
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 2000);
   };
 
-  const handleBuyNow = () => {
-    addToCart(product, selectedWeight, quantity, false);
+  const handleBuyNow = async () => {
+    if (isOutOfStock) return;
+    // If the cart already holds the maximum available, the shopper can still proceed to checkout
+    await addToCart(product, selectedWeight, quantity, false);
     navigate('/checkout');
   };
 
@@ -324,9 +335,19 @@ export default function ProductDetailPage() {
                 <span className="text-xs font-bold tracking-widest text-[#28543B] uppercase">
                   {product.flavor} • 100% Fox Nuts
                 </span>
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                  <Check className="w-3.5 h-3.5" /> In Stock ({product.stockCount || 200}+ packs)
-                </span>
+                {isOutOfStock ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full">
+                    Out of Stock
+                  </span>
+                ) : stockLimit !== null && stockLimit <= 10 ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full">
+                    Only {stockLimit} left
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                    <Check className="w-3.5 h-3.5" /> In Stock{stockLimit !== null ? ` (${stockLimit} packs)` : ''}
+                  </span>
+                )}
               </div>
 
               {/* Title */}
@@ -414,8 +435,9 @@ export default function ProductDetailPage() {
                   </button>
                   <span className="px-4 text-sm font-bold">{quantity}</span>
                   <button
-                    onClick={() => setQuantity(q => q + 1)}
-                    className="p-2 text-stone-600 hover:bg-stone-200 transition-colors"
+                    onClick={() => setQuantity(q => Math.min(maxQty, q + 1))}
+                    disabled={isOutOfStock || quantity >= maxQty}
+                    className="p-2 text-stone-600 hover:bg-stone-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -426,13 +448,16 @@ export default function ProductDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
                 <button
                   onClick={() => handleAddToCart(false)}
-                  className={`py-3.5 px-6 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md ${
+                  disabled={isOutOfStock}
+                  className={`py-3.5 px-6 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${
                     isAdded
                       ? 'bg-emerald-700 text-white'
                       : 'bg-[#0E2A1B] text-white hover:bg-[#1B3B29] border border-[#D4AF37]/40'
                   }`}
                 >
-                  {isAdded ? (
+                  {isOutOfStock ? (
+                    <span>OUT OF STOCK</span>
+                  ) : isAdded ? (
                     <>
                       <Check className="w-4 h-4 text-[#D4AF37]" />
                       <span>Added to Cart!</span>
@@ -447,7 +472,8 @@ export default function ProductDetailPage() {
 
                 <button
                   onClick={handleBuyNow}
-                  className="py-3.5 px-6 rounded-xl gold-gradient-btn font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg"
+                  disabled={isOutOfStock}
+                  className="py-3.5 px-6 rounded-xl gold-gradient-btn font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Zap className="w-4 h-4 fill-[#0E2A1B]" />
                   <span>BUY NOW</span>
@@ -686,9 +712,10 @@ export default function ProductDetailPage() {
         <div className="flex-1 grid grid-cols-2 gap-2">
           <button
             onClick={() => handleAddToCart(true)}
-            className="py-2.5 px-3 rounded-xl bg-[#0E2A1B] text-white text-xs font-bold uppercase tracking-wider min-h-[40px]"
+            disabled={isOutOfStock}
+            className="py-2.5 px-3 rounded-xl bg-[#0E2A1B] text-white text-xs font-bold uppercase tracking-wider min-h-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isAdded ? 'Added!' : 'Add to Cart'}
+            {isOutOfStock ? 'Out of Stock' : isAdded ? 'Added!' : 'Add to Cart'}
           </button>
           <button
             onClick={handleBuyNow}

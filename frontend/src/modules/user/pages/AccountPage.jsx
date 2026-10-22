@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { 
-  Package, MapPin, Tag, CreditCard, Heart, User,
+  Package, MapPin, Tag, Heart, User, // (re-import CreditCard when the Saved Cards tab is restored)
+ 
   LogOut, ChevronRight, ArrowRight, Copy, Check, Plus, 
   Edit3, Trash2, CheckCircle2, ShieldCheck, X, Sparkles, Lock,
   ArrowLeft, ChevronLeft, Phone, FileText, Camera, Upload,
@@ -16,6 +17,7 @@ import Footer from '../components/Footer';
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import CancellationNotice from '../components/CancellationNotice';
 import RateReviewButton from '../components/RateReviewButton';
+import DeleteAccountModal from '../components/DeleteAccountModal';
 
 import { useAuth } from '../../../context/AuthContext';
 import { useWishlist } from '../../../context/WishlistContext';
@@ -24,7 +26,9 @@ import { resolveHelpSupport } from '../../../utils/helpSupport';
 
 export default function AccountPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const rawTab = searchParams.get('tab');
+  // The Saved Payment Cards tab is disabled — treat /account?tab=cards like the plain account menu
+  const rawTabParam = searchParams.get('tab');
+  const rawTab = rawTabParam === 'cards' ? null : rawTabParam;
   const activeTab = rawTab || 'orders';
   const isMobileMenu = !rawTab; // When no ?tab= param on mobile, show the vertical menu
   const navigate = useNavigate();
@@ -49,8 +53,11 @@ export default function AccountPage() {
     deleteAddress, 
     setPrimaryAddress,
     cancelOrder,
-    updateProfile
+    updateProfile,
+    deleteAccount
   } = useAuth();
+
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   // Live orders state — refreshed every 15s when Orders tab is active
   const [liveOrders, setLiveOrders] = useState(null);
@@ -149,6 +156,12 @@ export default function AccountPage() {
   const handleLogout = () => {
     logout();
     setSearchParams({});
+  };
+
+  const handleConfirmDelete = async () => {
+    await deleteAccount(); // throws with a readable message if the server refuses
+    setIsDeleteOpen(false);
+    navigate('/', { replace: true });
   };
 
   // If user is logged out, render the compact, themed "Please Log In First" screen
@@ -468,12 +481,13 @@ export default function AccountPage() {
       icon: Heart, 
       badge: wishlistCount || undefined 
     },
-    { 
-      id: 'cards', 
-      label: 'Saved Payment Cards', 
-      desc: 'Quick checkout payment methods', 
-      icon: CreditCard 
-    },
+    // Saved Payment Cards tab disabled for now (online payments are switched off). To restore: uncomment.
+    // {
+    // id: 'cards',
+    // label: 'Saved Payment Cards',
+    // desc: 'Quick checkout payment methods',
+    // icon: CreditCard
+    // },
     { 
       id: 'profile', 
       label: 'Profile', 
@@ -644,6 +658,13 @@ export default function AccountPage() {
                 <LogOut className="w-4 h-4" />
                 <span>Log Out</span>
               </button>
+              <button
+                onClick={() => setIsDeleteOpen(true)}
+                className="mt-2 w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-rose-600 text-white font-bold text-xs shadow-xs active:bg-rose-700 min-h-[48px] hover:bg-rose-700 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Account</span>
+              </button>
             </div>
           </div>
         )}
@@ -691,6 +712,13 @@ export default function AccountPage() {
                 <LogOut className="w-4 h-4" />
                 <span>Logout</span>
               </button>
+              <button
+                onClick={() => setIsDeleteOpen(true)}
+                className="mt-1 w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Account</span>
+              </button>
             </div>
           </aside>
 
@@ -719,6 +747,9 @@ export default function AccountPage() {
                             <span className="text-xs text-stone-500">• {ord.date}</span>
                           </div>
                           <p className="text-[11px] text-stone-500 mt-0.5">Payment: {ord.paymentMethod} • Total: <strong className="text-stone-900">₹{ord.total}</strong></p>
+                          {ord.expectedDelivery && (
+                            <p className="text-[11px] text-stone-500 mt-0.5">{ord.expectedDelivery.label}: <strong className="text-stone-900">{ord.expectedDelivery.value}</strong></p>
+                          )}
                           {(ord.awbNumber || ord.shiprocket?.awbCode || ord.courierName || ord.shiprocket?.courierName) && (
                             <p className="text-[11px] text-stone-500 mt-0.5 break-words">
                               {ord.shiprocket?.courierName || ord.courierName ? `Courier: ${ord.shiprocket?.courierName || ord.courierName}` : ''}
@@ -936,6 +967,7 @@ export default function AccountPage() {
             )}
 
             {/* 5. SAVED CARDS TAB */}
+{/* Saved Payment Cards tab — disabled for now. To restore, remove this comment wrapper.
             {activeTab === 'cards' && (
               <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 border border-[#E8E2D5] shadow-xs space-y-4 animate-fadeIn">
                 <h3 className="text-base sm:text-xl font-bold text-[#0E2A1B] border-b border-stone-200 pb-3">
@@ -955,6 +987,7 @@ export default function AccountPage() {
                 </div>
               </div>
             )}
+            */}
 
             {/* 6. PROFILE & SECURITY TAB */}
             {activeTab === 'profile' && (
@@ -1349,6 +1382,12 @@ export default function AccountPage() {
           </form>
         </div>
       )}
+
+      <DeleteAccountModal
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+      />
 
       {/* Invoice Preview & Download Modal */}
       <InvoicePreviewModal

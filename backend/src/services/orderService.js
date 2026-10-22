@@ -692,6 +692,7 @@ export const getAllOrdersAdmin = async (filters = {}) => {
     limit = 20,
     status = null,
     search = null,
+    userId = null,
     fromDate = null,
     toDate = null,
     sortBy = 'createdAt:desc'
@@ -702,6 +703,11 @@ export const getAllOrdersAdmin = async (filters = {}) => {
   const skip = (pageNum - 1) * limitNum;
 
   const query = {};
+
+  // Orders of one customer (CRM drawer)
+  if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+    query.user = userId;
+  }
 
   // Status Filter
   if (status && status !== 'all' && status !== 'All') {
@@ -909,7 +915,20 @@ const applyRiderDetails = (order, rider) => {
   if (!rider || typeof rider !== 'object') return;
   const text = (v) => (typeof v === 'string' ? v.trim() : '');
   const num = (v) => (v === undefined || v === null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
-  const current = order.rider?.toObject ? order.rider.toObject() : (order.rider || {});
+  const stored = order.rider?.toObject ? order.rider.toObject() : (order.rider || {});
+  // Orders created before real rider data existed carry placeholder defaults — never carry them over
+  const PLACEHOLDER = { phone: '+919811122334', vehicle: 'MP09-AB-1234', eta: '25 mins', distance: '2.5 km away' };
+  const isFake = (key, value) => String(value || '').replace(/\s/g, '') === String(PLACEHOLDER[key]).replace(/\s/g, '');
+  const current = {
+    name: stored.name === 'Rohan Kumar' && isFake('phone', stored.phone) ? '' : stored.name,
+    phone: isFake('phone', stored.phone) ? '' : stored.phone,
+    rating: Number(stored.rating) === 4.9 ? null : stored.rating,
+    vehicle: isFake('vehicle', stored.vehicle) ? '' : stored.vehicle,
+    eta: isFake('eta', stored.eta) ? '' : stored.eta,
+    distance: isFake('distance', stored.distance) ? '' : stored.distance,
+    lat: Number(stored.lat) === 22.7196 && Number(stored.lng) === 75.8577 ? null : stored.lat,
+    lng: Number(stored.lat) === 22.7196 && Number(stored.lng) === 75.8577 ? null : stored.lng
+  };
   order.rider = {
     name: text(rider.name) || current.name || '',
     phone: text(rider.phone) || current.phone || '',

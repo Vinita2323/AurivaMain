@@ -11,14 +11,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
  */
 export default function InvoicePdfPages({ blob, onError }) {
   const containerRef = useRef(null);
+  const wrapperRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [pageCount, setPageCount] = useState(0);
   const pdfRef = useRef(null);
   const canvasRefs = useRef([]);
 
-  // Track container width so pages always fit
+  // Track the width of the column the pages actually sit in (not the whole panel), so they never overflow
   useEffect(() => {
-    const el = containerRef.current;
+    const el = wrapperRef.current;
     if (!el) return undefined;
     const update = () => setWidth(el.clientWidth);
     update();
@@ -88,10 +89,11 @@ export default function InvoicePdfPages({ blob, onError }) {
   return (
     <div
       ref={containerRef}
-      className="w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar bg-[#4A4A4A] p-2 sm:p-4"
+      data-lenis-prevent
+      className="w-full h-full overflow-y-auto overflow-x-hidden max-md:no-scrollbar bg-[#4A4A4A] p-2 sm:p-4"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
-      <div className="mx-auto max-w-3xl space-y-3">
+      <div ref={wrapperRef} className="mx-auto w-full max-w-3xl space-y-3">
         {Array.from({ length: pageCount }, (_, i) => (
           <canvas
             key={i}

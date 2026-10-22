@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { userAuthApi, addressApi, orderApi, cartApi, isJwtExpired } from '../utils/api';
+import { userAuthApi, addressApi, orderApi, cartApi, isJwtExpired, apiRequest } from '../utils/api';
 import confetti from 'canvas-confetti';
 import pushNotificationService from '../services/pushNotificationService';
+import { buildTimeline, getExpectedDelivery, formatDateTime } from '../utils/orderDisplay';
 
 const readStoredUserSession = () => {
   try {
@@ -85,21 +86,41 @@ export const formatAddress = (a) => ({
 
 // Orders created before real rider data existed stored this placeholder — treat it as "not assigned"
 const isPlaceholderRider = (r) =>
-  String(r?.name || '').trim() === 'Rohan Kumar' && String(r?.phone || '').replace(/s/g, '') === '+919811122334';
+  String(r?.name || '').trim() === 'Rohan Kumar' && String(r?.phone || '').replace(/\s/g, '') === '+919811122334';
+
+// Placeholder values that older orders stored as rider defaults — never show these as real data
+const PLACEHOLDER_RIDER_PHONE = '+919811122334';
+const PLACEHOLDER_RIDER_VALUES = {
+  vehicle: 'MP09-AB-1234',
+  eta: '25 mins',
+  distance: '2.5 km away'
+};
 
 export const getRealRider = (r) => {
   if (!r || typeof r !== 'object') return null;
   const name = String(r.name || '').trim();
   const phone = String(r.phone || '').trim();
   if ((!name && !phone) || isPlaceholderRider(r)) return null;
-  return { ...r, name, phone };
+  const clean = { ...r, name, phone };
+  if (phone.replace(/\s/g, '') === PLACEHOLDER_RIDER_PHONE) clean.phone = '';
+  if (!clean.name && !clean.phone) return null;
+  Object.entries(PLACEHOLDER_RIDER_VALUES).forEach(([key, fake]) => {
+    if (String(clean[key] || '').trim() === fake) clean[key] = '';
+  });
+  // The old default rating (4.9) and Indore coordinates were placeholders too
+  if (Number(clean.rating) === 4.9) clean.rating = null;
+  if (Number(clean.lat) === 22.7196 && Number(clean.lng) === 75.8577) {
+    clean.lat = null;
+    clean.lng = null;
+  }
+  return clean;
 };
 
 export const formatOrder = (o) => {
   const mapStatusToDisplay = (s) => {
     if (!s) return 'Order Received';
     const u = String(s).toUpperCase().replace(/\s+/g, '_');
-    if (u === 'CONFIRMED' || u === 'ORDER_RECEIVED') return 'Order Received';
+    if (u === 'CONFIRMED' || u === 'ORDER_RECEIVED' || u === 'PENDING') return 'Order Received';
     if (u === 'ACCEPTED') return 'Accepted';
     // PROCESSING is legacy/internal — treat as Accepted, never as Packed
     if (u === 'PROCESSING') return 'Accepted';
@@ -115,10 +136,13 @@ export const formatOrder = (o) => {
     id: o.orderNumber || o.id || o._id,
     _id: o._id,
     orderNumber: o.orderNumber || o.id,
-    customer: o.shippingAddress?.fullName || o.customer || "Customer",
-    email: o.email || "customer@aurivafoods.com",
-    phone: o.shippingAddress?.phoneNumber || o.phone || "+91 9876543210",
+    customer: o.shippingAddress?.fullName || o.user?.name || o.customer || "Customer",
+    // Real contact details only — no invented fallbacks
+    email: o.user?.email || o.email || '',
+    phone: o.shippingAddress?.phoneNumber || o.user?.phone || o.phone || '',
     createdAt: o.createdAt || null,
+    // Full placed date + time in the viewer's local timezone (same string everywhere)
+    placedAt: formatDateTime(o.createdAt),
     date: o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (o.date || 'Today'),
     time: o.createdAt ? new Date(o.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : (o.time || 'Just now'),
     items: o.items || [],
@@ -143,14 +167,19 @@ export const formatOrder = (o) => {
     cancelReason: o.cancelReason || '',
     cancelledBy: o.cancelledBy || null,
     cancelledAt: o.cancelledAt || null,
-    timeline: o.timeline && o.timeline.length > 0 ? o.timeline : [
-      { status: "Order Received", time: "Order Placed", done: true, current: true },
-      { status: "Accepted", time: "Awaiting team", done: false, current: false },
-      { status: "Packed", time: "Warehouse Hub", done: false, current: false },
-      { status: "Ready for Dispatch", time: "In process", done: false, current: false },
-      { status: "Out for Delivery", time: "Live", done: false, current: false },
-      { status: "Delivered", time: "Estimated", done: false, current: false }
-    ],
+    // One consistent timeline / delivery estimate for user + admin (see utils/orderDisplay.js)
+    timeline: buildTimeline({
+      status: mapStatusToDisplay(o.status),
+      rawTimeline: o.timeline,
+      createdAt: o.createdAt
+    }),
+    expectedDelivery: getExpectedDelivery({
+      status: mapStatusToDisplay(o.status),
+      rawTimeline: o.timeline,
+      estimatedDelivery: o.delivery?.estimatedDelivery,
+      createdAt: o.createdAt,
+      updatedAt: o.updatedAt
+    }),
     // Real delivery partner only (null until admin assigns one)
     rider: getRealRider(o.rider),
     address: o.shippingAddress ? {
@@ -492,6 +521,21 @@ export function AuthProvider({ children }) {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  /** Permanently delete the signed-in customer's account (server erases personal data, then we sign out). */
+  const deleteAccount = async () => {
+    await apiRequest('/users/account', {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: 'DELETE' })
+    });
+    try {
+      localStorage.removeItem('auriva_cart');
+      localStorage.removeItem('auriva_coupon');
+    } catch (e) {
+      console.error(e);
+    }
+    logout();
   };
 
   const addAddress = async (addr) => {
@@ -871,6 +915,7 @@ export function AuthProvider({ children }) {
       deleteAddress,
       setPrimaryAddress,
       placeOrder,
+      deleteAccount,
       updateOrderStatus,
       cancelOrder,
       updateProfile,

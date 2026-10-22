@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, UploadCloud, Image as ImageIcon, Trash2, Plus, RefreshCw, Star, Loader2, Cloud, Sparkles, Link as LinkIcon, Layers } from 'lucide-react';
+import { X, Check, UploadCloud, Image as ImageIcon, Trash2, Plus, RefreshCw, Star, Loader2, Cloud, Sparkles, Layers } from 'lucide-react';
 
 import { CATEGORIES } from '../../../data/categories';
 import { useAdmin } from '../../../context/AdminContext';
@@ -32,8 +32,6 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadStatusMsg, setUploadStatusMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showUrlInput, setShowUrlInput] = useState(false);
-  const [urlInputValue, setUrlInputValue] = useState('');
   const fileInputRef = useRef(null);
   const { categories: adminCategories, refreshCategories } = useAdmin();
 
@@ -121,8 +119,6 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
       setIsUploadingImage(false);
       setIsSubmitting(false);
       setUploadStatusMsg('');
-      setShowUrlInput(false);
-      setUrlInputValue('');
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -279,25 +275,6 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
         image: selected
       };
     });
-  };
-
-  // Add image by URL
-  const handleAddUrlImage = () => {
-    const url = urlInputValue.trim();
-    if (!url) return;
-    const cur = Array.isArray(formData.gallery) ? formData.gallery : [];
-    if (cur.length >= 4) {
-      alert("Maximum 4 photos allowed. Please remove a photo first.");
-      return;
-    }
-    const updated = [...cur, url];
-    setFormData(prev => ({
-      ...prev,
-      gallery: updated,
-      image: prev.image || updated[0] || ''
-    }));
-    setUrlInputValue('');
-    setShowUrlInput(false);
   };
 
   // Variant operations
@@ -638,14 +615,6 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setShowUrlInput(!showUrlInput)}
-                      className="text-[11px] font-bold text-[#0E2A1B] hover:text-[#D4AF37] transition-colors flex items-center gap-1 self-start sm:self-auto cursor-pointer"
-                    >
-                      <LinkIcon className="w-3 h-3" />
-                      <span>{showUrlInput ? 'Hide URL' : '+ Add via URL'}</span>
-                    </button>
                   </div>
 
                   {/* Multi-file Hidden Input */}
@@ -657,36 +626,6 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                     accept="image/*"
                     className="hidden"
                   />
-
-                  {/* Add by URL input */}
-                  {showUrlInput && (
-                    <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-stone-300 animate-in fade-in duration-150">
-                      <input
-                        type="url"
-                        value={urlInputValue}
-                        onChange={e => setUrlInputValue(e.target.value)}
-                        placeholder="Paste direct image URL (https://...)"
-                        className="flex-1 px-3 py-1.5 text-xs bg-transparent focus:outline-none text-stone-800 placeholder:text-stone-400"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddUrlImage}
-                        className="px-3 py-1.5 rounded bg-[#0E2A1B] text-[#D4AF37] text-xs font-bold uppercase tracking-wider hover:bg-[#1B3B29] cursor-pointer"
-                      >
-                        Add Photo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowUrlInput(false);
-                          setUrlInputValue('');
-                        }}
-                        className="px-2 py-1.5 text-xs text-stone-500 hover:text-stone-800 cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
 
                   {/* Gallery Grid (3-4 Slots) */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

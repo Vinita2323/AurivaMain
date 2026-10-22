@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { 
   Search, Eye, Edit3, Truck, UserCheck, Package, 
-  X, CheckCircle, ChevronLeft, ChevronRight, Ban, RefreshCw, Download, FileText 
+  X, CheckCircle, Ban, RefreshCw, Download, FileText 
 } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import AdminPagination from '../components/AdminPagination';
 import OrderStatusModal from '../components/OrderStatusModal';
+import OrderDistance from '../components/OrderDistance';
 import InvoicePreviewModal from '../../user/components/InvoicePreviewModal';
 import { useAuth, formatOrder } from '../../../context/AuthContext';
 import { adminOrderApi } from '../../../utils/api';
+import { getStatusOptions, isTerminalStatus, friendlyStatusError } from '../../../utils/orderStatusFlow';
 
 const STATUS_FILTERS = [
   { id: 'All', label: 'All Orders' },
@@ -82,10 +85,10 @@ export default function AdminOrders() {
           }
           return true;
         });
-        setOrdersList(filteredLocal);
+        setOrdersList(filteredLocal.slice((page - 1) * 20, page * 20));
         setPagination({
           total: filteredLocal.length,
-          page: 1,
+          page,
           limit: 20,
           totalPages: Math.ceil(filteredLocal.length / 20) || 1
         });
@@ -104,10 +107,10 @@ export default function AdminOrders() {
         }
         return true;
       });
-      setOrdersList(filteredLocal);
+      setOrdersList(filteredLocal.slice((page - 1) * 20, page * 20));
       setPagination({
         total: filteredLocal.length,
-        page: 1,
+        page,
         limit: 20,
         totalPages: Math.ceil(filteredLocal.length / 20) || 1
       });
@@ -129,6 +132,35 @@ export default function AdminOrders() {
     window.addEventListener('auriva:order-alert-accepted', onAccepted);
     return () => window.removeEventListener('auriva:order-alert-accepted', onAccepted);
   }, [fetchOrders]);
+
+  // Deep link (e.g. from the dashboard): /admin/orders?order=<id|orderNumber> opens that order's details
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkOrder = searchParams.get('order');
+  useEffect(() => {
+    if (!deepLinkOrder) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await adminOrderApi.getOrderById(deepLinkOrder);
+        const raw = res?.data?.order || res?.data;
+        if (!cancelled && raw) setSelectedOrderForDetail(formatOrder(raw));
+        else if (!cancelled) alert(`Order "${deepLinkOrder}" could not be found.`);
+      } catch (err) {
+        if (!cancelled) alert(err?.message || `Order "${deepLinkOrder}" could not be loaded.`);
+      } finally {
+        if (!cancelled) {
+          // Consume the param so closing the panel (or refreshing) doesn't reopen it
+          const next = new URLSearchParams(searchParams);
+          next.delete('order');
+          setSearchParams(next, { replace: true });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkOrder]);
 
   const refreshDetailOrder = async (orderId) => {
     try {
@@ -186,6 +218,12 @@ export default function AdminOrders() {
 
   // Update order status and dispatch logistics
   const handleUpdateOrderStatus = async (orderId, newStatus, extraData = {}) => {
+    const currentOrder = ordersList.find((o) => o.id === orderId);
+    // Never allow moving an order back to an earlier (or same) status
+    if (currentOrder && newStatus !== currentOrder.status && !getStatusOptions(currentOrder).includes(newStatus)) {
+      alert(friendlyStatusError('Invalid order status transition', currentOrder, newStatus));
+      return;
+    }
     // Optimistic UI update
     setOrdersList(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, ...extraData } : o));
 
@@ -223,7 +261,7 @@ export default function AdminOrders() {
         setOrdersList(prev => prev.map(o => o.id === orderId ? formatted : o));
       }
     } catch (err) {
-      alert(`Status update note: ${err.message || 'Error updating order'}`);
+      alert(friendlyStatusError(err.message, currentOrder, newStatus));
       fetchOrders();
     }
   };
@@ -364,7 +402,7 @@ export default function AdminOrders() {
 
                         <td className="py-4 px-5">
                           <div className="font-semibold text-stone-900 text-xs sm:text-[14px]">{ord.customer}</div>
-                          <div className="text-xs text-stone-400 font-normal mt-0.5">{ord.phone || '+91 9876543210'}</div>
+                          <div className="text-xs text-stone-400 font-normal mt-0.5">{ord.phone || 'Not provided'}</div>
                         </td>
 
                         <td className="py-4 px-5 text-stone-700">
@@ -396,7 +434,7 @@ export default function AdminOrders() {
                         <td className="py-4 px-5">
                           <select
                             value={ord.status}
-                            disabled={ord.status === 'Cancelled' || ord.status === 'Delivered'}
+                            disabled={isTerminalStatus(ord)}
                             onChange={(e) => handleUpdateOrderStatus(ord.id, e.target.value)}
                             className={`px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border focus:outline-none cursor-pointer transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                               ord.status === 'Delivered'
@@ -414,13 +452,9 @@ export default function AdminOrders() {
                                 : 'bg-blue-50 text-blue-800 border-blue-300'
                             }`}
                           >
-                            <option value="Order Received">Order Received</option>
-                            <option value="Accepted">Accepted</option>
-                            <option value="Packed">Packed</option>
-                            <option value="Ready for Dispatch">Ready for Dispatch</option>
-                            <option value="Out for Delivery">Out for Delivery</option>
-                            <option value="Delivered">Delivered</option>
-                            <option value="Cancelled">Cancelled</option>
+                            {getStatusOptions(ord).map((label) => (
+                              <option key={label} value={label}>{label}</option>
+                            ))}
                           </select>
                         </td>
 
@@ -476,36 +510,18 @@ export default function AdminOrders() {
               </table>
             </div>
 
-            {/* Bottom count & pagination */}
-            <div className="p-4 border-t border-stone-200 bg-[#FAF7F2] flex flex-col sm:flex-row items-center justify-between text-xs sm:text-sm text-stone-500 gap-3">
-              <span className="font-medium">
-                Showing {ordersList.length} of {pagination.total} orders (Page {pagination.page} of {pagination.totalPages || 1})
-              </span>
-
-              {pagination.totalPages > 1 && (
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => setPage(prev => Math.max(1, prev - 1))}
-                    className="p-1.5 rounded-lg border border-[#E8E2D5] bg-white text-stone-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-50 transition-colors"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-
-                  <span className="font-bold text-xs text-stone-800 px-2">
-                    {page} / {pagination.totalPages}
-                  </span>
-
-                  <button
-                    disabled={page >= pagination.totalPages}
-                    onClick={() => setPage(prev => Math.min(pagination.totalPages, prev + 1))}
-                    className="p-1.5 rounded-lg border border-[#E8E2D5] bg-white text-stone-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-50 transition-colors"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Count + pagination (server-side pages of 20) */}
+            <AdminPagination
+              label="orders"
+              pagination={{
+                page,
+                setPage,
+                totalItems: pagination.total || 0,
+                totalPages: pagination.totalPages || 1,
+                from: ordersList.length ? (page - 1) * (pagination.limit || 20) + 1 : 0,
+                to: ordersList.length ? (page - 1) * (pagination.limit || 20) + ordersList.length : 0
+              }}
+            />
           </div>
 
         </main>
@@ -539,7 +555,7 @@ export default function AdminOrders() {
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[#D4AF37]">ORDER INVOICE BREAKDOWN</span>
                 <h3 className="font-sans text-lg font-bold">Order #{selectedOrderForDetail.id}</h3>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-stone-300 font-normal mt-0.5">
-                  <span>{selectedOrderForDetail.date}</span>
+                  <span>{selectedOrderForDetail.placedAt || selectedOrderForDetail.date}</span>
                   <span>•</span>
                   <span>{selectedOrderForDetail.paymentMethod}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
@@ -584,6 +600,18 @@ export default function AdminOrders() {
                   </p>
                 </div>
               </div>
+
+              {selectedOrderForDetail.expectedDelivery && (
+                <div className="p-3.5 rounded-xl bg-white border border-[#E8E2D5] space-y-1 text-xs">
+                  <span className="text-stone-400 block text-[10px] font-bold uppercase">Delivery timing</span>
+                  <p className="text-stone-700">
+                    {selectedOrderForDetail.expectedDelivery.label}:{' '}
+                    <strong className="text-stone-900">{selectedOrderForDetail.expectedDelivery.value}</strong>
+                  </p>
+                </div>
+              )}
+
+              <OrderDistance orderId={selectedOrderForDetail._id || selectedOrderForDetail.id} />
 
               {/* Courier & Dispatch Info if present */}
               {(selectedOrderForDetail.courierName || selectedOrderForDetail.awbNumber || selectedOrderForDetail.rider?.name) && (
@@ -730,12 +758,23 @@ export default function AdminOrders() {
                   <span>Subtotal</span>
                   <span>₹{selectedOrderForDetail.subtotal}</span>
                 </div>
-                {selectedOrderForDetail.discount > 0 && (
-                  <div className="flex justify-between text-emerald-700 font-semibold">
-                    <span>Discount ({selectedOrderForDetail.couponApplied || 'Promo'})</span>
-                    <span>-₹{selectedOrderForDetail.discount}</span>
-                  </div>
-                )}
+                {(() => {
+                  const code = selectedOrderForDetail.couponApplied && selectedOrderForDetail.couponApplied !== 'None'
+                    ? selectedOrderForDetail.couponApplied
+                    : '';
+                  const amount = Number(selectedOrderForDetail.discount) || 0;
+                  return code || amount > 0 ? (
+                    <div className="flex justify-between text-emerald-700 font-semibold">
+                      <span>Coupon discount{code ? ` (${code})` : ''}</span>
+                      <span>-₹{amount}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-stone-400">
+                      <span>Coupon discount</span>
+                      <span>No coupon applied</span>
+                    </div>
+                  );
+                })()}
                 <div className="flex justify-between text-stone-600">
                   <span>Delivery Fee</span>
                   <span>{selectedOrderForDetail.deliveryFee === 0 ? 'FREE' : `₹${selectedOrderForDetail.deliveryFee}`}</span>
@@ -745,7 +784,7 @@ export default function AdminOrders() {
                   <span>₹{selectedOrderForDetail.tax}</span>
                 </div>
                 <div className="pt-2 border-t border-stone-200 flex justify-between font-sans text-sm font-bold text-[#0E2A1B]">
-                  <span>Total Paid</span>
+                  <span>{String(selectedOrderForDetail.paymentStatus || '').toUpperCase() === 'PAID' ? 'Total Paid' : 'Total Payable'}</span>
                   <span>₹{selectedOrderForDetail.total}</span>
                 </div>
               </div>

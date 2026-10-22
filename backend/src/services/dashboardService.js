@@ -278,56 +278,65 @@ export async function getDashboardSummary({ adminId = null } = {}) {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+/** Valid IANA timezone or 'UTC' */
+function safeTimezone(tz) {
+  try {
+    if (tz) {
+      new Intl.DateTimeFormat('en-CA', { timeZone: String(tz) });
+      return String(tz);
+    }
+  } catch {
+    /* fall through */
+  }
+  return 'UTC';
+}
 
 /**
- * Resolve the analytics window. Custom from/to (YYYY-MM-DD) wins over the preset range.
- * Returns { start, end (exclusive), bucket: 'day' | 'month', key }.
+ * Resolve the analytics window.
+ * The browser sends exact instants (from = inclusive start, to = exclusive end) computed in the admin's own
+ * timezone, plus that timezone's name, so results never depend on the server's timezone.
+ * Legacy plain "YYYY-MM-DD" values are still accepted (interpreted in the given timezone's UTC day).
  */
-function resolveAnalyticsRange({ range = 'monthly', from = null, to = null } = {}) {
-  const now = new Date();
-  let start;
-  let end = new Date(startOfDay(now).getTime() + DAY_MS); // tomorrow 00:00 -> includes today
-  let bucket = 'day';
+function resolveAnalyticsRange({ range = 'monthly', from = null, to = null, tz = null } = {}) {
+  const timezone = safeTimezone(tz);
+  const parse = (v, endOfDay) => {
+    if (!v) return null;
+    const str = String(v).trim();
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(str)
+      ? new Date(`${str}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`)
+      : new Date(str);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
 
-  const fromDate = from ? new Date(`${from}T00:00:00`) : null;
-  const toDate = to ? new Date(`${to}T00:00:00`) : null;
+  let start = parse(from, false);
+  let end = parse(to, true);
+  let key = 'custom';
 
-  if (fromDate && !Number.isNaN(fromDate.getTime())) {
-    start = startOfDay(fromDate);
-    if (toDate && !Number.isNaN(toDate.getTime())) {
-      end = new Date(startOfDay(toDate).getTime() + DAY_MS);
-    }
-    if (end <= start) end = new Date(start.getTime() + DAY_MS);
-    bucket = (end - start) / DAY_MS > 62 ? 'month' : 'day';
-    return { start, end, bucket, key: 'custom' };
+  if (!start) {
+    // No explicit window supplied: fall back to a preset measured back from now
+    const now = new Date();
+    key = ['weekly', 'monthly', 'quarterly', 'yearly'].includes(range) ? range : 'monthly';
+    end = new Date(now.getTime() + DAY_MS);
+    const days = { weekly: 7, monthly: 31, quarterly: 92, yearly: 366 }[key];
+    start = new Date(end.getTime() - days * DAY_MS);
   }
+  if (!end || end <= start) end = new Date(start.getTime() + DAY_MS);
 
-  switch (range) {
-    case 'weekly':
-      start = new Date(end.getTime() - 7 * DAY_MS);
-      break;
-    case 'quarterly':
-      start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-      bucket = 'month';
-      break;
-    case 'yearly':
-      start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-      bucket = 'month';
-      break;
-    case 'monthly':
-    default:
-      start = startOfMonth(now);
-      range = 'monthly';
-  }
-  return { start, end, bucket, key: range };
+  const spanDays = (end.getTime() - start.getTime()) / DAY_MS;
+  const bucket = spanDays > 62 ? 'month' : 'day';
+  return { start, end, bucket, key, timezone };
 }
+
+/** "2026-10-22" for an instant, as seen in a timezone */
+const dayKeyInTz = (date, timezone) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 
 /**
  * Admin Analytics - every figure is aggregated live from orders in the selected window.
  */
 export async function getAnalyticsSummary(options = {}) {
-  const { start, end, bucket, key } = resolveAnalyticsRange(options);
+  const { start, end, bucket, key, timezone } = resolveAnalyticsRange(options);
   const span = end.getTime() - start.getTime();
   const prevStart = new Date(start.getTime() - span);
   const inRange = { ...ACTIVE_ORDER_FILTER, createdAt: { $gte: start, $lt: end } };
@@ -340,9 +349,14 @@ export async function getAnalyticsSummary(options = {}) {
       { $match: inRange },
       {
         $group: {
-          _id: bucket === 'month'
-            ? { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }
-            : { y: { $year: '$createdAt' }, m: { $month: '$createdAt' }, d: { $dayOfMonth: '$createdAt' } },
+          // Bucket by the admin's local day / month, not by UTC
+          _id: {
+            $dateToString: {
+              format: bucket === 'month' ? '%Y-%m' : '%Y-%m-%d',
+              date: '$createdAt',
+              timezone
+            }
+          },
           revenue: { $sum: '$pricing.total' },
           orders: { $sum: 1 }
         }
@@ -393,32 +407,48 @@ export async function getAnalyticsSummary(options = {}) {
   const prevAov = prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
 
   // Fill every bucket in the window (zeros included) so the chart is continuous
-  const lookup = new Map(
-    bucketAgg.map((b) => [
-      bucket === 'month' ? `${b._id.y}-${b._id.m}` : `${b._id.y}-${b._id.m}-${b._id.d}`,
-      b
-    ])
-  );
+  const lookup = new Map(bucketAgg.map((r) => [r._id, r]));
   const series = [];
+  const lastInstant = new Date(end.getTime() - 1);
+
   if (bucket === 'month') {
-    for (let d = new Date(start.getFullYear(), start.getMonth(), 1); d < end; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
-      const row = lookup.get(`${d.getFullYear()}-${d.getMonth() + 1}`);
-      series.push({ label: monthLabel(d), revenue: row?.revenue || 0, orders: row?.orders || 0 });
+    const [sy, sm] = dayKeyInTz(start, timezone).split('-').map(Number);
+    const [ey, em] = dayKeyInTz(lastInstant, timezone).split('-').map(Number);
+    let y = sy;
+    let m = sm;
+    while (y < ey || (y === ey && m <= em)) {
+      const k = `${y}-${String(m).padStart(2, '0')}`;
+      const row = lookup.get(k);
+      series.push({
+        label: new Date(Date.UTC(y, m - 1, 15)).toLocaleString('en-IN', { month: 'short', timeZone: 'UTC' }),
+        revenue: row?.revenue || 0,
+        orders: row?.orders || 0
+      });
+      m += 1;
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
     }
   } else {
-    for (let d = new Date(start); d < end; d = new Date(d.getTime() + DAY_MS)) {
-      const row = lookup.get(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`);
+    const seen = new Set();
+    for (let t = start.getTime(); t < end.getTime(); t += DAY_MS) {
+      const d = new Date(t);
+      const k = dayKeyInTz(d, timezone);
+      if (seen.has(k)) continue; // DST safety
+      seen.add(k);
+      const row = lookup.get(k);
       series.push({
-        label: d.toLocaleString('en-IN', { day: '2-digit', month: 'short' }),
+        label: d.toLocaleString('en-IN', { day: '2-digit', month: 'short', timeZone: timezone }),
         revenue: row?.revenue || 0,
         orders: row?.orders || 0
       });
     }
   }
-  const best = series.reduce((m, p) => (p.revenue > (m?.revenue ?? 0) ? p : m), null);
+  const best = series.reduce((m, pt) => (pt.revenue > (m?.revenue ?? 0) ? pt : m), null);
 
   return {
-    range: { key, from: start.toISOString(), to: new Date(end.getTime() - 1).toISOString(), bucket },
+    range: { key, from: start.toISOString(), to: lastInstant.toISOString(), bucket, timezone },
     kpis: {
       revenue,
       revenueTrendPct: pctChange(revenue, prevRevenue),
@@ -437,15 +467,15 @@ export async function getAnalyticsSummary(options = {}) {
       revenue: c.revenue,
       percent: orders > 0 ? Math.round((c.orders / orders) * 100) : 0
     })),
-    topProducts: topRows.map((p) => ({
-      id: p._id?.toString(),
-      name: p.name || 'Product',
-      flavor: p.flavor || '',
-      image: typeof p.image === 'string' ? p.image : '',
-      price: p.price || 0,
-      sold: p.sold || 0,
-      revenue: p.revenue || 0,
-      stockCount: p.stockCount ?? 0
+    topProducts: topRows.map((r) => ({
+      id: r._id?.toString(),
+      name: r.name || 'Product',
+      flavor: r.flavor || '',
+      image: typeof r.image === 'string' ? r.image : '',
+      price: r.price || 0,
+      sold: r.sold || 0,
+      revenue: r.revenue || 0,
+      stockCount: r.stockCount ?? 0
     }))
   };
 }

@@ -30,6 +30,13 @@ router.get('/', orderController.getAllOrdersAdmin);
 router.get('/:id', validateOrderId, orderController.getOrderById);
 
 /**
+ * @route   GET /api/v1/admin/orders/:id/distance
+ * @desc    Approximate store -> customer distance (straight line, from pincodes)
+ * @access  Protected (Admin Only)
+ */
+router.get('/:id/distance', validateOrderId, orderController.getOrderDistanceAdmin);
+
+/**
  * @route   GET /api/v1/admin/orders/:id/invoice
  * @desc    Download official order Invoice PDF
  * @access  Protected (Admin Only)

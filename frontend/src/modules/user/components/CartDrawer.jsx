@@ -13,7 +13,8 @@ export default function CartDrawer() {
     discountAmount, 
     deliveryFee, 
     total, 
-    updateQty, 
+    updateQty,
+    getRemainingStock,
     removeFromCart 
   } = useCart();
   
@@ -119,7 +120,9 @@ export default function CartDrawer() {
                           <span className="px-2.5 text-xs font-semibold">{item.qty}</span>
                           <button
                             onClick={() => updateQty(itemId, item.weight, 1)}
-                            className="px-2 py-1 text-stone-600 hover:bg-stone-100 transition-colors"
+                            disabled={getRemainingStock(itemId) <= 0}
+                            title={getRemainingStock(itemId) <= 0 ? 'No more stock available' : undefined}
+                            className="px-2 py-1 text-stone-600 hover:bg-stone-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Plus className="w-3 h-3" />
                           </button>
@@ -181,10 +184,13 @@ export default function CartDrawer() {
                 </Link>
               </div>
 
+{/* Razorpay / UPI secure-checkout line — disabled with online payments. Restore together with the Online Payment option.
               <div className="flex items-center justify-center gap-1.5 text-[10px] text-stone-400">
                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
                 <span>100% Secure Checkout with Razorpay & UPI</span>
               </div>
+            */}
+
             </div>
           )}
         </div>

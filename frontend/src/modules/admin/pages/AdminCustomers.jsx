@@ -1,12 +1,43 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Award, ShoppingBag, Search, Eye, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Users, Award, ShoppingBag, Search, Eye, X, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
-import { useAuth } from '../../../context/AuthContext';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
+import { formatOrder } from '../../../context/AuthContext';
+import { adminUserApi, adminOrderApi } from '../../../utils/api';
 
 export default function AdminCustomers() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { customers, orders } = useAuth();
+  // Real customers from the database (all pages), not the browser's cached demo list
+  const [customers, setCustomers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  const loadCustomers = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const all = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const res = await adminUserApi.getUsers({ page, limit: 200 });
+        all.push(...(res?.data?.users || []));
+        totalPages = res?.data?.pagination?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      setCustomers(all);
+    } catch (err) {
+      setLoadError(err?.message || 'Could not load customers.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCustomers();
+  }, [loadCustomers]);
 
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState('All');
@@ -52,10 +83,33 @@ export default function AdminCustomers() {
     return true;
   });
 
-  // Get orders of selected customer
-  const customerOrders = selectedCustomer
-    ? (orders || []).filter(o => o.email === selectedCustomer.email || o.customer === selectedCustomer.name)
-    : [];
+  const pagination = usePagination(filteredCustomers, { resetKey: `${tierFilter}|${search}` });
+
+  // Orders of the selected customer — fetched from the server by customer id
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setCustomerOrders([]);
+      return undefined;
+    }
+    let cancelled = false;
+    setOrdersLoading(true);
+    adminOrderApi
+      .getAllOrders({ userId: selectedCustomer._id || selectedCustomer.id, limit: 50 })
+      .then((res) => {
+        if (!cancelled) setCustomerOrders((res?.data?.orders || []).map(formatOrder));
+      })
+      .catch(() => {
+        if (!cancelled) setCustomerOrders([]);
+      })
+      .finally(() => {
+        if (!cancelled) setOrdersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCustomer]);
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex font-sans">
@@ -137,6 +191,20 @@ export default function AdminCustomers() {
             </div>
           </div>
 
+          {loadError && (
+            <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+              <span className="flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {loadError}</span>
+              <button onClick={loadCustomers} className="inline-flex items-center gap-1 font-bold underline">
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
+          )}
+          {isLoading && customers.length === 0 && !loadError && (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-stone-500">
+              <Loader2 className="w-5 h-5 animate-spin" /> Loading customers…
+            </div>
+          )}
+
           {/* Customers Table */}
           <div className="bg-white rounded-xl border border-[#E8E2D5] shadow-2xs overflow-hidden w-full">
             <div className="overflow-x-auto w-full">
@@ -146,20 +214,18 @@ export default function AdminCustomers() {
                     <th className="py-3.5 px-4">Customer</th>
                     <th className="py-3.5 px-4">Loyalty Tier</th>
                     <th className="py-3.5 px-4">Location</th>
-                    <th className="py-3.5 px-4">Reward Points</th>
                     <th className="py-3.5 px-4">Orders Placed</th>
                     <th className="py-3.5 px-4">Total Spent</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 font-medium">
-                  {filteredCustomers.map(c => {
-                    const tierName = c.tier || 'Gold Wellness Member';
+                  {pagination.pageItems.map(c => {
+                    const tierName = c.tier || 'New Customer';
                     const isPlatinum = tierName.includes('Platinum');
                     const isGold = tierName.includes('Gold');
                     const spentNum = Number(c.totalSpent) || 0;
                     const ordersNum = Number(c.totalOrders) || 0;
-                    const pointsNum = Number(c.rewardsPoints) || 0;
                     const initial = (c.name || 'C').charAt(0).toUpperCase();
 
                     return (
@@ -197,11 +263,7 @@ export default function AdminCustomers() {
                         </td>
 
                         <td className="py-3 px-4 text-stone-700 text-xs sm:text-sm font-medium">
-                          {c.city || 'Indore'}{c.state ? `, ${c.state}` : ''}
-                        </td>
-
-                        <td className="py-3 px-4 font-bold text-amber-800 text-xs sm:text-sm">
-                          ✨ {pointsNum} pts
+                          {c.city ? `${c.city}${c.state ? `, ${c.state}` : ''}` : '—'}
                         </td>
 
                         <td className="py-3 px-4 font-semibold text-stone-900 text-xs sm:text-sm">
@@ -228,10 +290,7 @@ export default function AdminCustomers() {
               </table>
             </div>
 
-            <div className="p-4 border-t border-stone-200 bg-[#FAF7F2] flex items-center justify-between text-xs sm:text-sm text-stone-600">
-              <span className="font-semibold">Showing {filteredCustomers.length} registered customers</span>
-              <span className="hidden sm:inline font-medium">100% synchronized with user authentication profile</span>
-            </div>
+            <AdminPagination pagination={pagination} label="registered customers" />
           </div>
 
         </main>
@@ -274,7 +333,7 @@ export default function AdminCustomers() {
 
             <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1 font-sans">
               {/* Contact Info */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] text-xs sm:text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-[#FAF7F2] border border-[#E8E2D5] text-xs sm:text-sm">
                 <div>
                   <span className="text-stone-500 block text-[11px] font-bold uppercase">Phone</span>
                   <strong className="text-stone-800 font-semibold">{selectedCustomer.phone || 'N/A'}</strong>
@@ -282,10 +341,6 @@ export default function AdminCustomers() {
                 <div>
                   <span className="text-stone-500 block text-[11px] font-bold uppercase">Email</span>
                   <strong className="text-stone-800 font-semibold truncate block">{selectedCustomer.email || 'N/A'}</strong>
-                </div>
-                <div>
-                  <span className="text-stone-500 block text-[11px] font-bold uppercase">Reward Balance</span>
-                  <strong className="text-amber-800 font-bold">{Number(selectedCustomer.rewardsPoints) || 0} Points</strong>
                 </div>
                 <div>
                   <span className="text-stone-500 block text-[11px] font-bold uppercase">Lifetime Spend</span>
@@ -296,7 +351,9 @@ export default function AdminCustomers() {
               {/* Order History */}
               <div className="space-y-3">
                 <h4 className="font-sans text-sm sm:text-base font-bold text-[#0E2A1B]">Order History ({customerOrders.length})</h4>
-                {customerOrders.length === 0 ? (
+                {ordersLoading ? (
+                  <p className="text-xs text-stone-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading orders…</p>
+                ) : customerOrders.length === 0 ? (
                   <p className="text-xs text-stone-400 italic">No placed orders found for this customer.</p>
                 ) : (
                   <div className="space-y-2">

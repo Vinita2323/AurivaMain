@@ -586,13 +586,24 @@ export const orderApi = {
 };
 
 // Admin Order Management API
+// Admin: registered customers (real accounts + order stats)
+export const adminUserApi = {
+  getUsers: ({ page = 1, limit = 200, search = '' } = {}) => {
+    const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) query.append('search', search);
+    return apiRequest(`/admin/users?${query.toString()}`, { method: 'GET' });
+  }
+};
+
 export const adminDashboardApi = {
   getSummary: () => apiRequest('/admin/dashboard', { method: 'GET' }),
-  getAnalytics: ({ range = 'monthly', from = '', to = '' } = {}) => {
+  // from = inclusive start instant, to = exclusive end instant (ISO), tz = the admin's timezone
+  getAnalytics: ({ range = 'monthly', from = '', to = '', tz = '' } = {}) => {
     const query = new URLSearchParams();
+    query.append('range', range);
     if (from) query.append('from', from);
     if (to) query.append('to', to);
-    if (!from) query.append('range', range);
+    if (tz) query.append('tz', tz);
     return apiRequest(`/admin/analytics?${query.toString()}`, { method: 'GET' });
   }
 };
@@ -604,6 +615,7 @@ export const adminOrderApi = {
     if (params.limit) query.append('limit', params.limit);
     if (params.status && params.status !== 'all' && params.status !== 'All') query.append('status', params.status);
     if (params.search) query.append('search', params.search);
+    if (params.userId) query.append('userId', params.userId);
     if (params.fromDate) query.append('fromDate', params.fromDate);
     if (params.toDate) query.append('toDate', params.toDate);
     if (params.sortBy) query.append('sortBy', params.sortBy);
@@ -611,6 +623,7 @@ export const adminOrderApi = {
     return apiRequest(`/admin/orders${qs ? `?${qs}` : ''}`, { method: 'GET' });
   },
   getOrderById: (id) => apiRequest(`/admin/orders/${id}`, { method: 'GET' }),
+  getDistance: (id) => apiRequest(`/admin/orders/${id}/distance`, { method: 'GET' }),
   updateStatus: (id, status, note = '', rider = null) => apiRequest(`/admin/orders/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify(rider ? { status, note, rider } : { status, note })

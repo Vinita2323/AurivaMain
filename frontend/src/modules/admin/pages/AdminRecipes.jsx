@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import { useAdmin } from '../../../context/AdminContext';
 import { uploadApi } from '../../../utils/api';
 
@@ -55,7 +57,7 @@ export default function AdminRecipes() {
   const [formCookTime, setFormCookTime] = useState('5 mins');
   const [formServings, setFormServings] = useState('2 servings');
   const [formDifficulty, setFormDifficulty] = useState('Easy');
-  const [formCalories, setFormCalories] = useState('160 kcal');
+  const [formCalories, setFormCalories] = useState('');
   const [formRecommendedProduct, setFormRecommendedProduct] = useState('Peri Peri Roasted Makhana');
   const [formIsFeatured, setFormIsFeatured] = useState(true);
   const [formStatus, setFormStatus] = useState('ACTIVE');
@@ -147,7 +149,7 @@ export default function AdminRecipes() {
     setFormCookTime('5 mins');
     setFormServings('2 servings');
     setFormDifficulty('Easy');
-    setFormCalories('160 kcal');
+    setFormCalories('');
     setFormRecommendedProduct('Peri Peri Roasted Makhana');
     setFormIsFeatured(true);
     setFormStatus('ACTIVE');
@@ -169,7 +171,7 @@ export default function AdminRecipes() {
     setFormCookTime(recipe.cookTime || '5 mins');
     setFormServings(recipe.servings || '2 servings');
     setFormDifficulty(recipe.difficulty || 'Easy');
-    setFormCalories(recipe.calories || '160 kcal');
+    setFormCalories(recipe.calories || '');
     setFormRecommendedProduct(recipe.recommendedProduct || 'Peri Peri Roasted Makhana');
     setFormIsFeatured(Boolean(recipe.isFeatured));
     setFormStatus(recipe.status || 'ACTIVE');
@@ -236,6 +238,11 @@ export default function AdminRecipes() {
       statusFilter === 'All' || r.status === statusFilter;
 
     return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  const pagination = usePagination(filteredRecipes, {
+    initialPageSize: 9,
+    resetKey: `${categoryFilter}|${statusFilter}|${searchQuery}`
   });
 
   const featuredCount = recipes.filter(r => r.isFeatured).length;
@@ -350,8 +357,9 @@ export default function AdminRecipes() {
               </p>
             </div>
           ) : (
+            <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredRecipes.map((recipe) => (
+              {pagination.pageItems.map((recipe) => (
                 <div 
                   key={recipe.id || recipe._id}
                   className="rounded-2xl bg-white border border-[#E8E2D5] overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group"
@@ -400,10 +408,12 @@ export default function AdminRecipes() {
                           <Clock className="w-3.5 h-3.5 text-stone-400" />
                           <span>{recipe.prepTime}</span>
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Flame className="w-3.5 h-3.5 text-amber-500" />
-                          <span>{recipe.calories || '160 kcal'}</span>
-                        </span>
+                        {recipe.calories && (
+                          <span className="flex items-center gap-1">
+                            <Flame className="w-3.5 h-3.5 text-amber-500" />
+                            <span>{recipe.calories}</span>
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
                           <Users className="w-3.5 h-3.5 text-stone-400" />
                           <span>{recipe.servings}</span>
@@ -464,6 +474,11 @@ export default function AdminRecipes() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="rounded-xl border border-[#E8E2D5] bg-white overflow-hidden">
+              <AdminPagination pagination={pagination} label="recipes" />
+            </div>
             </div>
           )}
 
@@ -658,7 +673,7 @@ export default function AdminRecipes() {
               </div>
 
               {/* Preparation Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">Prep Time</label>
                   <input
@@ -686,6 +701,16 @@ export default function AdminRecipes() {
                     value={formServings}
                     onChange={(e) => setFormServings(e.target.value)}
                     placeholder="2 servings"
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-stone-300 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">Calories (optional)</label>
+                  <input
+                    type="text"
+                    value={formCalories}
+                    onChange={(e) => setFormCalories(e.target.value)}
+                    placeholder="e.g. 180 kcal"
                     className="w-full px-3 py-1.5 text-xs rounded-xl border border-stone-300 focus:outline-none"
                   />
                 </div>

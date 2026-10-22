@@ -6,6 +6,30 @@ import { HTTP_STATUS } from '../constants/status.js';
 
 class CartService {
   /**
+   * Stock guard: the TOTAL quantity of a product in the cart (across pack sizes) must not exceed its stock.
+   * @param {object} cart       cart document
+   * @param {object} product    product document (needs stockCount / inStock / name)
+   * @param {number} extraQty   units being added on top of what is already in the cart
+   */
+  _assertStockAvailable(cart, product, extraQty) {
+    if (typeof product.stockCount !== 'number') return; // no stock tracking on this product
+    const available = product.inStock === false ? 0 : Math.max(0, product.stockCount);
+    const inCart = (cart.items || [])
+      .filter((it) => it.product && it.product.toString() === product._id.toString())
+      .reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
+
+    if (inCart + extraQty <= available) return;
+
+    const err = new Error(
+      available <= 0
+        ? `"${product.name}" is out of stock.`
+        : `Only ${available} of "${product.name}" available${inCart > 0 ? ` (you already have ${inCart} in your cart)` : ''}.`
+    );
+    err.statusCode = HTTP_STATUS.BAD_REQUEST;
+    throw err;
+  }
+
+  /**
    * Helper to locate an existing cart or instantiate a new one
    */
   async _findOrCreateCart(userId, guestId) {
@@ -253,6 +277,7 @@ class CartService {
     }
 
     const cleanQty = Math.max(1, Number(qty) || 1);
+    this._assertStockAvailable(cart, product, cleanQty);
     const existingIndex = cart.items.findIndex(
       (item) => item.product.toString() === product._id.toString() && item.weight === weight
     );
@@ -303,6 +328,13 @@ class CartService {
     );
 
     if (existingIndex > -1) {
+      const currentQty = cart.items[existingIndex].qty;
+      const requestedQty = qty !== undefined ? Number(qty) : currentQty + Number(delta || 0);
+      if (requestedQty > currentQty) {
+        const productDoc = await Product.findById(productId);
+        if (productDoc) this._assertStockAvailable(cart, productDoc, requestedQty - currentQty);
+      }
+
       if (qty !== undefined) {
         const newQty = Number(qty);
         if (newQty <= 0) {
