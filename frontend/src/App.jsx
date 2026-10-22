@@ -8,6 +8,7 @@ import { AdminProvider } from './context/AdminContext';
 import UserRoutes from './modules/user/routes/UserRoutes';
 import AdminRoutes from './modules/admin/routes/AdminRoutes';
 import CartToast from './modules/user/components/CartToast';
+import StockNotice from './modules/user/components/StockNotice';
 import SmoothScroll from './components/SmoothScroll';
 import pushNotificationService from './services/pushNotificationService';
 
@@ -50,6 +51,7 @@ function App() {
             <CartProvider>
               <WishlistProvider>
                 <CartToast />
+                <StockNotice />
                 <Routes>
                   {/* Admin Management Routes */}
                   <Route path="/admin/*" element={<AdminRoutes />} />

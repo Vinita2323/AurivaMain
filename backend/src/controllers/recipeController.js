@@ -129,7 +129,7 @@ class RecipeController {
         cookTime: cookTime || '5 mins',
         servings: servings || '2 servings',
         difficulty: difficulty || 'Easy',
-        calories: calories || '180 kcal',
+        calories: typeof calories === 'string' ? calories.trim() : '',
         ingredients: Array.isArray(ingredients) ? ingredients : [],
         instructions: Array.isArray(instructions) ? instructions : [],
         recommendedProduct: recommendedProduct || 'Peri Peri Roasted Makhana',

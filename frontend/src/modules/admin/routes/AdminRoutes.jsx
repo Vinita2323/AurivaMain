@@ -10,7 +10,9 @@ import AdminOrders from '../pages/AdminOrders';
 import AdminCustomers from '../pages/AdminCustomers';
 import AdminCoupons from '../pages/AdminCoupons';
 import AdminReviews from '../pages/AdminReviews';
-import AdminPromotions from '../pages/AdminPromotions';
+// Campaigns / Promotions page is disabled for now (not connected to the user app yet).
+// To restore: uncomment this import, the route below, and the sidebar entry in AdminSidebar.jsx.
+// import AdminPromotions from '../pages/AdminPromotions';
 import AdminAnalytics from '../pages/AdminAnalytics';
 import AdminNotifications from '../pages/AdminNotifications';
 import AdminSettings from '../pages/AdminSettings';
@@ -49,7 +51,7 @@ export default function AdminRoutes() {
       <Route path="/customers" element={<ProtectedAdminRoute><AdminCustomers /></ProtectedAdminRoute>} />
       <Route path="/coupons" element={<ProtectedAdminRoute><AdminCoupons /></ProtectedAdminRoute>} />
       <Route path="/reviews" element={<ProtectedAdminRoute><AdminReviews /></ProtectedAdminRoute>} />
-      <Route path="/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} />
+      {/* <Route path="/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} /> */}
       <Route path="/recipes" element={<ProtectedAdminRoute><AdminRecipes /></ProtectedAdminRoute>} />
       <Route path="/notifications" element={<ProtectedAdminRoute><AdminNotifications /></ProtectedAdminRoute>} />
       <Route path="/analytics" element={<ProtectedAdminRoute><AdminAnalytics /></ProtectedAdminRoute>} />

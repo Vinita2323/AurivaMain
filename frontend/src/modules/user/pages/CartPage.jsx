@@ -26,7 +26,8 @@ export default function CartPage() {
     appliedCoupon, 
     couponError, 
     couponSuccess, 
-    updateQty, 
+    updateQty,
+    getRemainingStock,
     removeFromCart, 
     applyCoupon, 
     removeCoupon,
@@ -249,7 +250,9 @@ export default function CartPage() {
                           </span>
                           <button
                             onClick={() => updateQty(itemId, item.weight, 1)}
-                            className="p-1 sm:p-2.5 text-stone-600 hover:bg-stone-200 hover:text-[#0E2A1B] transition-colors min-w-[24px] min-h-[24px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center"
+                            disabled={getRemainingStock(itemId) <= 0}
+                            title={getRemainingStock(itemId) <= 0 ? 'No more stock available' : undefined}
+                            className="p-1 sm:p-2.5 text-stone-600 hover:bg-stone-200 hover:text-[#0E2A1B] transition-colors min-w-[24px] min-h-[24px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                             aria-label="Increase quantity"
                           >
                             <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />

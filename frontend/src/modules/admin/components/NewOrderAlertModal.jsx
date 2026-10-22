@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import OrderDistance from './OrderDistance';
 import {
   ShoppingBag, CheckCircle, XCircle, MapPin, User, Phone,
   CreditCard, Package, Clock, X, Bell, ChevronRight, Volume2, VolumeX,
-  Store, Navigation, Mail
+  Store, Mail
 } from 'lucide-react';
 
 /**
@@ -38,7 +39,8 @@ export default function NewOrderAlertModal({
       const sec = Math.floor((Date.now() - base.getTime()) / 1000);
       if (sec < 60) setElapsed(`${Math.max(0, sec)}s ago`);
       else if (sec < 3600) setElapsed(`${Math.floor(sec / 60)}m ago`);
-      else setElapsed(`${Math.floor(sec / 3600)}h ago`);
+      else if (sec < 86400) setElapsed(`${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m ago`);
+      else setElapsed(`${Math.floor(sec / 86400)}d ${Math.floor((sec % 86400) / 3600)}h ago`);
     };
     updateElapsed();
     const iv = setInterval(updateElapsed, 5000);
@@ -54,16 +56,28 @@ export default function NewOrderAlertModal({
 
   const orderId = order._id || order.id || order.orderNumber;
   const displayId = order.orderNumber || order.id || order._id;
-  const distance = order.rider?.distance || order.distance || null;
   const createdLabel = order.createdAt
     ? new Date(order.createdAt).toLocaleString('en-IN', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
       })
-    : `${order.date || ''} ${order.time || ''}`.trim() || 'Just now';
+    : `${order.date || ''} ${order.time || ''}`.trim() || 'Time not available';
+
+  // Real price breakdown from the saved order (no invented figures)
+  const money = (n) => `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
+  const itemsSubtotal = (order.items || []).reduce(
+    (sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 1),
+    0
+  );
+  const subtotal = Number(order.subtotal) || itemsSubtotal;
+  const discount = Number(order.discount) || 0;
+  const deliveryFee = Number(order.deliveryFee) || 0;
+  const tax = Number(order.tax) || 0;
+  const couponCode = order.couponApplied && order.couponApplied !== 'None' ? order.couponApplied : '';
 
   const deliveryLine = order.address
     ? [
@@ -222,12 +236,7 @@ export default function NewOrderAlertModal({
               <Clock className="w-3 h-3" />
               {createdLabel}
             </span>
-            {distance ? (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-50 text-sky-800 font-medium border border-sky-100">
-                <Navigation className="w-3 h-3" />
-                {distance}
-              </span>
-            ) : null}
+            <OrderDistance orderId={orderId} variant="chip" />
             {order.paymentStatus ? (
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-stone-100 text-stone-600 font-medium">
                 Pay: {order.paymentStatus}
@@ -261,7 +270,7 @@ export default function NewOrderAlertModal({
                     </p>
                   </div>
                   <span className="text-xs font-bold text-stone-700 shrink-0">
-                    ₹{(Number(it.price) || 0) * (Number(it.qty) || 1)}
+                    {money((Number(it.price) || 0) * (Number(it.qty) || 1))}
                   </span>
                 </div>
               ))}
@@ -269,6 +278,30 @@ export default function NewOrderAlertModal({
                 <p className="px-3 py-3 text-xs text-stone-400">No line items available.</p>
               )}
             </div>
+          </div>
+
+          {/* Price details */}
+          <div className="rounded-xl border border-stone-200 bg-white px-3 py-2.5 space-y-1 text-xs">
+            <div className="flex justify-between text-stone-600">
+              <span>Items subtotal</span>
+              <span className="font-semibold text-stone-800">{money(subtotal)}</span>
+            </div>
+            {discount > 0 && (
+              <div className="flex justify-between text-emerald-700">
+                <span>Discount{couponCode ? ` (${couponCode})` : ''}</span>
+                <span className="font-semibold">-{money(discount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-stone-600">
+              <span>Delivery</span>
+              <span className="font-semibold text-stone-800">{deliveryFee > 0 ? money(deliveryFee) : 'Free'}</span>
+            </div>
+            {tax > 0 && (
+              <div className="flex justify-between text-stone-600">
+                <span>GST / Tax</span>
+                <span className="font-semibold text-stone-800">{money(tax)}</span>
+              </div>
+            )}
           </div>
 
           {/* Totals */}
@@ -279,7 +312,7 @@ export default function NewOrderAlertModal({
             </span>
             <div className="text-right">
               <p className="text-[10px] text-stone-400 font-medium uppercase">Total Amount</p>
-              <p className="text-lg font-extrabold text-[#0E2A1B] leading-tight">₹{order.total ?? 0}</p>
+              <p className="text-lg font-extrabold text-[#0E2A1B] leading-tight">{money(order.total)}</p>
             </div>
           </div>
 

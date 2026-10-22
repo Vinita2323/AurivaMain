@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Star, CheckCircle, XCircle, Trash2, MessageSquare, Award, Search, Sparkles } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import { useAdmin } from '../../../context/AdminContext';
 
 export default function AdminReviews() {
@@ -37,6 +39,8 @@ export default function AdminReviews() {
     }
     return true;
   });
+
+  const pagination = usePagination(filteredReviews, { resetKey: `${activeStatus}|${search}` });
 
   const handleSendReply = (reviewId) => {
     if (!replyText.trim()) return;
@@ -131,7 +135,7 @@ export default function AdminReviews() {
 
           {/* Reviews List - Compact Cards */}
           <div className="space-y-3 w-full">
-            {filteredReviews.map(r => (
+            {pagination.pageItems.map(r => (
               <div
                 key={r.id}
                 className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-2.5 hover:shadow-xs transition-all w-full"
@@ -288,6 +292,10 @@ export default function AdminReviews() {
                 </div>
               </div>
             ))}
+
+            <div className="rounded-xl border border-[#E8E2D5] bg-white overflow-hidden">
+              <AdminPagination pagination={pagination} label="reviews" />
+            </div>
           </div>
 
         </main>

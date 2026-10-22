@@ -22,6 +22,10 @@ import {
   resolveDeliveryFee
 } from '../../../utils/checkoutPricing';
 
+// Online payments (Razorpay: UPI / cards / net banking) are switched off for now — Cash on Delivery only.
+// Set to true (and restore the "Online Payment" option card below) to re-enable.
+const ONLINE_PAYMENTS_ENABLED = false;
+
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     if (window.Razorpay) {
@@ -85,6 +89,7 @@ export default function CheckoutPage() {
   });
 
   useEffect(() => {
+    if (!ONLINE_PAYMENTS_ENABLED) return;
     paymentApi.getConfig()
       .then(res => {
         if (res?.data && res.data.keyId) {
@@ -402,7 +407,7 @@ export default function CheckoutPage() {
     setIsOrderPlacing(true);
 
     try {
-      const isOnline = paymentMethod === 'online';
+      const isOnline = ONLINE_PAYMENTS_ENABLED && paymentMethod === 'online';
 
       // COD: create order immediately (unchanged)
       if (!isOnline) {
@@ -677,7 +682,7 @@ export default function CheckoutPage() {
 
             {[
               { step: 1, title: 'Address', desc: 'Where to deliver' },
-              { step: 2, title: 'Payment', desc: 'UPI, Card, COD' }
+              { step: 2, title: 'Payment', desc: 'Cash on Delivery' }
             ].map((s) => {
               const isPassed = currentStep > s.step;
               const isCurrent = currentStep === s.step;
@@ -908,6 +913,7 @@ export default function CheckoutPage() {
                   
                   {/* Payment Options — Online (Prepaid) vs COD */}
                   <div className="space-y-2 sm:space-y-3">
+{/* Online Payment option — disabled for now (Cash on Delivery only). To restore, remove this wrapper and set ONLINE_PAYMENTS_ENABLED = true.
                     <div
                       onClick={() => setPaymentMethod('online')}
                       className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
@@ -946,6 +952,7 @@ export default function CheckoutPage() {
                         </div>
                       </div>
                     </div>
+            */}
 
                     <div
                       onClick={() => setPaymentMethod('cod')}
@@ -1075,7 +1082,13 @@ export default function CheckoutPage() {
                       <Tag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" />
                       <div>
                         <span className="font-bold text-emerald-900 text-[11px] sm:text-xs">{appliedCoupon.code}</span>
-                        <p className="font-sans text-[9px] sm:text-[10px] text-emerald-700">Applied (₹{discountAmount} OFF)</p>
+                        <p className="font-sans text-[9px] sm:text-[10px] text-emerald-700">
+                          Applied
+                          {appliedCoupon.discountType === 'PERCENTAGE' && Number(appliedCoupon.discountValue) > 0
+                            ? ` • ${appliedCoupon.discountValue}% off${appliedCoupon.maxDiscount > 0 ? ` (max ₹${appliedCoupon.maxDiscount})` : ''}`
+                            : ''}
+                          {' '}• You save ₹{discountAmount}
+                        </p>
                       </div>
                     </div>
                     <button

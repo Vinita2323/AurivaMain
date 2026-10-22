@@ -18,6 +18,10 @@ export default function SmoothScroll({ children }) {
       wheelMultiplier: 1,
       touchMultiplier: 1.5,
       infinite: false,
+      // Modals lock page scroll with body { overflow: hidden }. While locked, Lenis must ignore ALL
+      // wheel/touch input so (a) the page behind stays put and (b) scrollable areas inside the modal
+      // (invoice preview, forms) keep scrolling natively. Using stop() instead would swallow those events.
+      prevent: () => document.body.style.overflow === 'hidden',
     });
 
     lenisRef.current = lenis;
@@ -29,21 +33,7 @@ export default function SmoothScroll({ children }) {
 
     const animId = requestAnimationFrame(raf);
 
-    // Modals lock page scroll with body { overflow: hidden }. Lenis scrolls the window itself and
-    // ignores that, so pause it while the body is locked and resume when it is released.
-    const syncWithBodyLock = () => {
-      if (document.body.style.overflow === 'hidden') {
-        lenis.stop();
-      } else {
-        lenis.start();
-      }
-    };
-    syncWithBodyLock();
-    const bodyObserver = new MutationObserver(syncWithBodyLock);
-    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-
     return () => {
-      bodyObserver.disconnect();
       cancelAnimationFrame(animId);
       lenis.destroy();
       lenisRef.current = null;

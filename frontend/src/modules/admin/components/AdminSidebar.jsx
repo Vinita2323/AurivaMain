@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, ShoppingCart, Package, FolderTree, 
-  Boxes, Users, Tag, Star, Megaphone, Bell, 
+  Boxes, Users, Tag, Star, Bell, 
   BarChart3, Settings, ExternalLink, X, ChefHat, UserCircle
 } from 'lucide-react';
 import Logo from '../../user/components/Logo';
@@ -102,7 +102,8 @@ export default function AdminSidebar({ isOpen, onClose, badges: badgesProp }) {
     { name: 'Customers', path: '/admin/customers', icon: Users },
     { name: 'Coupons', path: '/admin/coupons', icon: Tag, badge: formatBadge(badges.coupons) },
     { name: 'Reviews', path: '/admin/reviews', icon: Star },
-    { name: 'Promotions', path: '/admin/promotions', icon: Megaphone },
+    // Promotions / campaigns page disabled for now — uncomment together with the route in AdminRoutes.jsx
+    // { name: 'Promotions', path: '/admin/promotions', icon: Megaphone }, // (also re-import Megaphone from lucide-react)
     { name: 'Recipes', path: '/admin/recipes', icon: ChefHat },
     { name: 'Notifications', path: '/admin/notifications', icon: Bell, badge: formatBadge(badges.notifications) },
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },

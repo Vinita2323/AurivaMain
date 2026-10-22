@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import AddCategoryModal from '../components/AddCategoryModal';
 import { useAdmin } from '../../../context/AdminContext';
 
@@ -112,6 +114,11 @@ export default function AdminCategories() {
     }
     return true;
   }).sort((a, b) => (a.order || a.sortOrder || 0) - (b.order || b.sortOrder || 0));
+
+  const pagination = usePagination(filteredCategories, {
+    initialPageSize: 12,
+    resetKey: `${statusFilter}|${search}|${viewMode}`
+  });
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex font-sans">
@@ -287,7 +294,8 @@ export default function AdminCategories() {
             ) : viewMode === 'list' ? (
               /* LIST VIEW */
               <div className="space-y-2.5">
-                {filteredCategories.map((cat, catIdx) => {
+                {pagination.pageItems.map((cat, pageIdx) => {
+                  const catIdx = pagination.from - 1 + pageIdx;
                   const catKey = cat.id || cat._id || `cat-${catIdx}`;
                   const isActive = cat.status !== 'Inactive';
                   const pCount = products.filter(p => p.category === cat.slug || p.category === cat.id).length;
@@ -388,7 +396,8 @@ export default function AdminCategories() {
             ) : (
               /* GRID VIEW */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredCategories.map((cat, catIdx) => {
+                {pagination.pageItems.map((cat, pageIdx) => {
+                  const catIdx = pagination.from - 1 + pageIdx;
                   const catKey = cat.id || cat._id || `cat-${catIdx}`;
                   const isActive = cat.status !== 'Inactive';
                   const pCount = products.filter(p => p.category === cat.slug || p.category === cat.id).length;
@@ -495,6 +504,10 @@ export default function AdminCategories() {
                 })}
               </div>
             )}
+
+            <div className="rounded-xl border border-[#E8E2D5] bg-white overflow-hidden mt-4">
+              <AdminPagination pagination={pagination} label="categories" />
+            </div>
           </div>
 
         </main>

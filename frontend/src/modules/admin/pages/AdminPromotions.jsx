@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, CheckCircle, Sparkles, X, Check } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import { useAdmin } from '../../../context/AdminContext';
 
 export default function AdminPromotions() {
@@ -38,6 +40,8 @@ export default function AdminPromotions() {
     if (activeFilter === 'inactive' && p.status === 'Active') return false;
     return true;
   });
+
+  const pagination = usePagination(filteredPromos, { initialPageSize: 9, resetKey: activeFilter });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -108,7 +112,7 @@ export default function AdminPromotions() {
 
           {/* Promotions Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
-            {filteredPromos.map(p => {
+            {pagination.pageItems.map(p => {
               const isActive = p.status === 'Active';
               return (
                 <div
@@ -172,6 +176,10 @@ export default function AdminPromotions() {
                 </div>
               );
             })}
+          </div>
+
+          <div className="rounded-xl border border-[#E8E2D5] bg-white overflow-hidden">
+            <AdminPagination pagination={pagination} label="campaigns" />
           </div>
 
         </main>

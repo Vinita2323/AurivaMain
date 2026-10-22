@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   CheckCircle2, Phone, MapPin, 
-  ChevronRight, MessageSquare, FileText, Wifi
+  ChevronRight, MessageSquare, MessageCircle, FileText, Wifi
 } from 'lucide-react';
 
 const ORDER_POLL_INTERVAL_MS = 15_000; // Re-fetch order status every 15 seconds
@@ -77,6 +77,11 @@ export default function OrderTrackingPage() {
   // Delivery partner info is real data only: shown while out for delivery, never placeholders
   const isOutForDelivery = order?.status === 'Out for Delivery';
   const rider = getRealRider(order?.rider);
+
+  // Contact links for the real rider (no in-app chat exists — SMS / WhatsApp open the customer's own apps)
+  const riderDigits = rider?.phone ? [...String(rider.phone)].filter((ch) => ch >= '0' && ch <= '9').join('') : '';
+  const riderWhatsApp = riderDigits.length === 10 ? '91' + riderDigits : riderDigits;
+  const riderMessage = 'Hi' + (rider?.name ? ' ' + rider.name : '') + ', this is regarding my AURIVA order #' + (order?.id || '') + '.';
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -165,7 +170,8 @@ export default function OrderTrackingPage() {
                 )}
               </div>
               <p className="text-[11px] sm:text-xs text-stone-500 mt-0.5 sm:mt-1">
-                Placed on {order.date} • Expected delivery today by 03:15 PM
+                Placed on {order.placedAt || order.date}
+                {order.expectedDelivery ? ` • ${order.expectedDelivery.label}: ${order.expectedDelivery.value}` : ''}
               </p>
               {['Order Received', 'Accepted', 'Packed', 'Confirmed'].includes(order.status) && (
                 <button
@@ -213,17 +219,10 @@ export default function OrderTrackingPage() {
               {/* Timeline Track bar */}
               <div className="hidden md:block absolute top-1/2 left-6 right-6 h-1 bg-stone-200 -translate-y-1/2 z-0" />
 
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-2 relative z-10">
-                {(order.timeline || [
-                  { status: 'Order Received', time: 'Order Placed', done: true, current: order.status === 'Order Received' },
-                  { status: 'Accepted', time: 'Team confirmed', done: ['Accepted', 'Packed', 'Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Accepted' },
-                  { status: 'Packed', time: 'Warehouse Hub', done: ['Packed', 'Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Packed' },
-                  { status: 'Ready for Dispatch', time: 'Sealed & Inspected', done: ['Ready for Dispatch', 'Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Ready for Dispatch' },
-                  { status: 'Out for Delivery', time: 'On the Way', done: ['Out for Delivery', 'Delivered'].includes(order.status), current: order.status === 'Out for Delivery' },
-                  { status: 'Delivered', time: order.status === 'Delivered' ? 'Completed' : 'Estimated', done: order.status === 'Delivered', current: order.status === 'Delivered' },
-                ]).map((step, idx) => {
-                  const isDone = step.done || ['Delivered'].includes(order.status);
-                  const isCurrent = step.current || step.status === order.status;
+              <div className={`grid grid-cols-1 ${(order.timeline || []).length > 6 ? 'md:grid-cols-7' : 'md:grid-cols-6'} gap-3 md:gap-2 relative z-10`}>
+                {(order.timeline || []).map((step, idx) => {
+                  const isDone = step.done;
+                  const isCurrent = step.current;
 
                   return (
                     <div key={idx} className="flex md:flex-col items-center gap-3 md:gap-2 text-left md:text-center">
@@ -241,7 +240,7 @@ export default function OrderTrackingPage() {
                         <h4 className={`text-xs sm:text-sm font-bold ${isCurrent ? 'text-[#0E2A1B]' : isDone ? 'text-stone-800' : 'text-stone-400'}`}>
                           {step.status || step.name}
                         </h4>
-                        <p className="text-[9.5px] sm:text-[10px] text-stone-400 mt-0.5">{step.time}</p>
+                        <p className="text-[9.5px] sm:text-[10px] text-stone-400 mt-0.5">{step.time || (isDone ? '' : 'Pending')}</p>
                       </div>
                     </div>
                   );
@@ -265,7 +264,7 @@ export default function OrderTrackingPage() {
                 {isOutForDelivery && rider && (
                   <div className="flex items-center gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-stone-200 shadow-2xs mb-3">
                     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#1B3B29] text-[#D4AF37] font-serif font-bold text-sm sm:text-lg flex items-center justify-center border border-[#D4AF37]/40 shrink-0">
-                      {(rider.name || '?').split(/s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+                      {(rider.name || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-serif text-xs sm:text-sm font-bold text-[#0E2A1B] truncate">{rider.name || 'Delivery partner'}</h4>
@@ -325,34 +324,42 @@ export default function OrderTrackingPage() {
                     {order.shiprocket?.isRto && (
                       <p className="text-amber-800 font-semibold mt-1">Return to origin (RTO) update received</p>
                     )}
-                    {order.estimatedDelivery && (
+                    {order.expectedDelivery && (
                       <p className="text-stone-500 mt-1">
-                        Est. delivery: {new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {order.expectedDelivery.label}: {order.expectedDelivery.value}
                       </p>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Contact Actions */}
+              {/* Contact Actions — real rider only */}
               {isOutForDelivery && rider?.phone && (
-              <div className="grid grid-cols-2 gap-2 pt-1 sm:pt-2">
-                <a
-                  href={`tel:${rider.phone}`}
-                  className="py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl bg-[#0E2A1B] text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 hover:bg-[#1B3B29] transition-colors shadow-2xs min-h-[38px] sm:min-h-[44px]"
-                >
-                  <Phone className="w-3.5 h-3.5 text-[#D4AF37]" />
-                  <span>Call Rider</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => alert(`Chat with rider ${rider.name || ''} opened.`)}
-                  className="py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl border border-stone-300 bg-white text-stone-800 text-[11px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 hover:bg-stone-50 transition-colors min-h-[38px] sm:min-h-[44px]"
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-[#0E2A1B]" />
-                  <span>Message</span>
-                </button>
-              </div>
+                <div className="grid grid-cols-3 gap-2 pt-1 sm:pt-2">
+                  <a
+                    href={`tel:${rider.phone}`}
+                    className="py-2.5 sm:py-3 px-2 sm:px-3 rounded-xl bg-[#0E2A1B] text-white text-[10.5px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-[#1B3B29] transition-colors shadow-2xs min-h-[38px] sm:min-h-[44px]"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <span>Call</span>
+                  </a>
+                  <a
+                    href={`sms:${rider.phone}?body=${encodeURIComponent(riderMessage)}`}
+                    className="py-2.5 sm:py-3 px-2 sm:px-3 rounded-xl border border-stone-300 bg-white text-stone-800 text-[10.5px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-stone-50 transition-colors min-h-[38px] sm:min-h-[44px]"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-[#0E2A1B]" />
+                    <span>Message</span>
+                  </a>
+                  <a
+                    href={`https://wa.me/${riderWhatsApp}?text=${encodeURIComponent(riderMessage)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="py-2.5 sm:py-3 px-2 sm:px-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 text-[10.5px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-emerald-100 transition-colors min-h-[38px] sm:min-h-[44px]"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>WhatsApp</span>
+                  </a>
+                </div>
               )}
 
             </div>

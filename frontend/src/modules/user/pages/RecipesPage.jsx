@@ -195,10 +195,12 @@ export default function RecipesPage() {
                         <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />
                         <span>{recipe.prepTime}</span>
                       </span>
-                      <span className="flex items-center gap-1 drop-shadow-sm">
-                        <Flame className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{recipe.calories || '160 kcal'}</span>
-                      </span>
+                      {recipe.calories && (
+                        <span className="flex items-center gap-1 drop-shadow-sm">
+                          <Flame className="w-3.5 h-3.5 text-amber-400" />
+                          <span>{recipe.calories}</span>
+                        </span>
+                      )}
                       <span className="flex items-center gap-1 drop-shadow-sm">
                         <Users className="w-3.5 h-3.5 text-[#D4AF37]" />
                         <span>{recipe.servings}</span>
@@ -294,10 +296,12 @@ export default function RecipesPage() {
                   <span className="text-[10px] uppercase font-bold text-stone-400 block">Cook Time</span>
                   <p className="text-xs sm:text-sm font-bold text-[#0E2A1B] mt-0.5">{activeModalRecipe.cookTime}</p>
                 </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Calories</span>
-                  <p className="text-xs sm:text-sm font-bold text-amber-600 mt-0.5">{activeModalRecipe.calories || '160 kcal'}</p>
-                </div>
+                {activeModalRecipe.calories && (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-stone-400 block">Calories</span>
+                    <p className="text-xs sm:text-sm font-bold text-amber-600 mt-0.5">{activeModalRecipe.calories}</p>
+                  </div>
+                )}
                 <div>
                   <span className="text-[10px] uppercase font-bold text-stone-400 block">Difficulty</span>
                   <p className="text-xs sm:text-sm font-bold text-[#0E2A1B] mt-0.5">{activeModalRecipe.difficulty || 'Easy'}</p>

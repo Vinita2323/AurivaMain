@@ -20,7 +20,7 @@ const getOrCreateGuestId = () => {
 };
 
 export function CartProvider({ children }) {
-  const { coupons, settings } = useAdmin();
+  const { coupons, settings, products } = useAdmin();
   const { token, isAuthenticated } = useAuth();
   const [liveSettings, setLiveSettings] = useState(null);
   const [guestId] = useState(getOrCreateGuestId);
@@ -160,6 +160,48 @@ export function CartProvider({ children }) {
     setCartToast(null);
   };
 
+  // ---- Stock limits (a product can only be added up to its available stock) ----
+  const [stockNotice, setStockNotice] = useState(null);
+  const stockNoticeTimer = React.useRef(null);
+
+  const showStockNotice = (message) => {
+    setStockNotice({ message, id: Date.now() });
+    if (stockNoticeTimer.current) clearTimeout(stockNoticeTimer.current);
+    stockNoticeTimer.current = setTimeout(() => setStockNotice(null), 4000);
+  };
+  const hideStockNotice = () => setStockNotice(null);
+
+  /** Available stock for a product, or null when unknown (the server still enforces it). */
+  const getStockLimit = (productId) => {
+    const key = String(productId || '').toLowerCase();
+    const p = (products || []).find(
+      (x) => String(x._id || x.id || '').toLowerCase() === key || String(x.slug || '').toLowerCase() === key
+    );
+    if (!p || typeof p.stockCount !== 'number') return null;
+    return p.inStock === false ? 0 : Math.max(0, p.stockCount);
+  };
+
+  const getCartQtyForProduct = (productId) =>
+    cartItems
+      .filter((it) => String(it.productId || it.id || it._id) === String(productId))
+      .reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
+
+  /** Units of this product that can still be added (Infinity when stock is unknown). */
+  const getRemainingStock = (productId) => {
+    const limit = getStockLimit(productId);
+    return limit === null ? Infinity : Math.max(0, limit - getCartQtyForProduct(productId));
+  };
+
+  /** If the server rejected a change because of stock, tell the user and re-sync the real cart. */
+  const handleStockRejection = (err) => {
+    if (/stock|available/i.test(err?.message || '')) {
+      showStockNotice(err.message);
+      refreshCartFromBackend();
+      return true;
+    }
+    return false;
+  };
+
   /**
    * Add to Cart from any section (Homepage bestsellers, Shop, Details, Wishlist)
    * Standardizes product ID, weight, image and price snapshot
@@ -169,7 +211,25 @@ export function CartProvider({ children }) {
 
     const prodId = (product._id || product.id || product.slug)?.toString();
     const cleanWeight = weight || product.weight || '150g';
-    const cleanQty = Math.max(1, Number(qty) || 1);
+    let cleanQty = Math.max(1, Number(qty) || 1);
+
+    // Stock guard: never add more than what is available
+    const stockLimit = getStockLimit(prodId);
+    if (stockLimit !== null) {
+      const remaining = Math.max(0, stockLimit - getCartQtyForProduct(prodId));
+      if (stockLimit <= 0) {
+        showStockNotice(`${product.name || 'This product'} is out of stock.`);
+        return false;
+      }
+      if (remaining <= 0) {
+        showStockNotice(`You already have all ${stockLimit} available in your cart.`);
+        return false;
+      }
+      if (cleanQty > remaining) {
+        showStockNotice(`Only ${stockLimit} available — added ${remaining}.`);
+        cleanQty = remaining;
+      }
+    }
 
     let itemPrice = Number(product.price || 249);
     let itemOldPrice = Number(product.oldPrice || 0);
@@ -238,7 +298,9 @@ export function CartProvider({ children }) {
       }
     } catch (err) {
       console.warn('[CartContext] Backend cart add sync note:', err.message);
+      if (handleStockRejection(err)) return false;
     }
+    return true;
   };
 
   /**
@@ -271,6 +333,16 @@ export function CartProvider({ children }) {
   const updateQty = async (id, weight, delta) => {
     const targetId = id?.toString();
 
+    // Stock guard: increases may not go past available stock
+    if (delta > 0) {
+      const remaining = getRemainingStock(targetId);
+      if (remaining < delta) {
+        const limit = getStockLimit(targetId);
+        showStockNotice(limit !== null && limit <= 0 ? 'This product is out of stock.' : `Only ${limit} available in stock.`);
+        return;
+      }
+    }
+
     // 1. Optimistic update
     setCartItems(prev => {
       return prev.map(item => {
@@ -292,6 +364,7 @@ export function CartProvider({ children }) {
       }
     } catch (err) {
       console.warn('[CartContext] Backend cart updateQty sync note:', err.message);
+      handleStockRejection(err);
     }
   };
 
@@ -372,19 +445,29 @@ export function CartProvider({ children }) {
   const itemCount = cartItems.reduce((acc, item) => acc + (Number(item.qty) || 0), 0);
   const subtotal = cartItems.reduce((acc, item) => acc + ((Number(item.price) || 0) * (Number(item.qty) || 1)), 0);
 
+  // Always recalculate from the coupon rule on the CURRENT subtotal (same formula as the server),
+  // so changing quantities never leaves a stale discount that differs from what is charged.
   let discountAmount = 0;
-  if (appliedCoupon) {
-    if (typeof appliedCoupon.discountAmount === 'number' && appliedCoupon.discountAmount > 0) {
-      discountAmount = appliedCoupon.discountAmount;
-    } else if (appliedCoupon.discountType === 'PERCENTAGE' || appliedCoupon.discountPercent) {
+  if (appliedCoupon && appliedCoupon.code) {
+    const minOrder = Number(appliedCoupon.minOrderValue) || 0;
+    const isPercent = appliedCoupon.discountType === 'PERCENTAGE' || (!appliedCoupon.discountType && appliedCoupon.discountPercent);
+    const isFixed = appliedCoupon.discountType === 'FIXED' || (!appliedCoupon.discountType && appliedCoupon.flatDiscount);
+
+    if (minOrder > 0 && subtotal < minOrder) {
+      discountAmount = 0;
+    } else if (isPercent) {
       const pct = Number(appliedCoupon.discountValue || appliedCoupon.discountPercent || 0);
       discountAmount = Math.round((subtotal * pct) / 100);
       if (appliedCoupon.maxDiscount > 0) {
         discountAmount = Math.min(discountAmount, appliedCoupon.maxDiscount);
       }
-    } else if (appliedCoupon.discountType === 'FIXED' || appliedCoupon.flatDiscount) {
+    } else if (isFixed) {
       discountAmount = Math.min(Number(appliedCoupon.discountValue || appliedCoupon.flatDiscount || 0), subtotal);
+    } else if (typeof appliedCoupon.discountAmount === 'number') {
+      // Legacy shape without rule fields — fall back to the server-supplied amount
+      discountAmount = appliedCoupon.discountAmount;
     }
+    discountAmount = Math.max(0, Math.min(discountAmount, subtotal));
   }
 
   const effectiveSettings = liveSettings || settings;
@@ -414,6 +497,10 @@ export function CartProvider({ children }) {
       cartToast,
       hideCartToast,
       addToCart,
+      stockNotice,
+      hideStockNotice,
+      getStockLimit,
+      getRemainingStock,
       removeFromCart,
       updateQty,
       clearCart,

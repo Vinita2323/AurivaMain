@@ -1,6 +1,11 @@
 import adminAuthService from '../services/adminAuthService.js';
 import { getDashboardSummary, getAnalyticsSummary } from '../services/dashboardService.js';
 import User from '../models/User.js';
+import Order from '../models/Order.js';
+
+// Lifetime-spend thresholds (INR) for the CRM customer tiers
+const CUSTOMER_TIER_GOLD = 2000;
+const CUSTOMER_TIER_PLATINUM = 5000;
 import { sendSuccess, sendError } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
@@ -76,8 +81,8 @@ export const getDashboard = async (req, res, next) => {
  */
 export const getAnalytics = async (req, res, next) => {
   try {
-    const { range, from, to } = req.query;
-    const summary = await getAnalyticsSummary({ range, from, to });
+    const { range, from, to, tz } = req.query;
+    const summary = await getAnalyticsSummary({ range, from, to, tz });
     return sendSuccess(res, 'Analytics fetched successfully', summary, HTTP_STATUS.OK);
   } catch (error) {
     next(error);
@@ -90,37 +95,95 @@ export const getAnalytics = async (req, res, next) => {
  */
 export const getAllUsers = async (req, res, next) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
 
-    const query = {};
+    // Customers only — admin accounts are not part of the CRM list
+    const query = { role: 'USER', deletedAt: null };
     if (req.query.status) {
       query.status = req.query.status;
     }
     if (req.query.search) {
+      const escaped = String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { name: { $regex: req.query.search, $options: 'i' } },
-        { email: { $regex: req.query.search, $options: 'i' } },
-        { phone: { $regex: req.query.search, $options: 'i' } }
+        { name: { $regex: escaped, $options: 'i' } },
+        { email: { $regex: escaped, $options: 'i' } },
+        { phone: { $regex: escaped, $options: 'i' } }
       ];
     }
 
     const [users, total] = await Promise.all([
-      User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       User.countDocuments(query)
     ]);
+
+    // Real per-customer stats from their (non-cancelled) orders
+    const ids = users.map((u) => u._id);
+    const statRows = ids.length
+      ? await Order.aggregate([
+          { $match: { user: { $in: ids }, status: { $ne: 'CANCELLED' } } },
+          { $sort: { createdAt: -1 } },
+          {
+            $group: {
+              _id: '$user',
+              totalOrders: { $sum: 1 },
+              totalSpent: { $sum: '$pricing.total' },
+              city: { $first: '$shippingAddress.city' },
+              state: { $first: '$shippingAddress.state' },
+              lastOrderAt: { $first: '$createdAt' }
+            }
+          }
+        ])
+      : [];
+    const statsById = new Map(statRows.map((r) => [String(r._id), r]));
+
+    const enriched = users.map((u) => {
+      const st = statsById.get(String(u._id)) || {};
+      const totalSpent = Math.round(st.totalSpent || 0);
+      const totalOrders = st.totalOrders || 0;
+      // Customer tier is derived from real lifetime spend
+      const tier =
+        totalOrders === 0
+          ? 'New Customer'
+          : totalSpent >= CUSTOMER_TIER_PLATINUM
+            ? 'Platinum Member'
+            : totalSpent >= CUSTOMER_TIER_GOLD
+              ? 'Gold Member'
+              : 'Silver Member';
+      return {
+        id: String(u._id),
+        _id: String(u._id),
+        name: u.name || '',
+        email: u.email || '',
+        phone: u.phone || '',
+        avatar: u.avatar || '',
+        status: u.status,
+        isVerified: u.isVerified,
+        createdAt: u.createdAt,
+        memberSince: u.createdAt
+          ? new Date(u.createdAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+          : '',
+        lastLoginAt: u.lastLoginAt || null,
+        totalOrders,
+        totalSpent,
+        city: st.city || u.addresses?.[0]?.city || '',
+        state: st.state || u.addresses?.[0]?.state || '',
+        lastOrderAt: st.lastOrderAt || null,
+        tier
+      };
+    });
 
     return sendSuccess(
       res,
       'Users list retrieved successfully',
       {
-        users,
+        users: enriched,
         pagination: {
           total,
           page,
           limit,
-          totalPages: Math.ceil(total / limit)
+          totalPages: Math.ceil(total / limit) || 1
         }
       },
       HTTP_STATUS.OK

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, MapPin, User, Package, ShieldCheck } from 'lucide-react';
+import { getStatusOptions } from '../../../utils/orderStatusFlow';
 
 export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatus }) {
   const [status, setStatus] = useState('Packed');
@@ -99,13 +100,12 @@ export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatu
                 onChange={(e) => setStatus(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-bold rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B] bg-white text-stone-800 shadow-2xs cursor-pointer"
               >
-                <option value="Order Received">Order Received (Confirmed)</option>
-                <option value="Accepted">Accepted</option>
-                <option value="Packed">Packed</option>
-                <option value="Ready for Dispatch">Ready for Dispatch (Shipped)</option>
-                <option value="Out for Delivery">Out for Delivery</option>
-                <option value="Delivered">Delivered</option>
-                <option value="Cancelled">Cancelled</option>
+                {getStatusOptions(order).map((label) => (
+                  <option key={label} value={label}>
+                    {label}
+                    {label === order.status ? ' (current)' : ''}
+                  </option>
+                ))}
               </select>
 
               <div>
@@ -194,7 +194,7 @@ export default function OrderStatusModal({ isOpen, onClose, order, onUpdateStatu
                   <span className="uppercase text-[10px] tracking-wider text-stone-500">Customer Details</span>
                 </div>
                 <p className="text-sm font-semibold text-stone-900">{order.customer}</p>
-                <p className="text-xs text-stone-600 font-medium">📞 {order.phone || '+91 9876543210'}</p>
+                <p className="text-xs text-stone-600 font-medium">📞 {order.phone || 'Not provided'}</p>
                 <p className="text-xs text-stone-500">{order.email || 'customer@auriva.in'}</p>
               </div>
 

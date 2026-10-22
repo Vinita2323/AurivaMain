@@ -25,10 +25,15 @@ export default function ProductCard({ product, priority = false }) {
     }
   }
 
-  const handleAddToCart = (e) => {
+  const outOfStock =
+    product.inStock === false || (typeof product.stockCount === 'number' && product.stockCount <= 0);
+
+  const handleAddToCart = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product, selectedWeight, 1, false);
+    if (outOfStock) return;
+    const added = await addToCart(product, selectedWeight, 1, false);
+    if (added === false) return; // blocked by stock limit
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1800);
   };
@@ -156,13 +161,18 @@ export default function ProductCard({ product, priority = false }) {
         <div className="flex items-center gap-1 sm:gap-2">
           <button
             onClick={handleAddToCart}
+            disabled={outOfStock}
             className={`flex-1 py-1.5 sm:py-2.5 px-1.5 sm:px-3 rounded-md sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-wider uppercase transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 shadow-xs min-h-[28px] sm:min-h-[40px] ${
-              isAdded
+              outOfStock
+                ? 'bg-stone-200 text-stone-500 cursor-not-allowed'
+                : isAdded
                 ? 'bg-emerald-700 text-white'
                 : 'bg-[#0E2A1B] text-white hover:bg-[#154627] hover:shadow-[0_4px_15px_rgba(212,175,55,0.3)] hover:scale-[1.02] active:scale-98'
             }`}
           >
-            {isAdded ? (
+            {outOfStock ? (
+              <span className="truncate">OUT OF STOCK</span>
+            ) : isAdded ? (
               <>
                 <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#D4AF37]" />
                 <span>ADDED</span>

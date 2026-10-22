@@ -2,15 +2,20 @@ import React, { useState, useMemo } from 'react';
 import { Boxes, AlertTriangle, CheckCircle, PackageX, Search, RefreshCw } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import { useAdmin } from '../../../context/AdminContext';
 
 export default function AdminInventory() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { products, updateProductStock, bulkRestock, settings } = useAdmin();
+  const { products, adjustProductStock, updateProductStock, bulkRestock, settings } = useAdmin();
 
   const [activeTab, setActiveTab] = useState('all'); // 'all', 'low', 'out', 'healthy'
   const [search, setSearch] = useState('');
   const [restockSuccess, setRestockSuccess] = useState('');
+  const [stockError, setStockError] = useState('');
+  const [busyIds, setBusyIds] = useState(() => new Set());
+  const [drafts, setDrafts] = useState({}); // typed-but-unsaved stock numbers, keyed by product id
 
   const lowStockThreshold = settings?.lowStockThreshold ?? 30;
 
@@ -35,15 +40,68 @@ export default function AdminInventory() {
     });
   }, [products, activeTab, search]);
 
-  const handleBulkRestock = () => {
+  const pagination = usePagination(filteredProducts, { resetKey: `${activeTab}|${search}` });
+
+  // Instant stock +/-: lock the row while saving so quick clicks never work from a stale stock number
+  const handleAdjustStock = async (id, delta) => {
+    const key = String(id);
+    if (busyIds.has(key)) return;
+    setStockError('');
+    setBusyIds((prev) => new Set(prev).add(key));
+    try {
+      await adjustProductStock(id, delta);
+    } catch (err) {
+      setStockError(err?.message || 'Could not update stock. Please try again.');
+    } finally {
+      setBusyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  // Typed stock number: edit locally, save on Enter / blur (not on every keystroke)
+  const commitStockDraft = async (id, currentCount) => {
+    const key = String(id);
+    const draft = drafts[key];
+    if (draft === undefined) return;
+    const next = Math.max(0, Math.floor(Number(draft)));
+    setDrafts((prev) => {
+      const { [key]: _removed, ...rest } = prev;
+      return rest;
+    });
+    if (draft === '' || Number.isNaN(next) || next === Number(currentCount)) return;
+    if (busyIds.has(key)) return;
+    setStockError('');
+    setBusyIds((prev) => new Set(prev).add(key));
+    try {
+      await updateProductStock(id, next);
+    } catch (err) {
+      setStockError(err?.message || 'Could not update stock. Please try again.');
+    } finally {
+      setBusyIds((prev) => {
+        const set = new Set(prev);
+        set.delete(key);
+        return set;
+      });
+    }
+  };
+
+  const handleBulkRestock = async () => {
     const lowIds = lowStockProducts.concat(outOfStockProducts).map(p => p._id || p.id);
     if (lowIds.length === 0) {
       alert("All products have sufficient stock levels!");
       return;
     }
-    bulkRestock(lowIds, 100);
-    setRestockSuccess(`Successfully replenished +100 units to ${lowIds.length} low-stock products!`);
-    setTimeout(() => setRestockSuccess(''), 3000);
+    setStockError('');
+    try {
+      await bulkRestock(lowIds, 100);
+      setRestockSuccess(`Successfully replenished +100 units to ${lowIds.length} low-stock products!`);
+      setTimeout(() => setRestockSuccess(''), 3000);
+    } catch (err) {
+      setStockError(err?.message || 'Bulk restock failed. Some products may not have been updated.');
+    }
   };
 
   return (
@@ -93,6 +151,12 @@ export default function AdminInventory() {
               <p className="text-xs text-rose-800 font-medium">Hidden / Sold out in storefront</p>
             </div>
           </div>
+
+          {stockError && (
+            <div role="alert" className="p-3.5 bg-rose-50 text-rose-800 border border-rose-200 rounded-lg text-xs sm:text-sm font-semibold">
+              {stockError}
+            </div>
+          )}
 
           {restockSuccess && (
             <div className="p-3.5 bg-emerald-100 text-emerald-900 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-between animate-in fade-in">
@@ -165,7 +229,7 @@ export default function AdminInventory() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 font-medium">
-                  {filteredProducts.map(p => {
+                  {pagination.pageItems.map(p => {
                     const count = p.stockCount || 0;
                     const isLow = count > 0 && count <= lowStockThreshold;
                     const isOut = count === 0 || p.inStock === false;
@@ -198,8 +262,12 @@ export default function AdminInventory() {
                           <div className="flex items-center gap-2">
                             <input
                               type="number"
-                              value={count}
-                              onChange={e => updateProductStock(p._id || p.id, e.target.value)}
+                              min="0"
+                              value={drafts[String(p._id || p.id)] ?? count}
+                              disabled={busyIds.has(String(p._id || p.id))}
+                              onChange={e => setDrafts(prev => ({ ...prev, [String(p._id || p.id)]: e.target.value }))}
+                              onBlur={() => commitStockDraft(p._id || p.id, count)}
+                              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                               className="w-22 px-3 py-1.5 text-xs sm:text-sm font-bold rounded-md border border-stone-300 bg-stone-50 focus:outline-none focus:bg-white text-center"
                             />
                             <span className="text-xs sm:text-sm text-stone-600 font-medium">units</span>
@@ -225,22 +293,25 @@ export default function AdminInventory() {
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => adjustProductStock(p.id, -10)}
-                              className="px-3 py-1.5 rounded-md border border-stone-200 hover:bg-stone-100 text-stone-700 text-xs sm:text-[12.5px] font-bold transition-colors"
+                              onClick={() => handleAdjustStock(p._id || p.id, -10)}
+                              disabled={busyIds.has(String(p._id || p.id))}
+                              className="px-3 py-1.5 rounded-md border border-stone-200 hover:bg-stone-100 text-stone-700 text-xs sm:text-[12.5px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Decrease 10 units"
                             >
                               -10
                             </button>
                             <button
-                              onClick={() => adjustProductStock(p.id, 10)}
-                              className="px-3 py-1.5 rounded-md border border-stone-200 hover:bg-stone-100 text-stone-700 text-xs sm:text-[12.5px] font-bold transition-colors"
+                              onClick={() => handleAdjustStock(p._id || p.id, 10)}
+                              disabled={busyIds.has(String(p._id || p.id))}
+                              className="px-3 py-1.5 rounded-md border border-stone-200 hover:bg-stone-100 text-stone-700 text-xs sm:text-[12.5px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Add 10 units"
                             >
                               +10
                             </button>
                             <button
-                              onClick={() => adjustProductStock(p.id, 50)}
-                              className="px-3.5 py-1.5 rounded-md bg-[#0E2A1B] text-[#D4AF37] hover:bg-[#1B3B29] text-xs sm:text-[12.5px] font-bold shadow-2xs transition-colors"
+                              onClick={() => handleAdjustStock(p._id || p.id, 50)}
+                              disabled={busyIds.has(String(p._id || p.id))}
+                              className="px-3.5 py-1.5 rounded-md bg-[#0E2A1B] text-[#D4AF37] hover:bg-[#1B3B29] text-xs sm:text-[12.5px] font-bold shadow-2xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Add 50 units"
                             >
                               +50
@@ -254,10 +325,7 @@ export default function AdminInventory() {
               </table>
             </div>
 
-            <div className="p-4 border-t border-stone-200 bg-[#FAF7F2] flex items-center justify-between text-xs sm:text-sm text-stone-600">
-              <span className="font-semibold">Showing {filteredProducts.length} items in inventory</span>
-              <span className="hidden sm:inline font-medium">Direct live sync with user shopping cart & stock limits</span>
-            </div>
+            <AdminPagination pagination={pagination} label="items in inventory" />
           </div>
 
         </main>

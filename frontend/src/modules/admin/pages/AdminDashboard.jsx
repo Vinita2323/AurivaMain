@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Eye, ArrowUpRight, RefreshCw
 } from 'lucide-react';
@@ -56,6 +56,7 @@ function buildChartPoints(revenueChart = []) {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [summary, setSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,7 +131,7 @@ export default function AdminDashboard() {
 
           {/* Top KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 font-sans w-full">
-            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1 relative overflow-hidden">
+            <Link to="/admin/analytics" aria-label="Open Total Revenue" className="block bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1 relative overflow-hidden hover:border-[#0E2A1B] hover:shadow-sm transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] sm:text-xs font-medium uppercase tracking-wider text-stone-500 font-sans">Total Revenue</span>
                 {!isLoading && <TrendBadge pct={kpis.revenueTrendPct} />}
@@ -139,9 +140,9 @@ export default function AdminDashboard() {
                 {isLoading ? '—' : `₹${Number(kpis.totalRevenue || 0).toLocaleString('en-IN')}`}
               </h2>
               <p className="text-[11px] sm:text-xs text-stone-400 font-sans font-normal">Live gross transactions sync</p>
-            </div>
+            </Link>
 
-            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1">
+            <Link to="/admin/orders" aria-label="Open Total Orders" className="block bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1 hover:border-[#0E2A1B] hover:shadow-sm transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] sm:text-xs font-medium uppercase tracking-wider text-stone-500 font-sans">Total Orders</span>
                 {!isLoading && <TrendBadge pct={kpis.ordersTrendPct} />}
@@ -150,9 +151,9 @@ export default function AdminDashboard() {
                 {isLoading ? '—' : Number(kpis.totalOrders || 0).toLocaleString('en-IN')}
               </h2>
               <p className="text-[11px] sm:text-xs text-stone-400 font-sans font-normal">Quick Commerce & Courier Orders</p>
-            </div>
+            </Link>
 
-            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1">
+            <Link to="/admin/customers" aria-label="Open Total Customers" className="block bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1 hover:border-[#0E2A1B] hover:shadow-sm transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] sm:text-xs font-medium uppercase tracking-wider text-stone-500 font-sans">Total Customers</span>
                 {!isLoading && <TrendBadge pct={kpis.customersTrendPct} />}
@@ -161,9 +162,9 @@ export default function AdminDashboard() {
                 {isLoading ? '—' : Number(kpis.totalCustomers || 0).toLocaleString('en-IN')}
               </h2>
               <p className="text-[11px] sm:text-xs text-stone-400 font-sans font-normal">Registered customer accounts</p>
-            </div>
+            </Link>
 
-            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1">
+            <Link to="/admin/customers" aria-label="Open Repeat Rate" className="block bg-white rounded-xl p-3.5 sm:p-4 border border-[#E8E2D5] shadow-2xs space-y-1 hover:border-[#0E2A1B] hover:shadow-sm transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] sm:text-xs font-medium uppercase tracking-wider text-stone-500 font-sans">Repeat Rate</span>
                 <span className="text-[11px] font-semibold text-[#0E2A1B] bg-[#D4AF37]/20 border border-[#D4AF37]/40 px-2 py-0.5 rounded-full font-sans">
@@ -174,7 +175,7 @@ export default function AdminDashboard() {
                 {isLoading ? '—' : Number(kpis.repeatCustomers || 0).toLocaleString('en-IN')}
               </h2>
               <p className="text-[11px] sm:text-xs text-stone-400 font-sans font-normal">Customers with 2+ orders</p>
-            </div>
+            </Link>
           </div>
 
           {/* Quick Action Navigation Grid */}
@@ -230,7 +231,13 @@ export default function AdminDashboard() {
 
           {/* Charts & Top Products Row */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch font-sans w-full">
-            <div className="lg:col-span-8 bg-white rounded-xl p-4 sm:p-5 border border-[#E8E2D5] shadow-2xs space-y-3 flex flex-col justify-between">
+            <div
+              role="link"
+              tabIndex={0}
+              onClick={() => navigate('/admin/analytics')}
+              onKeyDown={(e) => { if (e.key === 'Enter') navigate('/admin/analytics'); }}
+              className="lg:col-span-8 bg-white rounded-xl p-4 sm:p-5 border border-[#E8E2D5] shadow-2xs space-y-3 flex flex-col justify-between cursor-pointer hover:border-[#0E2A1B] hover:shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]"
+            >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="font-sans text-sm sm:text-base font-bold tracking-tight text-[#0E2A1B]">Revenue Overview</h3>
@@ -300,7 +307,13 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="lg:col-span-4 bg-white rounded-xl p-4 sm:p-5 border border-[#E8E2D5] shadow-2xs space-y-3 font-sans">
+            <div
+              role="link"
+              tabIndex={0}
+              onClick={() => navigate('/admin/products')}
+              onKeyDown={(e) => { if (e.key === 'Enter') navigate('/admin/products'); }}
+              className="lg:col-span-4 bg-white rounded-xl p-4 sm:p-5 border border-[#E8E2D5] shadow-2xs space-y-3 font-sans cursor-pointer hover:border-[#0E2A1B] hover:shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]"
+            >
               <div className="flex items-center justify-between border-b border-stone-200 pb-2.5">
                 <h3 className="font-sans text-sm sm:text-base font-bold tracking-tight text-[#0E2A1B]">Top Catalog Products</h3>
                 <Link to="/admin/products" className="text-xs text-[#0E2A1B] hover:text-[#D4AF37] font-bold">
@@ -405,7 +418,7 @@ export default function AdminDashboard() {
                         <td className="py-3 px-3.5 text-stone-500 text-xs font-medium">{ord.date}</td>
                         <td className="py-3 px-3.5 text-right">
                           <Link
-                            to="/admin/orders"
+                            to={`/admin/orders?order=${encodeURIComponent(ord._id || ord.id || ord.orderNumber)}`}
                             className="inline-flex items-center gap-1 text-xs font-bold text-[#0E2A1B] hover:text-[#D4AF37]"
                           >
                             <Eye className="w-3.5 h-3.5" />

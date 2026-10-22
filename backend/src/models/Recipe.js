@@ -49,7 +49,8 @@ const recipeSchema = new mongoose.Schema(
     },
     calories: {
       type: String,
-      default: '180 kcal'
+      trim: true,
+      default: ''
     },
     ingredients: {
       type: [String],

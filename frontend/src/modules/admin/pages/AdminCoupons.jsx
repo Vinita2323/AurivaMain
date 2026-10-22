@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Trash2, Copy, Check, Edit2, Search, Filter, RefreshCw, Tag } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Plus, Trash2, Copy, Check, Edit2, Search, Filter, RefreshCw } from 'lucide-react';
 
 import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
+import usePagination from '../../../hooks/usePagination';
+import AdminPagination from '../components/AdminPagination';
 import CreateCouponModal from '../components/CreateCouponModal';
 import { useAdmin } from '../../../context/AdminContext';
 
@@ -21,6 +23,23 @@ export default function AdminCoupons() {
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(''), 2000);
   };
+
+  // Keep usage counts live: reload on open, when the tab regains focus, and every 30s
+  useEffect(() => {
+    if (!refreshCoupons) return undefined;
+    refreshCoupons();
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') refreshCoupons();
+    };
+    const timer = setInterval(refreshIfVisible, 30000);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    window.addEventListener('focus', refreshIfVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+      window.removeEventListener('focus', refreshIfVisible);
+    };
+  }, [refreshCoupons]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -64,6 +83,8 @@ export default function AdminCoupons() {
     });
   }, [coupons, searchTerm, statusFilter]);
 
+  const pagination = usePagination(filteredCoupons, { resetKey: `${statusFilter}|${searchTerm}` });
+
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex font-sans">
       <AdminSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
@@ -75,17 +96,7 @@ export default function AdminCoupons() {
           
           {/* Top Header & Actions */}
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-[#E8E2D5] shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Tag className="w-5 h-5 text-[#0E2A1B]" />
-                <h2 className="font-sans text-lg sm:text-xl font-bold text-[#0E2A1B]">Database-Backed Promotional Coupons</h2>
-              </div>
-              <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
-                Centralized source of truth for discount percentages, flat vouchers, usage limits and customer cart validation.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0 sm:ml-auto">
               <button
                 type="button"
                 onClick={handleManualRefresh}
@@ -159,7 +170,7 @@ export default function AdminCoupons() {
                       </td>
                     </tr>
                   ) : (
-                    filteredCoupons.map((c) => {
+                    pagination.pageItems.map((c) => {
                       const isActive = c.status === 'Active' || c.status === 'ACTIVE';
                       const isPercentage = c.discountType === 'PERCENTAGE' || c.type === 'Percentage';
                       const discountStr = isPercentage
@@ -255,10 +266,7 @@ export default function AdminCoupons() {
               </table>
             </div>
 
-            <div className="p-4 border-t border-stone-200 bg-[#FAF7F2] flex items-center justify-between text-xs sm:text-sm text-stone-600">
-              <span className="font-semibold">{filteredCoupons.length} of {coupons?.length || 0} coupon rules shown</span>
-              <span className="hidden sm:inline font-medium">Backend-validated & locked during Checkout</span>
-            </div>
+            <AdminPagination pagination={pagination} label="coupon rules" />
           </div>
 
         </main>
