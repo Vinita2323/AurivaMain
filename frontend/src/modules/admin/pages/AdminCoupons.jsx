@@ -175,7 +175,6 @@ export default function AdminCoupons() {
                 Real-time promotional discount rules stored live in MongoDB
               </p>
             </div>
-
             <div className="flex items-center gap-2.5 shrink-0 sm:ml-auto">
               <button
                 type="button"
