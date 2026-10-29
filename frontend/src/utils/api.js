@@ -814,6 +814,8 @@ export const adminPaymentApi = {
 
 // Customer Coupon API
 export const couponApi = {
+  getActiveCoupons: () =>
+    apiRequest('/coupons', { method: 'GET' }),
   validateCoupon: (code, subtotal = 0) =>
     apiRequest('/coupons/validate', {
       method: 'POST',

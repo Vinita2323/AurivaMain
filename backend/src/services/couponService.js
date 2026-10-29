@@ -349,6 +349,37 @@ class CouponService {
   }
 
   /**
+   * Public / Customer: Get active, currently-valid coupons for storefront display
+   */
+  static async getActiveCouponsPublic() {
+    const now = new Date();
+    const coupons = await Coupon.find({
+      status: 'ACTIVE',
+      $and: [
+        {
+          $or: [
+            { startDate: { $lte: now } },
+            { startDate: null },
+            { startDate: { $exists: false } }
+          ]
+        },
+        {
+          $or: [
+            { endDate: { $gte: now } },
+            { endDate: null },
+            { endDate: { $exists: false } }
+          ]
+        }
+      ]
+    })
+      .select('code description discountType discountValue minOrderValue maxDiscount endDate startDate')
+      .sort('-createdAt')
+      .lean();
+
+    return coupons;
+  }
+
+  /**
    * System Startup Seed: Populate initial coupons if none exist
    */
   static async seedInitialCoupons() {

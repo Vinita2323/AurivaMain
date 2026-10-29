@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { INITIAL_COUPONS } from '../data/coupons';
 import { CATEGORIES } from '../data/categories';
 import { REVIEWS } from '../data/reviews';
 import { BANNERS_DATA } from '../data/adminData';
@@ -138,7 +137,7 @@ const INITIAL_PROMOTIONS = [
   }
 ];
 
-import { adminAuthApi, productApi, categoryApi, adminSettingsApi, settingsApi, adminReviewApi, reviewApi, adminCouponApi } from '../utils/api';
+import { adminAuthApi, productApi, categoryApi, adminSettingsApi, settingsApi, adminReviewApi, reviewApi, adminCouponApi, couponApi } from '../utils/api';
 
 const DEFAULT_ADMIN_CREDENTIALS = {
   email: "admin@aurivafoods.com",
@@ -298,16 +297,18 @@ export function AdminProvider({ children }) {
     return CATEGORIES;
   });
 
-  // 3. Coupons State
-  const [coupons, setCoupons] = useState(() => {
+  // 3. Coupons State - Database is Single Source of Truth
+  const [coupons, setCoupons] = useState([]);
+  const [couponsLoading, setCouponsLoading] = useState(true);
+
+  // Clear legacy localStorage coupon cache
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('auriva_admin_coupons');
-      if (saved) return JSON.parse(saved);
+      localStorage.removeItem('auriva_admin_coupons');
     } catch (e) {
-      console.error(e);
+      console.warn('[AdminContext] LocalStorage coupon cleanup note:', e.message);
     }
-    return INITIAL_COUPONS;
-  });
+  }, []);
 
   // 4. Banners State
   const [banners, setBanners] = useState(() => {
@@ -360,10 +361,6 @@ export function AdminProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem('auriva_admin_categories', JSON.stringify(categories)); } catch (e) { console.error(e); }
   }, [categories]);
-
-  useEffect(() => {
-    try { localStorage.setItem('auriva_admin_coupons', JSON.stringify(coupons)); } catch (e) { console.error(e); }
-  }, [coupons]);
 
   useEffect(() => {
     try { localStorage.setItem('auriva_admin_banners', JSON.stringify(banners)); } catch (e) { console.error(e); }
@@ -802,27 +799,29 @@ export function AdminProvider({ children }) {
     }
   };
 
-  // Coupon Actions (Backend API Integration)
+  // Coupon Actions (Backend API Integration - Single Source of Truth)
   const refreshCoupons = useCallback(async () => {
-    if (!isAdminAuthenticated) return;
+    setCouponsLoading(true);
     try {
-      const res = await adminCouponApi.getCoupons({ limit: 100 });
-      if (res && res.data && Array.isArray(res.data.coupons)) {
-        const normalized = res.data.coupons.map(normalizeCoupon);
+      const res = isAdminAuthenticated
+        ? await adminCouponApi.getCoupons({ limit: 100 })
+        : await couponApi.getActiveCoupons();
+      const raw = res?.data?.coupons || res?.data || [];
+      if (Array.isArray(raw)) {
+        const normalized = raw.map(normalizeCoupon);
         setCoupons(normalized);
-        try {
-          localStorage.setItem('auriva_admin_coupons', JSON.stringify(normalized));
-        } catch (e) {}
+        return normalized;
       }
     } catch (err) {
       console.warn('[AdminContext] Could not fetch coupons from backend:', err.message);
+    } finally {
+      setCouponsLoading(false);
     }
   }, [isAdminAuthenticated]);
 
   useEffect(() => {
-    if (!isAdminAuthenticated) return;
     refreshCoupons();
-  }, [isAdminAuthenticated, refreshCoupons]);
+  }, [refreshCoupons]);
 
   const addCoupon = async (couponData) => {
     const rawType = (couponData.discountType || (couponData.type === 'Flat' ? 'FIXED' : 'PERCENTAGE')).toUpperCase();
@@ -1187,6 +1186,7 @@ export function AdminProvider({ children }) {
       deleteCategory,
       toggleCategoryStatus,
       // Coupon Actions
+      couponsLoading,
       refreshCoupons,
       addCoupon,
       updateCoupon,

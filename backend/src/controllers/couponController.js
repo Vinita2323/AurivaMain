@@ -29,6 +29,19 @@ class CouponController {
   }
 
   /**
+   * GET /api/v1/coupons
+   * Public: List active, currently-valid coupons for customer display
+   */
+  async getActiveCoupons(req, res, next) {
+    try {
+      const coupons = await couponService.getActiveCouponsPublic();
+      return sendSuccess(res, 'Active coupons retrieved successfully', { coupons }, HTTP_STATUS.OK);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/admin/coupons
    * Admin: List all coupons with filtering & pagination
    */

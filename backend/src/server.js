@@ -24,7 +24,7 @@ const startServer = async () => {
       await categoryService.seedInitialCategories().catch((e) => console.warn('[Category Seed Note]', e.message));
       await productService.seedInitialProducts().catch((e) => console.warn('[Product Seed Note]', e.message));
       await bestsellerService.seedInitialBestsellers().catch((e) => console.warn('[Bestseller Seed Note]', e.message));
-      await couponService.seedInitialCoupons().catch((e) => console.warn('[Coupon Seed Note]', e.message));
+      // Dynamic coupons: manage via Admin panel only (no automatic static coupon seeding)
       console.log('[Database Init] Database synchronization complete.');
     };
 

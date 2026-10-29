@@ -33,7 +33,7 @@ export default function AccountPage() {
   const isMobileMenu = !rawTab; // When no ?tab= param on mobile, show the vertical menu
   const navigate = useNavigate();
 
-  const { coupons: INITIAL_COUPONS, settings } = useAdmin();
+  const { coupons: availableCoupons = [], settings } = useAdmin();
 
   const help = resolveHelpSupport(settings);
   const supportEmail = help.email;
@@ -472,7 +472,7 @@ export default function AccountPage() {
       label: 'Offers & Coupons', 
       desc: 'Exclusive discount vouchers', 
       icon: Tag, 
-      badge: INITIAL_COUPONS.length 
+      badge: availableCoupons.length || undefined 
     },
     { 
       id: 'wishlist', 
@@ -828,27 +828,37 @@ export default function AccountPage() {
             {activeTab === 'offers' && (
               <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 border border-[#E8E2D5] shadow-xs space-y-4 sm:space-y-6 animate-fadeIn">
                 <h3 className="text-base sm:text-xl font-bold text-[#0E2A1B] border-b border-stone-200 pb-3 sm:pb-4">
-                  Available Coupons & Vouchers ({INITIAL_COUPONS.length})
+                  Available Coupons & Vouchers ({availableCoupons.length})
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  {INITIAL_COUPONS.map((c) => (
-                    <div key={c.id} className="p-4 rounded-2xl border-2 border-dashed border-[#D4AF37]/60 bg-[#FAF7F2] flex items-center justify-between gap-2">
-                      <div>
-                        <span className="font-mono text-base font-extrabold text-[#0E2A1B] tracking-wider">{c.code}</span>
-                        <p className="text-xs text-stone-600 mt-0.5 font-medium">{c.description}</p>
-                        <p className="text-[10px] text-stone-400 mt-1">Valid till: {c.validity}</p>
+                {availableCoupons.length === 0 ? (
+                  <div className="py-12 text-center max-w-sm mx-auto space-y-2">
+                    <Tag className="w-8 h-8 mx-auto text-stone-300 stroke-[1.5]" />
+                    <p className="text-sm font-bold text-stone-700">No active coupons right now</p>
+                    <p className="text-xs text-stone-500">
+                      Check back soon for festive discounts and exclusive promotional vouchers!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    {availableCoupons.map((c) => (
+                      <div key={c.id || c._id} className="p-4 rounded-2xl border-2 border-dashed border-[#D4AF37]/60 bg-[#FAF7F2] flex items-center justify-between gap-2">
+                        <div>
+                          <span className="font-mono text-base font-extrabold text-[#0E2A1B] tracking-wider">{c.code}</span>
+                          <p className="text-xs text-stone-600 mt-0.5 font-medium">{c.description}</p>
+                          <p className="text-[10px] text-stone-400 mt-1">Valid till: {c.validity || (c.endDate ? new Date(c.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Ongoing')}</p>
+                        </div>
+                        <button
+                          onClick={() => handleCopyCoupon(c.code)}
+                          className="px-3 py-1.5 rounded-xl bg-[#0E2A1B] text-[#D4AF37] hover:bg-[#1B3B29] text-xs font-bold flex items-center gap-1 shrink-0 min-h-[36px] cursor-pointer"
+                        >
+                          {copiedCoupon === c.code ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedCoupon === c.code ? 'Copied' : 'Copy'}</span>
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleCopyCoupon(c.code)}
-                        className="px-3 py-1.5 rounded-xl bg-[#0E2A1B] text-[#D4AF37] hover:bg-[#1B3B29] text-xs font-bold flex items-center gap-1 shrink-0 min-h-[36px]"
-                      >
-                        {copiedCoupon === c.code ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedCoupon === c.code ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

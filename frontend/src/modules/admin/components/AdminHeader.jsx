@@ -10,14 +10,22 @@ import useOrderAlertSound from '../../../hooks/useOrderAlertSound';
 const HANDLED_IDS_KEY = 'auriva_admin_handled_order_ids';
 const QUEUE_KEY = 'auriva_admin_order_alert_queue';
 const POLL_INTERVAL_MS = 5_000;
+const MAX_ALERT_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours: orders older than this belong in Orders list, not popup alerts
 
 function orderKey(order) {
   return String(order?._id || order?.id || order?.orderNumber || '');
 }
 
+function isOrderStale(order) {
+  if (!order) return true;
+  if (!order.createdAt) return false;
+  const t = new Date(order.createdAt).getTime();
+  return Number.isFinite(t) && (Date.now() - t) > MAX_ALERT_AGE_MS;
+}
+
 function readHandledIds() {
   try {
-    const raw = sessionStorage.getItem(HANDLED_IDS_KEY);
+    const raw = localStorage.getItem(HANDLED_IDS_KEY) || sessionStorage.getItem(HANDLED_IDS_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
   } catch {
@@ -27,7 +35,7 @@ function readHandledIds() {
 
 function writeHandledIds(set) {
   try {
-    sessionStorage.setItem(HANDLED_IDS_KEY, JSON.stringify([...set].slice(-120)));
+    localStorage.setItem(HANDLED_IDS_KEY, JSON.stringify([...set].slice(-200)));
   } catch {
     /* ignore */
   }
@@ -35,9 +43,16 @@ function writeHandledIds(set) {
 
 function readQueue() {
   try {
-    const raw = sessionStorage.getItem(QUEUE_KEY);
+    // Clear legacy queue from sessionStorage if present
+    sessionStorage.removeItem(QUEUE_KEY);
+    const raw = localStorage.getItem(QUEUE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const handled = readHandledIds();
+    return parsed.filter((o) => {
+      const key = orderKey(o);
+      return key && !handled.has(key) && !isOrderStale(o);
+    });
   } catch {
     return [];
   }
@@ -45,7 +60,7 @@ function readQueue() {
 
 function writeQueue(queue) {
   try {
-    sessionStorage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(0, 20)));
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(0, 20)));
   } catch {
     /* ignore */
   }
@@ -134,7 +149,9 @@ export default function AdminHeader({ onMenuClick, title = 'Dashboard' }) {
       const formatted = formatOrder(o);
       const key = orderKey(formatted);
       if (!key) continue;
-      // Skip only if already accepted / rejected / dismissed this session
+      // Skip stale orders older than 24 hours (they belong in Orders list, not modal alerts)
+      if (isOrderStale(formatted)) continue;
+      // Skip if already accepted / rejected / dismissed
       if (handledIdsRef.current.has(key)) continue;
       if (activeKey && key === activeKey) continue;
       fresh.push(formatted);

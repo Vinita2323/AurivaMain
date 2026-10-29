@@ -19,14 +19,25 @@ export default function Header() {
   const location = useLocation();
 
   useEffect(() => {
+    let ticking = false;
+
     const handleScroll = () => {
-      if (window.scrollY > 20) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const y = window.scrollY || window.pageYOffset || 0;
+          setIsScrolled((prev) => {
+            if (!prev && y > 35) return true;
+            if (prev && y < 10) return false;
+            return prev;
+          });
+          ticking = false;
+        });
+        ticking = true;
       }
     };
-    window.addEventListener('scroll', handleScroll);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -75,17 +86,17 @@ export default function Header() {
   return (
     <>
       <header
-        className={`sticky top-0 z-40 w-full transition-all duration-300 ${
+        className={`sticky top-0 z-40 w-full transform-gpu py-3 sm:py-3.5 transition-[background-color,border-color,box-shadow] duration-200 ${
           isScrolled 
-            ? 'bg-[#FAF7F2]/95 backdrop-blur-md py-3 sm:py-3.5 shadow-sm' 
-            : 'bg-[#FAF7F2] py-3.5 sm:py-4'
+            ? 'bg-[#FAF7F2]/95 backdrop-blur-md shadow-xs border-b border-[#E8E2D5]' 
+            : 'bg-[#FAF7F2] border-b border-transparent'
         }`}
       >
         <div className="relative w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between">
           
           {/* Left: Auriva Brand Logo */}
           <div className="flex items-center z-10">
-            <Logo variant="dark" size={isScrolled ? 'default' : 'large'} />
+            <Logo variant="dark" size="default" />
           </div>
 
           {/* Middle: Desktop Navigation Links (Centered) */}

@@ -187,6 +187,8 @@ export default function Footer() {
             <Link to="/help-support" className="hover:text-[#D4AF37] transition-colors">Help & Support</Link>
             <span>•</span>
             <Link to="/help-support#shipping" className="hover:text-[#D4AF37] transition-colors">Shipping & Returns</Link>
+            <span>•</span>
+            <Link to="/admin" className="hover:text-[#D4AF37] transition-colors">Admin</Link>
           </div>
         </div>
       </div>

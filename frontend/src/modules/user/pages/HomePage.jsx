@@ -720,35 +720,6 @@ export default function HomePage() {
 
             </div>
 
-            {/* Ultra Compact Celebration Voucher Ribbon */}
-            <div className="max-w-4xl mx-auto bg-gradient-to-r from-[#173D29] via-[#0E281B] to-[#0A1F14] border border-[#D4AF37]/40 rounded-xl py-2.5 px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg hover:border-[#D4AF37] transition-all duration-300">
-              <div className="flex items-center gap-3 text-center sm:text-left">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-[#E5C158] to-[#C89038] text-[#081B11] flex items-center justify-center shrink-0 shadow-sm">
-                  <Gift className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center justify-center sm:justify-start gap-2">
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-[#D4AF37] bg-[#D4AF37]/15 px-1.5 py-0.5 rounded">
-                      CELEBRATION VOUCHER
-                    </span>
-                    <h3 className="font-serif text-sm sm:text-[15px] font-bold text-white">
-                      20% OFF Your Next Order
-                    </h3>
-                  </div>
-                  <p className="text-[10px] sm:text-[11px] text-[#A2B5A8]">
-                    Use code <strong className="text-[#D4AF37] bg-black/40 px-1.5 py-0.2 rounded border border-[#D4AF37]/30 tracking-wider">AURIVA20</strong> at checkout
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                to="/shop"
-                className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#C89038] hover:from-[#E5C158] hover:to-[#D4AF37] text-[#081B11] font-extrabold text-[11px] uppercase tracking-wider shadow-sm hover:scale-105 transition-all whitespace-nowrap"
-              >
-                CLAIM OFFER →
-              </Link>
-            </div>
-
           </div>
         </section>
 
