@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useCart } from '../../../context/CartContext';
 import { useWishlist } from '../../../context/WishlistContext';
 import { resolveOptimizedProductImage } from '../../../utils/productImage';
+import ProductShareButton from './ProductShareButton';
 
 export default function ProductCard({ product, priority = false }) {
   const { addToCart } = useCart();
@@ -80,17 +81,20 @@ export default function ProductCard({ product, priority = false }) {
             </span>
           ) : <div />}
 
-          <button
-            onClick={handleWishlistClick}
-            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 pointer-events-auto bg-white/95 shadow-md border border-stone-200/80 hover:scale-115 active:scale-95 ${
-              isWishlisted 
-                ? 'text-rose-600 shadow-rose-200/50' 
-                : 'text-stone-400 hover:text-rose-600 hover:bg-rose-50'
-            }`}
-            aria-label="Add to Wishlist"
-          >
-            <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isWishlisted ? 'fill-rose-600' : ''}`} />
-          </button>
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              onClick={handleWishlistClick}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 pointer-events-auto bg-white/95 shadow-md border border-stone-200/80 hover:scale-115 active:scale-95 ${
+                isWishlisted 
+                  ? 'text-rose-600 shadow-rose-200/50' 
+                  : 'text-stone-400 hover:text-rose-600 hover:bg-rose-50'
+              }`}
+              aria-label="Add to Wishlist"
+            >
+              <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isWishlisted ? 'fill-rose-600' : ''}`} />
+            </button>
+            <ProductShareButton product={product} price={currentPrice} className="w-7 h-7 sm:w-8 sm:h-8" />
+          </div>
         </div>
 
         {/* Product Image */}

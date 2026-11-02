@@ -13,6 +13,7 @@ import { useWishlist } from '../../../context/WishlistContext';
 import { useCart } from '../../../context/CartContext';
 import { useAdmin } from '../../../context/AdminContext';
 import { resolveProductImage } from '../../../utils/productImage';
+import ProductShareButton from '../components/ProductShareButton';
 
 export default function WishlistPage() {
   const navigate = useNavigate();
@@ -235,6 +236,7 @@ export default function WishlistPage() {
                       >
                         <Heart className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-rose-500 text-rose-500" />
                       </button>
+                      <ProductShareButton product={p} price={p.price} className="absolute top-8 right-1 sm:top-10 sm:right-1.5 w-6 h-6 sm:w-7 sm:h-7" />
                     </div>
 
                     {/* Product Details */}
@@ -326,6 +328,7 @@ export default function WishlistPage() {
                       >
                         <Heart className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       </button>
+                      <ProductShareButton product={p} price={p.price} className="absolute top-8 right-1 sm:top-10 sm:right-1.5 w-6 h-6 sm:w-7 sm:h-7" />
                     </div>
 
                     <div className="space-y-0.5 sm:space-y-1">

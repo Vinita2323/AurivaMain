@@ -149,6 +149,7 @@ export const formatOrder = (o) => {
     subtotal: o.pricing?.subtotal ?? o.subtotal ?? 0,
     discount: o.pricing?.discount ?? o.discount ?? 0,
     couponApplied: o.pricing?.couponCode || o.couponApplied || 'None',
+    walletApplied: Number(o.pricing?.walletApplied) || 0,
     deliveryFee: o.pricing?.deliveryFee ?? o.deliveryFee ?? 0,
     tax: o.pricing?.tax ?? o.tax ?? 0,
     total: o.pricing?.total ?? o.total ?? 0,
@@ -726,6 +727,7 @@ export function AuthProvider({ children }) {
           upiApp: orderPayload.selectedUpiApp || ''
         },
         couponCode: orderPayload.couponApplied || undefined,
+        useWallet: orderPayload.useWallet === true,
         idempotencyKey: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         guestId: guestId || undefined,
         items: Array.isArray(localCartItems) && localCartItems.length > 0

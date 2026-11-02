@@ -820,7 +820,8 @@ class PaymentService {
         user: userId,
         gateway: 'COD',
         paymentMethod: 'COD',
-        amount: order.pricing.total,
+        // Wallet money already collected is not due on delivery
+        amount: Math.max(0, order.pricing.total - (order.pricing.walletApplied || 0)),
         status: order.payment?.status || 'PENDING',
         transactionId: `COD_${order.orderNumber}`,
         financialBreakdown: {

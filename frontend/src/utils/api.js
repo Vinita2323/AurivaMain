@@ -956,8 +956,26 @@ export const fcmApi = {
     apiRequest('/fcm-tokens/status', { method: 'GET' })
 };
 
+// Wallet (store credit)
+export const walletApi = {
+  getWallet: ({ page = 1, limit = 15 } = {}) =>
+    apiRequest(`/wallet?page=${page}&limit=${limit}`, { method: 'GET' })
+};
+
+export const adminWalletApi = {
+  get: (userId, { page = 1, limit = 10 } = {}) =>
+    apiRequest(`/admin/wallets/${userId}?page=${page}&limit=${limit}`, { method: 'GET' }),
+  adjust: (userId, { type, amount, note }) =>
+    apiRequest(`/admin/wallets/${userId}/adjust`, {
+      method: 'POST',
+      body: JSON.stringify({ type, amount, note })
+    })
+};
+
 export default {
   apiRequest,
+  walletApi,
+  adminWalletApi,
   userAuthApi,
   adminAuthApi,
   productApi,

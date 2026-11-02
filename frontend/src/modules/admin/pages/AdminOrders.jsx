@@ -783,6 +783,12 @@ export default function AdminOrders() {
                   <span>GST Tax</span>
                   <span>₹{selectedOrderForDetail.tax}</span>
                 </div>
+                {selectedOrderForDetail.walletApplied > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span>Paid from wallet</span>
+                    <span>−₹{selectedOrderForDetail.walletApplied}</span>
+                  </div>
+                )}
                 <div className="pt-2 border-t border-stone-200 flex justify-between font-sans text-sm font-bold text-[#0E2A1B]">
                   <span>{String(selectedOrderForDetail.paymentStatus || '').toUpperCase() === 'PAID' ? 'Total Paid' : 'Total Payable'}</span>
                   <span>₹{selectedOrderForDetail.total}</span>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import useWallet, { notifyWalletChanged } from '../../../hooks/useWallet';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   Check, CreditCard, ShieldCheck, 
@@ -22,9 +23,8 @@ import {
   resolveDeliveryFee
 } from '../../../utils/checkoutPricing';
 
-// Online payments (Razorpay: UPI / cards / net banking) are switched off for now — Cash on Delivery only.
-// Set to true (and restore the "Online Payment" option card below) to re-enable.
-const ONLINE_PAYMENTS_ENABLED = false;
+// Online payments (Razorpay: UPI / cards / net banking) are enabled. Set to false to hide them (Cash on Delivery only).
+const ONLINE_PAYMENTS_ENABLED = true;
 
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -141,6 +141,14 @@ export default function CheckoutPage() {
   }, [subtotal, discountAmount, paymentMethod, shippingSettings, shiprocketDeliveryFee, shiprocketCheckoutEnabled]);
 
   const { deliveryFee, tax, total } = checkoutPricing;
+
+  // Wallet (store credit): usable on Cash on Delivery orders only
+  const { balance: walletBalance } = useWallet({ enabled: Boolean(isAuthenticated && token), intervalMs: 0, limit: 1 });
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
+  const walletAvailable = Number(walletBalance) || 0;
+  const walletApplied =
+    useWalletBalance && paymentMethod === 'cod' ? Math.min(walletAvailable, Number(total) || 0) : 0;
+  const amountDue = Math.max(0, (Number(total) || 0) - walletApplied);
   const settingsPrepaidFee = resolveDeliveryFee({
     subtotal,
     paymentMethod: 'UPI',
@@ -420,10 +428,12 @@ export default function CheckoutPage() {
           tax,
           total,
           paymentMethod: 'COD',
+          useWallet: walletApplied > 0,
           deliveryType: 'Standard Express Courier',
           address: selectedAddress
         };
         const newOrderId = await placeOrder(orderPayload);
+        notifyWalletChanged();
         clearCart();
         setIsOrderPlacing(false);
         navigate(`/order-tracking/${newOrderId}`);
@@ -682,7 +692,7 @@ export default function CheckoutPage() {
 
             {[
               { step: 1, title: 'Address', desc: 'Where to deliver' },
-              { step: 2, title: 'Payment', desc: 'Cash on Delivery' }
+              { step: 2, title: 'Payment', desc: 'UPI, Card, COD' }
             ].map((s) => {
               const isPassed = currentStep > s.step;
               const isCurrent = currentStep === s.step;
@@ -913,7 +923,6 @@ export default function CheckoutPage() {
                   
                   {/* Payment Options — Online (Prepaid) vs COD */}
                   <div className="space-y-2 sm:space-y-3">
-{/* Online Payment option — disabled for now (Cash on Delivery only). To restore, remove this wrapper and set ONLINE_PAYMENTS_ENABLED = true.
                     <div
                       onClick={() => setPaymentMethod('online')}
                       className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
@@ -952,7 +961,6 @@ export default function CheckoutPage() {
                         </div>
                       </div>
                     </div>
-            */}
 
                     <div
                       onClick={() => setPaymentMethod('cod')}
@@ -992,6 +1000,27 @@ export default function CheckoutPage() {
                         </div>
                       </div>
                     </div>
+
+                    {paymentMethod === 'cod' && walletAvailable > 0 && (
+                      <label className="flex items-start gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 border-dashed border-[#D4AF37]/60 bg-[#FFFBEF] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useWalletBalance}
+                          onChange={(e) => setUseWalletBalance(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 accent-[#0E2A1B]"
+                        />
+                        <span className="text-xs sm:text-sm text-[#0E2A1B]">
+                          <span className="font-bold">Use wallet balance</span>{' '}
+                          <span className="text-stone-600">(₹{walletAvailable} available)</span>
+                          {useWalletBalance && (
+                            <span className="block text-[10.5px] sm:text-[11px] text-emerald-700 font-semibold mt-0.5">
+                              ₹{walletApplied} will be taken from your wallet
+                              {amountDue > 0 ? ` · ₹${amountDue} to pay on delivery` : ' · nothing to pay on delivery'}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    )}
                   </div>
 
                   {/* Order Error Alert */}
@@ -1026,7 +1055,11 @@ export default function CheckoutPage() {
                       ) : (
                         <>
                           <Sparkles className="w-4 h-4 fill-[#0E2A1B]" />
-                          <span className="font-sans">CONFIRM & PAY ₹{total}</span>
+                          <span className="font-sans">
+                            {paymentMethod === 'cod' && walletApplied > 0 && amountDue === 0
+                              ? 'PLACE ORDER · PAID FROM WALLET'
+                              : `CONFIRM & PAY ₹${amountDue}`}
+                          </span>
                         </>
                       )}
                     </button>
@@ -1201,6 +1234,19 @@ export default function CheckoutPage() {
                   <span className="text-xs sm:text-base font-serif">Total Payable</span>
                   <span className="font-sans text-lg sm:text-2xl font-extrabold text-[#0E2A1B]">₹{total}</span>
                 </div>
+
+                {walletApplied > 0 && (
+                  <div className="space-y-1 text-xs sm:text-sm">
+                    <div className="flex justify-between text-emerald-700 font-semibold">
+                      <span>Wallet applied</span>
+                      <span className="font-sans">−₹{walletApplied}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-[#0E2A1B]">
+                      <span>{amountDue === 0 ? 'Nothing to pay on delivery' : 'Pay on delivery'}</span>
+                      <span className="font-sans">₹{amountDue}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Trust Badges */}

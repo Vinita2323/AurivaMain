@@ -8,6 +8,7 @@ import Coupon from '../models/Coupon.js';
 import PaymentService from './paymentService.js';
 import settingsService from './settingsService.js';
 import couponService from './couponService.js';
+import walletService from './walletService.js';
 import notificationService from './notificationService.js';
 import { calculateOrderTotals } from '../utils/pricing.js';
 import { resolveShiprocketDeliveryFee } from './shippingQuoteService.js';
@@ -193,7 +194,8 @@ export const placeOrder = async (userId, payload) => {
     idempotencyKey = null,
     guestId = null,
     items: clientItems = null,
-    paymentStatus = null
+    paymentStatus = null,
+    useWallet = false
   } = payload;
 
   // 1. Idempotency Check
@@ -370,6 +372,8 @@ export const placeOrder = async (userId, payload) => {
   // 7. Atomic Inventory Deduction & Coupon Consumption
   const deductedItems = [];
   let couponIncrementedId = null;
+  let walletDebited = 0;
+  const orderObjectId = new mongoose.Types.ObjectId();
 
   try {
     for (const item of orderItems) {
@@ -416,6 +420,28 @@ export const placeOrder = async (userId, payload) => {
 
     // 8. Order Number & Status Setup
     const orderNumber = generateOrderNumber();
+
+    // 8b. Wallet: only for Cash on Delivery orders. Takes what the balance can cover (up to the order total).
+    let walletApplied = 0;
+    if (useWallet === true && normalizedPaymentMethod === 'COD') {
+      const balance = await walletService.getBalance(userId);
+      const toUse = Math.min(balance, total);
+      if (toUse > 0) {
+        await walletService.debit({
+          userId,
+          amount: toUse,
+          source: 'ORDER_PAYMENT',
+          reason: `Used for order #${orderNumber}`,
+          order: orderObjectId,
+          orderNumber,
+          createdBy: 'System',
+          dedupeKey: `ORDER_PAYMENT:${orderObjectId}`
+        });
+        walletApplied = toUse;
+        walletDebited = toUse;
+      }
+    }
+    const fullyPaidByWallet = walletApplied > 0 && walletApplied >= total;
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -424,6 +450,7 @@ export const placeOrder = async (userId, payload) => {
       String(paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'PENDING';
 
     const order = new Order({
+      _id: orderObjectId,
       orderNumber,
       user: userId,
       items: orderItems,
@@ -435,11 +462,12 @@ export const placeOrder = async (userId, payload) => {
         deliveryFee,
         tax,
         total,
+        walletApplied,
         couponDetails: couponDetailsSnapshot
       },
       payment: {
-        method: normalizedPaymentMethod,
-        status: initialPaymentStatus,
+        method: fullyPaidByWallet ? 'WALLET' : normalizedPaymentMethod,
+        status: fullyPaidByWallet ? 'PAID' : initialPaymentStatus,
         transactionId: paymentDetails.transactionId || '',
         upiApp: paymentDetails.upiApp || ''
       },
@@ -503,7 +531,7 @@ export const placeOrder = async (userId, payload) => {
 
     // Record COD in payment ledger only.
     // Shiprocket push is deferred until admin sets "Ready for Dispatch" (SHIPPED).
-    if (normalizedPaymentMethod === 'COD') {
+    if (normalizedPaymentMethod === 'COD' && !fullyPaidByWallet) {
       await PaymentService.recordCodPayment(savedOrder, userId).catch(err => {
         console.warn('Could not record COD payment in ledger:', err.message);
       });
@@ -527,6 +555,19 @@ export const placeOrder = async (userId, payload) => {
 
     return savedOrder;
   } catch (error) {
+    // Give back any wallet money already taken for this (failed) order
+    if (walletDebited > 0) {
+      await walletService
+        .credit({
+          userId,
+          amount: walletDebited,
+          source: 'ORDER_REFUND',
+          reason: 'Order could not be placed — wallet amount returned',
+          createdBy: 'System'
+        })
+        .catch((e) => console.error('[Wallet] rollback failure:', e.message));
+    }
+
     // Rollback coupon usage if it was incremented
     if (couponIncrementedId) {
       await Coupon.updateOne({ _id: couponIncrementedId }, { $inc: { usedCount: -1 } }).catch(() => {});
@@ -1149,6 +1190,13 @@ export const cancelOrder = async (orderId, options = {}) => {
     }
   } catch (couponErr) {
     console.warn('[Coupon] Cancel usage decrement note:', couponErr.message);
+  }
+
+  // Return any wallet money this order used (idempotent)
+  try {
+    await walletService.refundOrder(lockedOrder);
+  } catch (walletErr) {
+    console.error('[Wallet] Cancel refund failure for order', lockedOrder.orderNumber, walletErr.message);
   }
 
   // 4. Update timeline with persistent Cancellation step

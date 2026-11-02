@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { 
-  Package, MapPin, Tag, Heart, User, // (re-import CreditCard when the Saved Cards tab is restored)
+  Package, MapPin, Tag, Heart, User, Wallet, // (re-import CreditCard when the Saved Cards tab is restored)
  
   LogOut, ChevronRight, ArrowRight, Copy, Check, Plus, 
   Edit3, Trash2, CheckCircle2, ShieldCheck, X, Sparkles, Lock,
@@ -18,6 +18,8 @@ import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import CancellationNotice from '../components/CancellationNotice';
 import RateReviewButton from '../components/RateReviewButton';
 import DeleteAccountModal from '../components/DeleteAccountModal';
+import WalletPanel from '../components/WalletPanel';
+import ShareAppButton from '../components/ShareAppButton';
 
 import { useAuth } from '../../../context/AuthContext';
 import { useWishlist } from '../../../context/WishlistContext';
@@ -481,6 +483,12 @@ export default function AccountPage() {
       icon: Heart, 
       badge: wishlistCount || undefined 
     },
+    {
+      id: 'wallet',
+      label: 'My Wallet',
+      desc: 'Balance, credits & refunds',
+      icon: Wallet
+    },
     // Saved Payment Cards tab disabled for now (online payments are switched off). To restore: uncomment.
     // {
     // id: 'cards',
@@ -649,6 +657,9 @@ export default function AccountPage() {
               );
             })}
 
+            {/* Share the app */}
+            <ShareAppButton className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-white border border-[#D4AF37]/50 text-[#0E2A1B] font-bold text-xs shadow-xs active:bg-[#FAF7F2] min-h-[48px] hover:bg-[#FAF7F2] transition-colors" />
+
             {/* Mobile Logout Button */}
             <div className="pt-2">
               <button
@@ -705,6 +716,7 @@ export default function AccountPage() {
             })}
 
             <div className="pt-3 border-t border-[#D4AF37]/20 mt-3">
+              <ShareAppButton className="mb-1 w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#E8DFC8] hover:bg-white/5 hover:text-white transition-colors" />
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-white/5 hover:text-rose-300 transition-colors"
@@ -998,6 +1010,9 @@ export default function AccountPage() {
               </div>
             )}
             */}
+
+            {/* WALLET TAB */}
+            {activeTab === 'wallet' && <WalletPanel />}
 
             {/* 6. PROFILE & SECURITY TAB */}
             {activeTab === 'profile' && (

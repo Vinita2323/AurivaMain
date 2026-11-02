@@ -201,6 +201,14 @@ export default function OrderTrackingPage() {
               <div>
                 <span className="text-[10.5px] sm:text-xs text-stone-500 block">Total Paid Amount</span>
                 <p className="font-sans text-base sm:text-xl font-bold text-[#0E2A1B]">₹{order.total}</p>
+                {order.walletApplied > 0 && (
+                  <p className="text-[10.5px] sm:text-xs text-emerald-700 font-semibold mt-0.5">
+                    Wallet −₹{order.walletApplied}
+                    {order.total - order.walletApplied > 0
+                      ? ` · Pay on delivery ₹${order.total - order.walletApplied}`
+                      : ' · Paid in full'}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => setIsInvoicePreviewOpen(true)}

@@ -184,12 +184,10 @@ export default function CartDrawer() {
                 </Link>
               </div>
 
-{/* Razorpay / UPI secure-checkout line — disabled with online payments. Restore together with the Online Payment option.
               <div className="flex items-center justify-center gap-1.5 text-[10px] text-stone-400">
                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
                 <span>100% Secure Checkout with Razorpay & UPI</span>
               </div>
-            */}
 
             </div>
           )}

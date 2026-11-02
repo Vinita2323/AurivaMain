@@ -9,6 +9,7 @@ import {
 import AnnouncementBar from '../components/AnnouncementBar';
 import Header from '../components/Header';
 import ProductCard from '../components/ProductCard';
+import ProductShareButton from '../components/ProductShareButton';
 import Footer from '../components/Footer';
 
 import { useAdmin } from '../../../context/AdminContext';
@@ -308,6 +309,11 @@ export default function ProductDetailPage() {
               >
                 <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-rose-600 text-rose-600' : ''}`} />
               </button>
+              <ProductShareButton
+                product={product}
+                price={product.price}
+                className="absolute top-16 right-4 z-10 w-10 h-10 backdrop-blur-xs"
+              />
 
               <img
                 src={selectedImage || product.image}

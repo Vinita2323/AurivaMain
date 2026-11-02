@@ -68,6 +68,8 @@ const pricingSchema = new mongoose.Schema(
     deliveryFee: { type: Number, default: 0, min: 0 },
     tax: { type: Number, default: 0, min: 0 },
     total: { type: Number, required: true, min: 0 },
+    // Part of the total paid from the customer's wallet (the rest is paid on delivery for COD)
+    walletApplied: { type: Number, default: 0, min: 0 },
     couponDetails: {
       couponId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon', default: null },
       code: { type: String, default: null },
@@ -83,7 +85,7 @@ const paymentSchema = new mongoose.Schema(
   {
     method: {
       type: String,
-      enum: ['COD', 'UPI', 'CARD', 'NETBANKING'],
+      enum: ['COD', 'UPI', 'CARD', 'NETBANKING', 'WALLET'],
       default: 'COD'
     },
     status: {

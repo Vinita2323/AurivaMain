@@ -4,6 +4,7 @@ import AdminSidebar from '../components/AdminSidebar';
 import AdminHeader from '../components/AdminHeader';
 import usePagination from '../../../hooks/usePagination';
 import AdminPagination from '../components/AdminPagination';
+import AdminCustomerWallet from '../components/AdminCustomerWallet';
 import { formatOrder } from '../../../context/AuthContext';
 import { adminUserApi, adminOrderApi } from '../../../utils/api';
 
@@ -347,6 +348,9 @@ export default function AdminCustomers() {
                   <strong className="text-[#0E2A1B] font-bold">₹{(Number(selectedCustomer.totalSpent) || 0).toLocaleString('en-IN')}</strong>
                 </div>
               </div>
+
+              {/* Wallet */}
+              <AdminCustomerWallet customerId={selectedCustomer._id || selectedCustomer.id} />
 
               {/* Order History */}
               <div className="space-y-3">
