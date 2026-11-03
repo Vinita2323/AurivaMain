@@ -15,7 +15,7 @@ import { FLAVORS } from '../../../data/flavors';
 import { useAdmin } from '../../../context/AdminContext';
 
 export default function ShopPage() {
-  const { products: PRODUCTS, categories: RAW_CATEGORIES, refreshProducts } = useAdmin();
+  const { products: PRODUCTS, categories: RAW_CATEGORIES, refreshProducts, productsLoading } = useAdmin();
 
   // Show categories in the order the admin configured (order / sortOrder), then by name for ties
   const CATEGORIES = useMemo(() => {
@@ -465,7 +465,20 @@ export default function ShopPage() {
             </div>
 
             {/* Product Cards Grid: 2 columns on mobile (<=767px), 3-4 on tablet/desktop */}
-            {filteredProducts.length === 0 ? (
+            {productsLoading && PRODUCTS.length === 0 ? (
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-5">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-[#E8E2D5] overflow-hidden animate-pulse">
+                    <div className="aspect-square bg-stone-100" />
+                    <div className="p-3 space-y-2">
+                      <div className="h-3 bg-stone-100 rounded w-3/4" />
+                      <div className="h-3 bg-stone-100 rounded w-1/2" />
+                      <div className="h-8 bg-stone-100 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-[#E8E2D5] space-y-4">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-full bg-[#0E2A1B]/5 flex items-center justify-center text-stone-400">
                   <LayoutGrid className="w-7 h-7 sm:w-8 sm:h-8 text-[#C89038]" />

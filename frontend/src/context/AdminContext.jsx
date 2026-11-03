@@ -262,7 +262,15 @@ export function AdminProvider({ children }) {
   };
 
   // 1. Products State - Database is Single Source of Truth
-  const [products, setProducts] = useState([]);
+  // Seed from a per-session cache so a page refresh renders instantly; always revalidated from the API.
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = JSON.parse(sessionStorage.getItem('auriva_products_cache') || '[]');
+      return Array.isArray(cached) ? cached : [];
+    } catch {
+      return [];
+    }
+  });
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState(null);
 
@@ -434,11 +442,15 @@ export function AdminProvider({ children }) {
         id: (p._id || p.id)?.toString()
       }));
       setProducts(fetched);
+      try {
+        sessionStorage.setItem('auriva_products_cache', JSON.stringify(fetched));
+      } catch { /* storage full/unavailable – ignore */ }
       return fetched;
     } catch (err) {
       console.error('[AdminContext] Could not fetch products from backend API:', err.message);
       setProductsError(err.message || 'Could not fetch products from server');
       setProducts([]);
+      try { sessionStorage.removeItem('auriva_products_cache'); } catch { /* ignore */ }
       throw err;
     } finally {
       setProductsLoading(false);
