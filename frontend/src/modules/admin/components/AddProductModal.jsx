@@ -295,10 +295,15 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
   };
 
   const handleUpdateVariant = (id, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      variants: (prev.variants || []).map(v => v.id === id ? { ...v, [field]: value } : v)
-    }));
+    setFormData(prev => {
+      const variants = (prev.variants || []).map(v => v.id === id ? { ...v, [field]: value } : v);
+      const next = { ...prev, variants };
+      // Keep top-level price in sync with the default (first) pack
+      if (variants[0]?.id === id && (field === 'price' || field === 'oldPrice')) {
+        next[field] = value;
+      }
+      return next;
+    });
   };
 
   const handleRemoveVariant = (id) => {
@@ -505,7 +510,11 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                         required
                         min="1"
                         value={formData.price}
-                        onChange={e => setFormData({ ...formData, price: e.target.value })}
+                        onChange={e => setFormData(prev => ({
+                          ...prev,
+                          price: e.target.value,
+                          variants: (prev.variants || []).map((v, i) => i === 0 ? { ...v, price: e.target.value } : v)
+                        }))}
                         placeholder="249"
                         className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 bg-white focus:outline-none focus:border-[#0E2A1B]"
                       />
@@ -518,7 +527,11 @@ export default function AddProductModal({ isOpen, onClose, onSave, initialData =
                         type="number"
                         min="0"
                         value={formData.oldPrice}
-                        onChange={e => setFormData({ ...formData, oldPrice: e.target.value })}
+                        onChange={e => setFormData(prev => ({
+                          ...prev,
+                          oldPrice: e.target.value,
+                          variants: (prev.variants || []).map((v, i) => i === 0 ? { ...v, oldPrice: e.target.value } : v)
+                        }))}
                         placeholder="299"
                         className={`w-full px-3 py-2 text-xs sm:text-sm rounded-lg border bg-white focus:outline-none ${
                           Number(formData.oldPrice) > 0 && Number(formData.price) > 0 && Number(formData.oldPrice) < Number(formData.price)
