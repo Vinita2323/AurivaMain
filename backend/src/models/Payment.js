@@ -7,6 +7,21 @@ const refundItemSchema = new mongoose.Schema(
       trim: true,
       default: ''
     },
+    // Our own idempotency key for this refund request (sent to Razorpay as `receipt`);
+    // lets webhooks that arrive before the API response still be matched to the right row
+    requestKey: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    processedAt: {
+      type: Date
+    },
+    failureReason: {
+      type: String,
+      trim: true,
+      default: ''
+    },
     amount: {
       type: Number,
       required: true,
@@ -69,17 +84,16 @@ const paymentSchema = new mongoose.Schema(
       enum: ['RAZORPAY', 'COD', 'MANUAL'],
       default: 'RAZORPAY'
     },
+    // Uniqueness of non-empty gateway ids is enforced by the partial unique indexes declared below
     gatewayOrderId: {
       type: String,
       trim: true,
-      default: '',
-      index: true
+      default: ''
     },
     gatewayPaymentId: {
       type: String,
       trim: true,
-      default: '',
-      index: true
+      default: ''
     },
     gatewaySignature: {
       type: String,
@@ -122,10 +136,32 @@ const paymentSchema = new mongoose.Schema(
       type: Date
     },
     refunds: [refundItemSchema],
+    // Money the gateway has CONFIRMED as refunded (sum of PROCESSED refunds)
     refundedAmount: {
       type: Number,
       default: 0,
       min: [0, 'Refunded amount cannot be negative']
+    },
+    // Money reserved by refund requests that are still in flight (sum of PENDING refunds)
+    refundPendingAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Pending refund amount cannot be negative']
+    },
+    // Append-only trail of sensitive financial actions (never stores secrets or signatures)
+    auditTrail: {
+      type: [
+        new mongoose.Schema(
+          {
+            action: { type: String, required: true },
+            actor: { type: String, default: 'SYSTEM' },
+            at: { type: Date, default: Date.now },
+            meta: { type: mongoose.Schema.Types.Mixed, default: {} }
+          },
+          { _id: false }
+        )
+      ],
+      default: []
     },
     financialBreakdown: {
       type: financialBreakdownSchema,
@@ -149,7 +185,27 @@ const paymentSchema = new mongoose.Schema(
 // Compound index for querying user payments and status filtering
 paymentSchema.index({ user: 1, createdAt: -1 });
 paymentSchema.index({ order: 1, status: 1 });
+paymentSchema.index({ gatewayOrderId: 1 });
+paymentSchema.index({ gatewayPaymentId: 1 });
 
+// One Razorpay payment can belong to exactly one Payment record (blocks reuse across orders/sessions),
+// and one Razorpay order maps to exactly one Payment record. Empty strings are excluded.
+paymentSchema.index(
+  { gatewayPaymentId: 1 },
+  {
+    name: 'uniq_gatewayPaymentId',
+    unique: true,
+    partialFilterExpression: { gatewayPaymentId: { $type: 'string', $gt: '' } }
+  }
+);
+paymentSchema.index(
+  { gatewayOrderId: 1 },
+  {
+    name: 'uniq_gatewayOrderId',
+    unique: true,
+    partialFilterExpression: { gatewayOrderId: { $type: 'string', $gt: '' } }
+  }
+);
 const Payment = mongoose.models.Payment || mongoose.model('Payment', paymentSchema);
 
 export default Payment;

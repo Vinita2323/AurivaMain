@@ -3,6 +3,18 @@ import Razorpay from 'razorpay';
 import env from './env.js';
 
 let razorpayInstance = null;
+let testClientOverride = null;
+
+/**
+ * TEST ONLY: swap the Razorpay SDK client for a fake so automated tests never touch the network.
+ * Refuses to work unless NODE_ENV === 'test', so it can never alter production behaviour.
+ */
+export const __setRazorpayClientForTests = (client) => {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('__setRazorpayClientForTests is only available when NODE_ENV=test');
+  }
+  testClientOverride = client;
+};
 
 /**
  * Get or lazily initialize Razorpay client instance.
@@ -11,6 +23,10 @@ let razorpayInstance = null;
 export const getRazorpayInstance = () => {
   if (!env.RAZORPAY.IS_CONFIGURED) {
     return null;
+  }
+
+  if (testClientOverride && process.env.NODE_ENV === 'test') {
+    return testClientOverride;
   }
 
   if (!razorpayInstance) {

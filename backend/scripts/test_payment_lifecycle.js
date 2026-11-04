@@ -363,6 +363,10 @@ const runPaymentTests = async () => {
           entity: {
             id: capturedGatewayPaymentId,
             order_id: capturedGatewayOrderId,
+            // A real Razorpay payment.captured event always carries these; the server now checks them (Phase 1 / C-03)
+            amount: Math.round(onlineOrder.pricing.total * 100),
+            currency: 'INR',
+            status: 'captured',
             created_at: Math.floor(Date.now() / 1000)
           }
         }
@@ -390,6 +394,10 @@ const runPaymentTests = async () => {
           entity: {
             id: capturedGatewayPaymentId,
             order_id: capturedGatewayOrderId,
+            // A real Razorpay payment.captured event always carries these; the server now checks them (Phase 1 / C-03)
+            amount: Math.round(onlineOrder.pricing.total * 100),
+            currency: 'INR',
+            status: 'captured',
             created_at: Math.floor(Date.now() / 1000)
           }
         }

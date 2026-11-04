@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import settingsService from './settingsService.js';
 import shiprocketClient from './shiprocketClient.js';
 import env from '../config/env.js';
-import { updateOrderTimeline, ALLOWED_TRANSITIONS } from './orderService.js';
+import { updateOrderTimeline, ALLOWED_TRANSITIONS, assertPaymentAllowsFulfilment } from './orderService.js';
 
 /**
  * Parse pack label like "150g" / "300 g" / "0.5kg" into kilograms.
@@ -377,6 +377,9 @@ class ShiprocketFulfillmentService {
       err.statusCode = 400;
       throw err;
     }
+
+    // Never hand an unpaid online order to a courier (COD and paid orders are unaffected)
+    assertPaymentAllowsFulfilment(order);
 
     if (sr.orderId && sr.shipmentId && !options.force) {
       return {

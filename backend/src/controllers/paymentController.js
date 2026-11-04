@@ -3,6 +3,16 @@ import { sendSuccess, sendError } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/status.js';
 
 /**
+ * Customer-facing payment payloads must not expose the internal audit trail.
+ */
+const forCustomer = (payment) => {
+  if (!payment) return payment;
+  const obj = typeof payment.toObject === 'function' ? payment.toObject() : { ...payment };
+  delete obj.auditTrail;
+  return obj;
+};
+
+/**
  * Public: Get current payment gateway configuration
  */
 export const getConfig = (req, res) => {
@@ -53,7 +63,7 @@ export const verifyPayment = async (req, res, next) => {
     return sendSuccess(
       res,
       result.message || 'Payment verified successfully',
-      result,
+      { ...result, payment: forCustomer(result.payment) },
       HTTP_STATUS.OK
     );
   } catch (error) {
@@ -95,7 +105,8 @@ export const handleWebhook = async (req, res, next) => {
     const result = await PaymentService.handleWebhookEvent({
       rawBody,
       signature,
-      eventPayload: req.body
+      eventPayload: req.body,
+      eventId: req.headers['x-razorpay-event-id'] || null
     });
 
     return res.status(HTTP_STATUS.OK).json({ status: 'ok', ...result });
@@ -113,7 +124,7 @@ export const handleWebhook = async (req, res, next) => {
 export const getPaymentByOrder = async (req, res, next) => {
   try {
     const payment = await PaymentService.getPaymentByOrderId(req.user._id, req.params.orderId);
-    return sendSuccess(res, 'Payment retrieved successfully', { payment });
+    return sendSuccess(res, 'Payment retrieved successfully', { payment: forCustomer(payment) });
   } catch (error) {
     if (error.statusCode) {
       return sendError(res, error.message, null, error.statusCode);
@@ -153,11 +164,51 @@ export const getPaymentByIdAdmin = async (req, res, next) => {
 };
 
 /**
+ * Admin: mark a flagged payment as reconciled (note required; changes only the reconciliation marker)
+ */
+export const reconcilePaymentAdmin = async (req, res, next) => {
+  try {
+    const payment = await PaymentService.markReconciled(req.user._id, req.params.id, req.body?.note);
+    return sendSuccess(res, 'Payment marked as reconciled', { payment });
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, { code: error.code }, error.statusCode);
+    }
+    next(error);
+  }
+};
+
+/**
+ * Admin: retry a failed refund (uses the same atomic, idempotent refund engine)
+ */
+export const retryRefundAdmin = async (req, res, next) => {
+  try {
+    const result = await PaymentService.retryRefund(req.user._id, req.params.id, {
+      idempotencyKey: req.get('Idempotency-Key') || req.body?.idempotencyKey || null
+    });
+    return sendSuccess(
+      res,
+      result.duplicate ? 'Refund retry already submitted' : 'Refund retry submitted. Status updates when the gateway confirms.',
+      { payment: result.payment, duplicate: result.duplicate }
+    );
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, { code: error.code }, error.statusCode);
+    }
+    next(error);
+  }
+};
+
+/**
  * Admin: Initiate payment refund
  */
 export const initiateRefundAdmin = async (req, res, next) => {
   try {
-    const payment = await PaymentService.initiateRefund(req.user._id, req.params.id, req.body);
+    // An `Idempotency-Key` header (or body field) makes a retried / double-clicked request harmless
+    const payment = await PaymentService.initiateRefund(req.user._id, req.params.id, {
+      ...(req.body || {}),
+      idempotencyKey: req.get('Idempotency-Key') || req.body?.idempotencyKey || null
+    });
     return sendSuccess(res, 'Refund initiated successfully', { payment });
   } catch (error) {
     if (error.statusCode) {

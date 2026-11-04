@@ -30,4 +30,18 @@ router.get('/:id', paymentController.getPaymentByIdAdmin);
  */
 router.post('/:id/refund', validateRefundRequest, paymentController.initiateRefundAdmin);
 
+/**
+ * @route   POST /api/v1/admin/payments/:id/refund/retry
+ * @desc    Retry a failed refund (same atomic / idempotent engine as a normal refund)
+ * @access  Protected (Admin Only)
+ */
+router.post('/:id/refund/retry', paymentController.retryRefundAdmin);
+
+/**
+ * @route   POST /api/v1/admin/payments/:id/reconcile
+ * @desc    Mark a flagged payment as reconciled (note required). Never edits payment/refund status.
+ * @access  Protected (Admin Only)
+ */
+router.post('/:id/reconcile', paymentController.reconcilePaymentAdmin);
+
 export default router;

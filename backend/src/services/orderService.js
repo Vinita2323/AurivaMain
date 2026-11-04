@@ -195,7 +195,11 @@ export const placeOrder = async (userId, payload) => {
     guestId = null,
     items: clientItems = null,
     paymentStatus = null,
-    useWallet = false
+    useWallet = false,
+    // INTERNAL-ONLY flags, set exclusively by paymentService after server-side gateway verification.
+    // The HTTP controller strips them from client input; they are ignored unless trustedPayment === true.
+    trustedPayment = false,
+    expectedTotal = null
   } = payload;
 
   // 1. Idempotency Check
@@ -355,6 +359,19 @@ export const placeOrder = async (userId, payload) => {
   });
   const { deliveryFee, tax, total } = pricing;
 
+  // 5b. Prepaid orders: the amount the customer actually paid must match what this cart costs NOW.
+  // Checked before any stock/coupon/wallet side effect so a mismatch leaves nothing to roll back.
+  if (trustedPayment === true && expectedTotal !== null && expectedTotal !== undefined) {
+    if (Math.abs(Number(total) - Number(expectedTotal)) > 0.01) {
+      const err = new Error(
+        `Order total (₹${total}) does not match the amount paid (₹${expectedTotal}). The cart changed after payment started.`
+      );
+      err.statusCode = 409;
+      err.code = 'PAID_AMOUNT_MISMATCH';
+      throw err;
+    }
+  }
+
   // 6. Address Snapshot
   const addressSnapshot = {
     fullName: selectedAddress.fullName,
@@ -446,8 +463,10 @@ export const placeOrder = async (userId, payload) => {
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+    // Only a server-verified gateway payment may create an already-PAID order (never client input)
     const initialPaymentStatus =
-      String(paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'PENDING';
+      trustedPayment === true && String(paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'PENDING';
+    const safeTransactionId = trustedPayment === true ? paymentDetails.transactionId || '' : '';
 
     const order = new Order({
       _id: orderObjectId,
@@ -468,8 +487,8 @@ export const placeOrder = async (userId, payload) => {
       payment: {
         method: fullyPaidByWallet ? 'WALLET' : normalizedPaymentMethod,
         status: fullyPaidByWallet ? 'PAID' : initialPaymentStatus,
-        transactionId: paymentDetails.transactionId || '',
-        upiApp: paymentDetails.upiApp || ''
+        transactionId: safeTransactionId,
+        upiApp: trustedPayment === true ? paymentDetails.upiApp || '' : ''
       },
       delivery: {
         type: 'Standard Express Courier',
@@ -813,6 +832,29 @@ export const getAllOrdersAdmin = async (filters = {}) => {
 /**
  * Admin: Update order fulfillment status with lifecycle validation and timeline tracking
  */
+/**
+ * Payment states that mean "the money is with us" (partially refunded still counts as received).
+ */
+const PAYMENT_RECEIVED_STATUSES = ['PAID', 'PARTIALLY_REFUNDED'];
+
+/**
+ * Orders may only be shipped / handed to a courier / delivered when payment is settled:
+ *  - Cash on Delivery orders follow their normal flow (cash is collected at the door), and
+ *  - every other (online / wallet) order must already be PAID.
+ * Prevents shipping goods for an online order whose payment was never verified.
+ */
+export const assertPaymentAllowsFulfilment = (order) => {
+  const method = String(order?.payment?.method || 'COD').toUpperCase();
+  if (method === 'COD') return;
+  if (PAYMENT_RECEIVED_STATUSES.includes(order?.payment?.status)) return;
+  const err = new Error(
+    `Order #${order?.orderNumber || ''} is an online-payment order and its payment is "${order?.payment?.status || 'PENDING'}". It cannot be shipped or delivered until the payment is verified.`
+  );
+  err.statusCode = 400;
+  err.code = 'PAYMENT_NOT_RECEIVED';
+  throw err;
+};
+
 export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy = 'Admin', note = '', rider = null } = {}) => {
   const query = mongoose.Types.ObjectId.isValid(orderId)
     ? { _id: orderId }
@@ -852,15 +894,23 @@ export const updateOrderStatusAdmin = async (orderId, newStatusRaw, { updatedBy 
     });
   }
 
+  // Unpaid online orders must not move into the shipping / delivery stages
+  if (['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(newStatus)) {
+    assertPaymentAllowsFulfilment(order);
+  }
+
   order.status = newStatus;
 
   if (newStatus === 'DELIVERED') {
     order.delivery.status = 'Delivered';
-    order.payment.status = 'PAID';
-    await Payment.findOneAndUpdate(
-      { order: order._id },
-      { $set: { status: 'PAID', paidAt: new Date() } }
-    ).catch(() => {});
+    // Delivery only settles CASH-on-delivery orders. An online order is paid by the gateway, never by delivery.
+    if (String(order.payment?.method || 'COD').toUpperCase() === 'COD') {
+      order.payment.status = 'PAID';
+      await Payment.findOneAndUpdate(
+        { order: order._id, gateway: 'COD', status: { $ne: 'PAID' } },
+        { $set: { status: 'PAID', paidAt: new Date() } }
+      ).catch(() => {});
+    }
   } else if (newStatus === 'OUT_FOR_DELIVERY') {
     order.delivery.status = 'Out for Delivery';
     applyRiderDetails(order, rider);
@@ -1016,6 +1066,9 @@ export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
     err.statusCode = 400;
     throw err;
   }
+
+  // Dispatch hands the parcel to a courier — never for an unpaid online order
+  assertPaymentAllowsFulfilment(order);
 
   if (courierName) order.courierName = courierName.trim();
   if (awbNumber) order.awbNumber = awbNumber.trim();
@@ -1197,6 +1250,15 @@ export const cancelOrder = async (orderId, options = {}) => {
     await walletService.refundOrder(lockedOrder);
   } catch (walletErr) {
     console.error('[Wallet] Cancel refund failure for order', lockedOrder.orderNumber, walletErr.message);
+  }
+
+  // Online payment already captured by the gateway → start the refund workflow.
+  // Idempotent per order (request key), skips COD / unpaid / wallet-only orders, and never blocks cancellation:
+  // if the gateway call fails the payment is flagged `refundRequired` for an admin to retry.
+  try {
+    await PaymentService.refundForCancelledOrder(lockedOrder);
+  } catch (refundErr) {
+    console.error('[Refund] Cancel-triggered refund failure for order', lockedOrder.orderNumber, refundErr.message);
   }
 
   // 4. Update timeline with persistent Cancellation step

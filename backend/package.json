@@ -11,7 +11,8 @@
     "test:db": "node scripts/test-db.js",
     "test:admin-forgot-password": "node scripts/test_admin_forgot_password.js",
     "test:smtp": "node scripts/test-smtp.js",
-    "test:smtp:send": "node scripts/test-smtp.js --send"
+    "test:smtp:send": "node scripts/test-smtp.js --send",
+    "test:payments": "node --test --test-concurrency=1 tests/payments/"
   },
   "keywords": [
     "nodejs",
@@ -40,6 +41,7 @@
     "razorpay": "^2.9.8"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^10.4.3",
     "nodemon": "^3.1.9"
   }
 }

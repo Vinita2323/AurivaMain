@@ -10,9 +10,18 @@ export const placeOrder = async (req, res, next) => {
       req.headers['x-guest-id'] ||
       req.headers['X-Guest-Id'] ||
       null;
+    // Whitelist customer input. Payment state (paymentStatus / paymentDetails / trustedPayment / expectedTotal)
+    // is NEVER accepted from the client — an order only becomes PAID through server-side gateway verification.
+    const body = req.body || {};
     const order = await orderService.placeOrder(req.user._id, {
-      ...req.body,
-      guestId: guestId || req.body?.guestId || null
+      addressId: body.addressId,
+      paymentMethod: body.paymentMethod,
+      deliverySlot: body.deliverySlot,
+      couponCode: body.couponCode,
+      idempotencyKey: body.idempotencyKey,
+      items: body.items,
+      useWallet: body.useWallet,
+      guestId: guestId || body.guestId || null
     });
     return sendSuccess(
       res,

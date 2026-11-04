@@ -80,13 +80,17 @@ export async function apiRequest(endpoint, options = {}) {
   // IMPORTANT: Never send admin JWT on storefront/user APIs (cart, wishlist, orders…).
   // Doing so causes User.findById(adminId) to fail → 401 → clears the fresh user session after OTP login.
   let attachedAuthRole = null; // 'ADMIN' | 'USER' | null
+  // The token is chosen by the ENDPOINT being called, not by the page the browser is on:
+  //  - admin endpoints (/admin/*, /auth/admin/*) -> admin token only
+  //  - shared endpoints (/fcm-tokens/*, valid for either role) -> admin token on admin pages, else user token
+  //  - every other endpoint (cart, orders, addresses, wallet...) -> user token only, even on /admin pages
+  const endpointIsAdmin = endpoint.includes('/admin') || endpoint.includes('/auth/admin');
+  const endpointIsShared = endpoint.includes('/fcm-tokens');
   if (!headers.Authorization) {
-    let adminToken = localStorage.getItem('auriva_admin_token');
+    const adminToken = localStorage.getItem('auriva_admin_token');
     let userToken = localStorage.getItem('auriva_user_token');
     const pathIsAdmin =
       typeof window !== 'undefined' && window.location.pathname.includes('/admin');
-    const endpointIsAdmin = endpoint.includes('/admin') || endpoint.includes('/auth/admin');
-    const isAdminContext = endpointIsAdmin || pathIsAdmin;
 
     // Drop stale user JWTs before they spam 401s on checkout / orders
     if (userToken && isJwtExpired(userToken)) {
@@ -94,20 +98,21 @@ export async function apiRequest(endpoint, options = {}) {
       userToken = null;
     }
 
-    if (isAdminContext || (endpoint.includes('/fcm-tokens') && !userToken && pathIsAdmin)) {
-      // Never auto-login with embedded credentials — admin must sign in via /admin/login
+    if (endpointIsAdmin) {
+      // Never auto-login with embedded credentials — admin must sign in via /admin/login.
+      // Never fall back to the customer token (it would only produce a 403).
       if (adminToken) {
         headers.Authorization = `Bearer ${adminToken}`;
         attachedAuthRole = 'ADMIN';
-      } else if (userToken) {
-        headers.Authorization = `Bearer ${userToken}`;
-        attachedAuthRole = 'USER';
       }
+    } else if (endpointIsShared && pathIsAdmin && adminToken) {
+      headers.Authorization = `Bearer ${adminToken}`;
+      attachedAuthRole = 'ADMIN';
     } else if (userToken) {
       headers.Authorization = `Bearer ${userToken}`;
       attachedAuthRole = 'USER';
     }
-    // No admin-token fallback on user/storefront endpoints
+    // The admin token is never sent to customer endpoints
   } else if (typeof headers.Authorization === 'string') {
     const payload = decodeJwtPayload(headers.Authorization.replace(/^Bearer\s+/i, ''));
     attachedAuthRole = payload?.role === 'ADMIN' ? 'ADMIN' : payload ? 'USER' : null;
@@ -128,10 +133,25 @@ export async function apiRequest(endpoint, options = {}) {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      // Auto-retry once on 401 Unauthorized for admin endpoints
-      const isAdminRetry = endpoint.includes('/admin') || 
-        (typeof window !== 'undefined' && window.location.pathname.includes('/admin'));
-      if (response.status === 401 && isAdminRetry && !endpoint.includes('/auth/admin/login')) {
+      // A 401 ends the ADMIN session only when the request was an admin request
+      // (admin endpoint, or admin token attached) — not merely because the page is under /admin.
+      const isAdminRetry = endpointIsAdmin || attachedAuthRole === 'ADMIN';
+
+      // Change-password answers 401 for "current password is incorrect". That is a form error,
+      // not an expired session: keep the admin signed in unless the stored token is really expired.
+      const isCredentialCheck = endpoint.includes('/auth/admin/change-password');
+      let adminTokenExpired = true;
+      if (isCredentialCheck) {
+        const stored = localStorage.getItem('auriva_admin_token');
+        adminTokenExpired = !stored || isJwtExpired(stored);
+      }
+
+      if (
+        response.status === 401 &&
+        isAdminRetry &&
+        !endpoint.includes('/auth/admin/login') &&
+        (!isCredentialCheck || adminTokenExpired)
+      ) {
         try {
           localStorage.removeItem('auriva_admin_token');
           localStorage.removeItem('auriva_admin_auth');
@@ -800,6 +820,8 @@ export const adminPaymentApi = {
     if (params.status) query.append('status', params.status);
     if (params.method) query.append('method', params.method);
     if (params.search) query.append('search', params.search);
+    // all | needs_reconciliation | reconciled | failed | refund_required
+    if (params.view && params.view !== 'all') query.append('view', params.view);
     const qs = query.toString();
     return apiRequest(`/admin/payments${qs ? `?${qs}` : ''}`);
   },
@@ -809,6 +831,18 @@ export const adminPaymentApi = {
     apiRequest(`/admin/payments/${id}/refund`, {
       method: 'POST',
       body: JSON.stringify(payload)
+    }),
+  /** Retry a failed refund. The server de-duplicates, so a double click can never refund twice. */
+  retryRefund: (id) =>
+    apiRequest(`/admin/payments/${id}/refund/retry`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    }),
+  /** Close a flagged payment once it has been resolved (note required). Does not change payment status. */
+  reconcilePayment: (id, note) =>
+    apiRequest(`/admin/payments/${id}/reconcile`, {
+      method: 'POST',
+      body: JSON.stringify({ note })
     })
 };
 

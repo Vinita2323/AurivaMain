@@ -5,7 +5,7 @@ import {
   Check, CreditCard, ShieldCheck, 
   Wallet, Plus, ArrowRight, Truck, Sparkles, ShoppingBag, 
   Lock, ArrowLeft, ChevronRight, CheckCircle2, Clock, 
-  Tag, Gift, AlertCircle, Percent, Flame, Pencil, Trash2
+  Tag, Gift, AlertCircle, Percent, Flame, Pencil, Trash2, Minus
 } from 'lucide-react';
 
 import AnnouncementBar from '../components/AnnouncementBar';
@@ -51,6 +51,8 @@ export default function CheckoutPage() {
     removeCoupon,
     clearCart,
     updateQty,
+    removeFromCart,
+    getRemainingStock,
     shippingSettings,
     freeShippingMin
   } = useCart();
@@ -1089,22 +1091,58 @@ export default function CheckoutPage() {
 
               {/* Items List */}
               <div className="max-h-40 sm:max-h-56 overflow-y-auto divide-y divide-stone-100 pr-1 space-y-1 sm:space-y-1.5">
-                {cartItems.map((item) => (
-                  <div key={`${item.id}-${item.weight}`} className="pt-1.5 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                      <img 
-                        src={resolveProductImage(item)} 
-                        alt="" 
-                        className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg object-cover border border-[#E8E2D5] bg-[#FAF7F2] shrink-0" 
-                      />
-                      <div className="min-w-0">
-                        <p className="font-bold text-[#0E2A1B] truncate text-xs">{item.name}</p>
-                        <p className="text-[9px] sm:text-[10px] text-stone-500">{item.weight} • Qty: {item.qty}</p>
+                {cartItems.map((item) => {
+                  const itemId = item.productId || item.id || item._id;
+                  const noMoreStock = getRemainingStock(itemId) <= 0;
+                  return (
+                    <div key={`${itemId}-${item.weight}`} className="pt-1.5 flex items-center justify-between text-xs gap-2">
+                      <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                        <img
+                          src={resolveProductImage(item)}
+                          alt=""
+                          className="w-9 h-9 sm:w-12 sm:h-12 rounded-lg object-cover border border-[#E8E2D5] bg-[#FAF7F2] shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#0E2A1B] truncate text-xs">{item.name}</p>
+                          <p className="text-[9px] sm:text-[10px] text-stone-500">{item.weight} • ₹{item.price} each</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="flex items-center border border-stone-300 rounded-lg bg-stone-50 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => updateQty(itemId, item.weight, -1)}
+                                className="p-1 text-stone-600 hover:bg-stone-200 hover:text-[#0E2A1B] transition-colors min-w-[24px] min-h-[24px] flex items-center justify-center"
+                                aria-label={`Decrease quantity of ${item.name}`}
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="px-2 text-[11px] font-bold text-stone-900 select-none min-w-[22px] text-center">{item.qty}</span>
+                              <button
+                                type="button"
+                                onClick={() => updateQty(itemId, item.weight, 1)}
+                                disabled={noMoreStock}
+                                title={noMoreStock ? 'No more stock available' : undefined}
+                                className="p-1 text-stone-600 hover:bg-stone-200 hover:text-[#0E2A1B] transition-colors min-w-[24px] min-h-[24px] flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                                aria-label={`Increase quantity of ${item.name}`}
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeFromCart(itemId, item.weight)}
+                              className="p-1 text-stone-400 hover:text-rose-600 transition-colors"
+                              aria-label={`Remove ${item.name} from cart`}
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
+                      <span className="font-sans font-bold text-[#0E2A1B] shrink-0 text-xs">₹{item.price * item.qty}</span>
                     </div>
-                    <span className="font-sans font-bold text-[#0E2A1B] shrink-0 ml-2 text-xs">₹{item.price * item.qty}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Coupon Code Input */}

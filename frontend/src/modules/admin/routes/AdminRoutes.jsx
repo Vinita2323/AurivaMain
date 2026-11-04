@@ -7,6 +7,7 @@ import AdminBestsellers from '../pages/AdminBestsellers';
 import AdminCategories from '../pages/AdminCategories';
 import AdminInventory from '../pages/AdminInventory';
 import AdminOrders from '../pages/AdminOrders';
+import AdminPayments from '../pages/AdminPayments';
 import AdminCustomers from '../pages/AdminCustomers';
 import AdminCoupons from '../pages/AdminCoupons';
 import AdminReviews from '../pages/AdminReviews';
@@ -48,6 +49,7 @@ export default function AdminRoutes() {
       <Route path="/categories" element={<ProtectedAdminRoute><AdminCategories /></ProtectedAdminRoute>} />
       <Route path="/inventory" element={<ProtectedAdminRoute><AdminInventory /></ProtectedAdminRoute>} />
       <Route path="/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />
+      <Route path="/payments" element={<ProtectedAdminRoute><AdminPayments /></ProtectedAdminRoute>} />
       <Route path="/customers" element={<ProtectedAdminRoute><AdminCustomers /></ProtectedAdminRoute>} />
       <Route path="/coupons" element={<ProtectedAdminRoute><AdminCoupons /></ProtectedAdminRoute>} />
       <Route path="/reviews" element={<ProtectedAdminRoute><AdminReviews /></ProtectedAdminRoute>} />
