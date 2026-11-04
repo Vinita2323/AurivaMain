@@ -5,9 +5,9 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node api.js && node src/server.js",
-    "dev": "node api.js && nodemon src/server.js",
-    "build:frontend": "node scripts/sync-frontend.js",
+    "start": "node init && node src/server.js",
+    "dev": "node init && nodemon src/server.js",
+    "build:frontend": "node init && node scripts/sync-frontend.js",
     "test:db": "node scripts/test-db.js",
     "test:admin-forgot-password": "node scripts/test_admin_forgot_password.js",
     "test:smtp": "node scripts/test-smtp.js",
