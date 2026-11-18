@@ -175,6 +175,32 @@ const orderSchema = new mongoose.Schema(
       type: deliverySchema,
       default: () => ({})
     },
+    // Delivery method, decided by the backend when the order is created and then stable for the order's life.
+    // Orders created before this field existed have it undefined and are treated as SHIPROCKET (see deliveryMethodService).
+    deliveryMethod: { type: String, enum: ['SELF', 'SHIPROCKET'], default: undefined, index: true },
+    deliveryMethodSource: { type: String, enum: ['AUTO', 'ADMIN'], default: undefined },
+    deliveryMethodMatchedBy: { type: String, enum: ['PINCODE', 'DISTANCE', ''], default: undefined },
+    deliveryMethodDistanceKm: { type: Number, default: undefined },
+    deliveryMethodUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: undefined },
+    deliveryMethodUpdatedAt: { type: Date, default: undefined },
+    deliveryMethodReason: { type: String, trim: true, maxlength: 500, default: undefined },
+    // Every admin override: previous and new method, who, why, when
+    deliveryMethodHistory: {
+      type: [
+        new mongoose.Schema(
+          {
+            from: { type: String, enum: ['SELF', 'SHIPROCKET'], required: true },
+            to: { type: String, enum: ['SELF', 'SHIPROCKET'], required: true },
+            by: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+            byName: { type: String, default: '' },
+            reason: { type: String, trim: true, maxlength: 500, default: '' },
+            at: { type: Date, default: Date.now }
+          },
+          { _id: false }
+        )
+      ],
+      default: undefined
+    },
     courierName: {
       type: String,
       trim: true,

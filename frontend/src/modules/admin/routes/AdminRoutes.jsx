@@ -9,6 +9,7 @@ import AdminInventory from '../pages/AdminInventory';
 import AdminOrders from '../pages/AdminOrders';
 import AdminPayments from '../pages/AdminPayments';
 import AdminCustomers from '../pages/AdminCustomers';
+import AdminCodPermission from '../pages/AdminCodPermission';
 import AdminCoupons from '../pages/AdminCoupons';
 import AdminReviews from '../pages/AdminReviews';
 // Campaigns / Promotions page is disabled for now (not connected to the user app yet).
@@ -51,6 +52,7 @@ export default function AdminRoutes() {
       <Route path="/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />
       <Route path="/payments" element={<ProtectedAdminRoute><AdminPayments /></ProtectedAdminRoute>} />
       <Route path="/customers" element={<ProtectedAdminRoute><AdminCustomers /></ProtectedAdminRoute>} />
+      <Route path="/cod-permission" element={<ProtectedAdminRoute><AdminCodPermission /></ProtectedAdminRoute>} />
       <Route path="/coupons" element={<ProtectedAdminRoute><AdminCoupons /></ProtectedAdminRoute>} />
       <Route path="/reviews" element={<ProtectedAdminRoute><AdminReviews /></ProtectedAdminRoute>} />
       {/* <Route path="/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} /> */}

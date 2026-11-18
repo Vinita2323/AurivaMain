@@ -25,6 +25,25 @@ const STATUS_FILTERS = [
   { id: 'Cancelled', label: 'Cancelled' }
 ];
 
+const DELIVERY_FILTERS = [
+  { id: 'All', label: 'All Delivery Types' },
+  { id: 'SELF', label: 'Self Delivery' },
+  { id: 'SHIPROCKET', label: 'Shiprocket' }
+];
+
+function DeliveryBadge({ method }) {
+  const isSelf = method === 'SELF';
+  return (
+    <span
+      className={`inline-block text-[9.5px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border ${
+        isSelf ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-stone-50 text-stone-600 border-stone-200'
+      }`}
+    >
+      {isSelf ? 'Self Delivery' : 'Shiprocket'}
+    </span>
+  );
+}
+
 export default function AdminOrders() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { orders: localContextOrders } = useAuth();
@@ -33,6 +52,12 @@ export default function AdminOrders() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [deliveryFilter, setDeliveryFilter] = useState('All');
+  // Delivery-method override dialog: { target: 'SELF' | 'SHIPROCKET' } | null
+  const [methodDialog, setMethodDialog] = useState(null);
+  const [methodReason, setMethodReason] = useState('');
+  const [methodBusy, setMethodBusy] = useState(false);
+  const [methodError, setMethodError] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
 
@@ -62,7 +87,8 @@ export default function AdminOrders() {
         page,
         limit: 20,
         status: statusFilter !== 'All' ? statusFilter : undefined,
-        search: search.trim() || undefined
+        search: search.trim() || undefined,
+        deliveryMethod: deliveryFilter !== 'All' ? deliveryFilter : undefined
       });
 
       if (res && res.data && Array.isArray(res.data.orders)) {
@@ -117,7 +143,31 @@ export default function AdminOrders() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, statusFilter, search, localContextOrders]);
+  }, [page, statusFilter, deliveryFilter, search, localContextOrders]);
+
+  const openMethodDialog = (target) => {
+    setMethodReason('');
+    setMethodError('');
+    setMethodDialog({ target });
+  };
+
+  const confirmMethodChange = async () => {
+    if (!methodDialog || !selectedOrderForDetail || methodBusy) return;
+    setMethodBusy(true);
+    setMethodError('');
+    try {
+      const id = selectedOrderForDetail._id || selectedOrderForDetail.id;
+      await adminOrderApi.changeDeliveryMethod(id, methodDialog.target, methodReason.trim());
+      const fresh = await adminOrderApi.getOrderById(id);
+      if (fresh?.data?.order) setSelectedOrderForDetail(formatOrder(fresh.data.order));
+      setMethodDialog(null);
+      fetchOrders();
+    } catch (err) {
+      setMethodError(err?.message || 'Could not change the delivery method.');
+    } finally {
+      setMethodBusy(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -352,6 +402,27 @@ export default function AdminOrders() {
             })}
           </div>
 
+          {/* Delivery method filter: Self Delivery / Shiprocket */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar" role="group" aria-label="Delivery method filter">
+            {DELIVERY_FILTERS.map(f => {
+              const isActive = deliveryFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => { setDeliveryFilter(f.id); setPage(1); }}
+                  aria-pressed={isActive}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                    isActive
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'bg-white text-stone-600 border border-[#E8E2D5] hover:bg-stone-50'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Full-Width Orders Table */}
           <div className="bg-white rounded-xl border border-[#E8E2D5] shadow-2xs overflow-hidden w-full">
             <div className="overflow-x-auto">
@@ -393,6 +464,7 @@ export default function AdminOrders() {
                           >
                             #{ord.id}
                           </button>
+                          <div className="mt-1"><DeliveryBadge method={ord.deliveryMethod} /></div>
                           {ord.awbNumber && (
                             <span className="block text-[10.5px] font-mono text-stone-400 mt-0.5 truncate max-w-[120px]">
                               AWB: {ord.awbNumber}
@@ -535,6 +607,48 @@ export default function AdminOrders() {
         onUpdateStatus={handleUpdateOrderStatus}
       />
 
+      {/* Confirm delivery-method change (reason is required and saved in the order's audit history) */}
+      {methodDialog && selectedOrderForDetail && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" data-lenis-prevent role="dialog" aria-modal="true" aria-labelledby="dm-title">
+          <div className="bg-white rounded-2xl border border-[#E8E2D5] shadow-xl w-full max-w-md p-5 space-y-3 font-sans">
+            <h2 id="dm-title" className="font-semibold text-[#0E2A1B]">
+              Change delivery method to {methodDialog.target === 'SELF' ? 'Self Delivery' : 'Shiprocket'}?
+            </h2>
+            <p className="text-sm text-stone-600">
+              {methodDialog.target === 'SELF'
+                ? 'You will deliver this order yourself and no Shiprocket shipment will be created. If a Shiprocket shipment already exists, the change is refused: cancel that shipment first.'
+                : 'This order will be shipped through Shiprocket. Nothing is created automatically; use Create Shipment (or mark Ready for Dispatch) afterwards. The delivery charge already agreed with the customer does not change.'}
+            </p>
+            <label htmlFor="dm-reason" className="block text-xs font-medium text-stone-600">Reason (required, saved with your name)</label>
+            <textarea
+              id="dm-reason"
+              value={methodReason}
+              onChange={(e) => setMethodReason(e.target.value)}
+              maxLength={500}
+              rows={3}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:border-[#0E2A1B]"
+              placeholder="e.g. Parcel is too large for local delivery"
+            />
+            {methodError && (
+              <div role="alert" className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">{methodError}</div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setMethodDialog(null)} disabled={methodBusy} className="px-4 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-40">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmMethodChange}
+                disabled={methodBusy || methodReason.trim().length < 3}
+                className="px-4 py-2 rounded-lg bg-[#0E2A1B] text-[#D4AF37] text-xs font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {methodBusy ? 'Saving…' : 'Yes, change it'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Order Detail Modal */}
       {selectedOrderForDetail && (
         <div 
@@ -626,8 +740,46 @@ export default function AdminOrders() {
                 </div>
               )}
 
-              {/* Shiprocket Shipment (existing design language — no layout redesign) */}
+              {/* Delivery method: automatic classification + audited admin override */}
               {(() => {
+                const o = selectedOrderForDetail;
+                const isSelf = o.deliveryMethod === 'SELF';
+                const closed = ['Cancelled', 'Delivered'].includes(o.status);
+                const lastChange = Array.isArray(o.deliveryMethodHistory) && o.deliveryMethodHistory.length
+                  ? o.deliveryMethodHistory[o.deliveryMethodHistory.length - 1]
+                  : null;
+                return (
+                  <div className="p-3.5 rounded-xl bg-white border border-[#E8E2D5] space-y-2 text-xs" data-testid="delivery-method-card">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-stone-400 block text-[10px] font-bold uppercase">Delivery method</span>
+                      <DeliveryBadge method={o.deliveryMethod} />
+                    </div>
+                    <p className="text-stone-600">
+                      {isSelf
+                        ? 'You deliver this order yourself. No Shiprocket shipment is created. Use the status buttons to pack, dispatch and deliver it.'
+                        : 'Shipped through Shiprocket.'}
+                      {o.deliveryMethodSource === 'ADMIN' ? ' (Set by an admin.)' : ''}
+                    </p>
+                    {lastChange && (
+                      <p className="text-[11px] text-stone-500">
+                        Last change: {lastChange.from} → {lastChange.to} by {lastChange.byName || 'admin'} — “{lastChange.reason}”
+                      </p>
+                    )}
+                    {!closed && (
+                      <button
+                        type="button"
+                        onClick={() => openMethodDialog(isSelf ? 'SHIPROCKET' : 'SELF')}
+                        className="px-2.5 py-1.5 rounded-md border border-stone-300 bg-white text-[10px] font-bold uppercase tracking-wider text-stone-700 hover:bg-stone-50"
+                      >
+                        {isSelf ? 'Switch to Shiprocket delivery' : 'Switch to Self delivery'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Shiprocket Shipment (existing design language — no layout redesign). Not shown for self-delivery orders. */}
+              {selectedOrderForDetail.deliveryMethod !== 'SELF' && (() => {
                 const sr = selectedOrderForDetail.shiprocket || {};
                 const hasShipment = Boolean(sr.orderId || sr.shipmentId);
                 const hasAwb = Boolean(sr.awbCode || selectedOrderForDetail.awbNumber);

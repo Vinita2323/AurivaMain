@@ -8,6 +8,7 @@ import adminReviewRoutes from './adminReviewRoutes.js';
 import adminPaymentRoutes from './adminPaymentRoutes.js';
 import adminCouponRoutes from './adminCouponRoutes.js';
 import adminNotificationRoutes from './adminNotificationRoutes.js';
+import adminCodRoutes from './adminCodRoutes.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { requireAdmin } from '../middleware/roleMiddleware.js';
 import { adminLoginLimiter } from '../middleware/rateLimiter.js';
@@ -28,6 +29,7 @@ router.use('/reviews', adminReviewRoutes);
 router.use('/payments', adminPaymentRoutes);
 router.use('/coupons', adminCouponRoutes);
 router.use('/notifications', adminNotificationRoutes);
+router.use('/cod-permissions', adminCodRoutes);
 
 
 // Protected Admin Routes (Require Auth + ADMIN Role)

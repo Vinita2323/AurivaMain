@@ -55,6 +55,13 @@ router.patch('/:id/status', validateOrderId, validateUpdateOrderStatus, orderCon
  * @desc    Assign courier, AWB, rider tracking, and dispatch notes
  * @access  Protected (Admin Only)
  */
+/**
+ * @route   PATCH /api/v1/admin/orders/:id/delivery-method
+ * @desc    Override the delivery method (SELF / SHIPROCKET) with a recorded reason
+ * @access  Protected (Admin Only)
+ */
+router.patch('/:id/delivery-method', validateOrderId, orderController.updateDeliveryMethod);
+
 router.patch('/:id/dispatch', validateOrderId, validateDispatchOrder, orderController.dispatchOrder);
 
 /**

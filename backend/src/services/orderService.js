@@ -9,9 +9,10 @@ import PaymentService from './paymentService.js';
 import settingsService from './settingsService.js';
 import couponService from './couponService.js';
 import walletService from './walletService.js';
+import { isCodEnabled, codNotAllowedError } from './codPermissionService.js';
 import notificationService from './notificationService.js';
 import { calculateOrderTotals } from '../utils/pricing.js';
-import { resolveShiprocketDeliveryFee } from './shippingQuoteService.js';
+import { resolveDeliveryQuote } from './deliveryQuoteService.js';
 
 /**
  * Generate a customer-facing human-readable order number
@@ -144,7 +145,7 @@ export const getCheckoutSummary = async (userId) => {
 
   let shippingQuote = null;
   if (defaultAddress?.postalCode) {
-    shippingQuote = await resolveShiprocketDeliveryFee({
+    shippingQuote = await resolveDeliveryQuote({
       pincode: defaultAddress.postalCode,
       paymentMethod: 'UPI',
       subtotal,
@@ -330,7 +331,7 @@ export const placeOrder = async (userId, payload) => {
     ? String(paymentMethod).toUpperCase()
     : 'COD';
 
-  const shipQuote = await resolveShiprocketDeliveryFee({
+  const shipQuote = await resolveDeliveryQuote({
     pincode: selectedAddress.postalCode,
     paymentMethod: normalizedPaymentMethod,
     subtotal,
@@ -349,6 +350,8 @@ export const placeOrder = async (userId, payload) => {
     err.statusCode = 400;
     throw err;
   }
+
+  const isSelfDelivery = shipQuote.deliveryMethod === 'SELF';
 
   const pricing = calculateOrderTotals({
     subtotal,
@@ -369,6 +372,18 @@ export const placeOrder = async (userId, payload) => {
       err.statusCode = 409;
       err.code = 'PAID_AMOUNT_MISMATCH';
       throw err;
+    }
+  }
+
+  // 5c. Cash on Delivery is a per-customer permission granted by an admin (default: OFF).
+  // Read from MongoDB here — NEVER from the request. Server-verified prepaid orders (trustedPayment) collect no cash.
+  // An order the wallet balance covers in full is not a cash order, so it stays allowed.
+  const cashRulesApply = trustedPayment !== true && normalizedPaymentMethod === 'COD';
+  const codAllowed = cashRulesApply ? await isCodEnabled(userId) : true;
+  if (cashRulesApply && !codAllowed) {
+    const walletBalance = useWallet === true ? await walletService.getBalance(userId) : 0;
+    if (!(total > 0 && walletBalance >= total)) {
+      throw codNotAllowedError();
     }
   }
 
@@ -459,6 +474,11 @@ export const placeOrder = async (userId, payload) => {
       }
     }
     const fullyPaidByWallet = walletApplied > 0 && walletApplied >= total;
+    // Authoritative re-check after the wallet debit (the balance could have changed since 5c):
+    // without COD permission, any cash still due means the order must not be created (rolled back below).
+    if (cashRulesApply && !codAllowed && !fullyPaidByWallet) {
+      throw codNotAllowedError();
+    }
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -490,14 +510,22 @@ export const placeOrder = async (userId, payload) => {
         transactionId: safeTransactionId,
         upiApp: trustedPayment === true ? paymentDetails.upiApp || '' : ''
       },
+      // Delivery method is decided HERE, on the server, from the saved delivery address (never from the request),
+      // and is stored so it cannot silently change later. SELF = delivered by the store, no Shiprocket shipment.
+      deliveryMethod: isSelfDelivery ? 'SELF' : 'SHIPROCKET',
+      deliveryMethodSource: 'AUTO',
+      deliveryMethodMatchedBy: shipQuote.classification?.matchedBy || '',
+      ...(shipQuote.classification?.distanceKm != null ? { deliveryMethodDistanceKm: shipQuote.classification.distanceKm } : {}),
+      deliveryMethodUpdatedAt: new Date(),
+      deliveryMethodReason: shipQuote.classification?.reason || '',
       delivery: {
-        type: 'Standard Express Courier',
+        type: isSelfDelivery ? 'Local Delivery' : 'Standard Express Courier',
         slot: {
           date: deliverySlot.date || dateStr,
-          timeSlot: deliverySlot.timeSlot || 'Standard Delivery (1-3 Days)'
+          timeSlot: deliverySlot.timeSlot || (isSelfDelivery ? 'Local Delivery (same day / next day)' : 'Standard Delivery (1-3 Days)')
         },
         status: 'Pending',
-        estimatedDelivery: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+        estimatedDelivery: new Date(Date.now() + (isSelfDelivery ? 1 : 2) * 24 * 60 * 60 * 1000)
       },
       status: 'CONFIRMED',
       timeline: [],
@@ -628,6 +656,108 @@ export const getOrderById = async (userId, orderIdOrNumber, isAdmin = false) => 
 };
 
 /**
+ * Customer-facing copy of an order: keeps `deliveryMethod` but drops the admin-only classification details
+ * (why it was classified, who overrode it, distances, history).
+ */
+export const toCustomerOrder = (order) => {
+  const plain = order?.toJSON ? order.toJSON() : { ...(order || {}) };
+  for (const key of [
+    'deliveryMethodSource',
+    'deliveryMethodMatchedBy',
+    'deliveryMethodDistanceKm',
+    'deliveryMethodUpdatedBy',
+    'deliveryMethodUpdatedAt',
+    'deliveryMethodReason',
+    'deliveryMethodHistory'
+  ]) {
+    delete plain[key];
+  }
+  return plain;
+};
+
+/**
+ * Admin: change an order's delivery method (SELF <-> SHIPROCKET). Audited, and never creates or deletes a shipment.
+ */
+export const changeDeliveryMethodAdmin = async (orderId, { deliveryMethod, reason } = {}, admin = {}) => {
+  const target = String(deliveryMethod || '').toUpperCase();
+  if (!['SELF', 'SHIPROCKET'].includes(target)) {
+    const err = new Error('deliveryMethod must be SELF or SHIPROCKET.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const cleanReason = String(reason ?? '').trim();
+  if (cleanReason.length < 3 || cleanReason.length > 500) {
+    const err = new Error('A reason of 3 to 500 characters is required.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const query = mongoose.Types.ObjectId.isValid(orderId) ? { _id: orderId } : { orderNumber: orderId };
+  const order = await Order.findOne(query);
+  if (!order) {
+    const err = new Error(`Order "${orderId}" not found`);
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const current = order.deliveryMethod === 'SELF' ? 'SELF' : 'SHIPROCKET';
+  if (current === target) {
+    const err = new Error(`This order is already ${target === 'SELF' ? 'a self-delivery' : 'a Shiprocket'} order.`);
+    err.statusCode = 409;
+    throw err;
+  }
+  if (['DELIVERED', 'CANCELLED'].includes(order.status)) {
+    const err = new Error(`The delivery method of a ${order.status.toLowerCase()} order cannot be changed.`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const sr = order.shiprocket || {};
+  const hasShipment = Boolean(sr.orderId || sr.shipmentId || sr.awbCode);
+  if (target === 'SELF' && hasShipment) {
+    const err = new Error(
+      'A Shiprocket shipment already exists for this order. Cancel the shipment in Shiprocket first, then switch to self delivery. (Nothing was changed.)'
+    );
+    err.statusCode = 409;
+    err.code = 'SHIPMENT_EXISTS';
+    throw err;
+  }
+
+  const noShipment = (field) => ({ $or: [{ [field]: { $exists: false } }, { [field]: '' }, { [field]: null }] });
+  const filter = {
+    _id: order._id,
+    status: { $nin: ['DELIVERED', 'CANCELLED'] },
+    // compare-and-set on the method we read, so two admins cannot both apply a change
+    ...(order.deliveryMethod === 'SELF' ? { deliveryMethod: 'SELF' } : { deliveryMethod: { $ne: 'SELF' } }),
+    ...(target === 'SELF' ? { $and: [noShipment('shiprocket.orderId'), noShipment('shiprocket.shipmentId'), noShipment('shiprocket.awbCode')] } : {})
+  };
+  const now = new Date();
+  const updated = await Order.findOneAndUpdate(
+    filter,
+    {
+      $set: {
+        deliveryMethod: target,
+        deliveryMethodSource: 'ADMIN',
+        deliveryMethodUpdatedBy: admin._id,
+        deliveryMethodUpdatedAt: now,
+        deliveryMethodReason: cleanReason,
+        'delivery.type': target === 'SELF' ? 'Local Delivery' : 'Standard Express Courier'
+      },
+      $push: {
+        deliveryMethodHistory: { from: current, to: target, by: admin._id, byName: admin.name || admin.email || '', reason: cleanReason, at: now }
+      }
+    },
+    { new: true }
+  );
+  if (!updated) {
+    const err = new Error('This order was just changed by someone else. Refresh and try again.');
+    err.statusCode = 409;
+    throw err;
+  }
+  return updated;
+};
+
+/**
  * Retrieve all orders for an authenticated user
  */
 export const getUserOrders = async (userId) => {
@@ -755,7 +885,8 @@ export const getAllOrdersAdmin = async (filters = {}) => {
     userId = null,
     fromDate = null,
     toDate = null,
-    sortBy = 'createdAt:desc'
+    sortBy = 'createdAt:desc',
+    deliveryMethod = null
   } = filters;
 
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -763,6 +894,11 @@ export const getAllOrdersAdmin = async (filters = {}) => {
   const skip = (pageNum - 1) * limitNum;
 
   const query = {};
+
+  // Delivery method filter. Orders from before the feature (no deliveryMethod) count as SHIPROCKET.
+  const dm = String(deliveryMethod || '').toUpperCase();
+  if (dm === 'SELF') query.deliveryMethod = 'SELF';
+  else if (dm === 'SHIPROCKET') query.deliveryMethod = { $ne: 'SELF' };
 
   // Orders of one customer (CRM drawer)
   if (userId && mongoose.Types.ObjectId.isValid(userId)) {
@@ -1086,7 +1222,8 @@ export const dispatchOrderAdmin = async (orderId, dispatchPayload = {}) => {
 
   const settings = await settingsService.getSettings();
   const hubName = settings.warehouseName || 'AURIVÁ Central Fulfillment Hub';
-  const noteMsg = `Dispatched via ${order.courierName || 'Standard Express'}${order.awbNumber ? ` (AWB: ${order.awbNumber})` : ''}`;
+  const isSelf = order.deliveryMethod === 'SELF';
+  const noteMsg = `Dispatched via ${order.courierName || (isSelf ? 'Local delivery' : 'Standard Express')}${order.awbNumber ? ` (AWB: ${order.awbNumber})` : ''}`;
   updateOrderTimeline(order, 'SHIPPED', hubName, noteMsg);
 
   let savedOrder = await order.save();

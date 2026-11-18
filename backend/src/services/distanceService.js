@@ -58,7 +58,7 @@ async function nominatimSearch(params) {
   }
 }
 
-async function geocodeArea({ pincode, city, state }) {
+export async function geocodeArea({ pincode, city, state }) {
   const pin = String(pincode || '').replace(/\D/g, '').slice(0, 6);
   const cityName = String(city || '').trim();
   const stateName = String(state || '').trim();

@@ -26,6 +26,33 @@ const EMPTY_FORM = {
   helpSupport: { ...DEFAULT_HELP_SUPPORT, faqs: [...DEFAULT_HELP_SUPPORT.faqs] }
 };
 
+const PINCODE_RE = /^[1-9][0-9]{5}$/;
+const parsePincodes = (text) => [...new Set(String(text || '').split(/[\s,;]+/).map((p) => p.trim()).filter(Boolean))];
+
+const EMPTY_DELIVERY = {
+  warehouseLatitude: '',
+  warehouseLongitude: '',
+  shiprocketEnabled: true,
+  shiprocketAutoCreate: true,
+  selfEnabled: false,
+  pincodesText: '',
+  maxRadiusKm: 0,
+  deliveryCharge: 0,
+  freeDeliveryThreshold: ''
+};
+
+const deliveryFromSettings = (s = {}) => ({
+  warehouseLatitude: s.warehouseLatitude ?? '',
+  warehouseLongitude: s.warehouseLongitude ?? '',
+  shiprocketEnabled: s.shiprocketEnabled !== false,
+  shiprocketAutoCreate: s.shiprocketAutoCreate !== false,
+  selfEnabled: s.selfDelivery?.enabled === true,
+  pincodesText: Array.isArray(s.selfDelivery?.pincodes) ? s.selfDelivery.pincodes.join(', ') : '',
+  maxRadiusKm: s.selfDelivery?.maxRadiusKm ?? 0,
+  deliveryCharge: s.selfDelivery?.deliveryCharge ?? 0,
+  freeDeliveryThreshold: s.selfDelivery?.freeDeliveryThreshold ?? ''
+});
+
 export default function AdminSettings() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { settings, updateSettings } = useAdmin();
@@ -56,6 +83,24 @@ export default function AdminSettings() {
     setFormData((prev) => ({ ...prev, ...settings, helpSupport: hs }));
     hydratedRef.current = true;
   }, [settings]);
+
+  // Delivery Configuration (self delivery / Shiprocket switches). Hydrated separately and ONLY once the full admin
+  // settings (which contain selfDelivery) have arrived, so a form opened before that can never overwrite the saved
+  // configuration with defaults.
+  const [delivery, setDelivery] = useState(EMPTY_DELIVERY);
+  const [deliveryLoaded, setDeliveryLoaded] = useState(false);
+  useEffect(() => {
+    if (deliveryLoaded || !settings || typeof settings !== 'object') return;
+    if (settings.selfDelivery === undefined) return;
+    setDelivery(deliveryFromSettings(settings));
+    setDeliveryLoaded(true);
+  }, [settings, deliveryLoaded]);
+
+  const setDeliveryField = (key, value) => {
+    setSaved(false);
+    setError('');
+    setDelivery((prev) => ({ ...prev, [key]: value }));
+  };
 
   const setField = (key, value) => {
     setSaved(false);
@@ -124,7 +169,38 @@ export default function AdminSettings() {
           .slice(0, 20)
       };
 
+      // Delivery Configuration: validated here too (the server validates again)
+      let deliveryPayload = {};
+      if (deliveryLoaded) {
+        const pins = parsePincodes(delivery.pincodesText);
+        const badPins = pins.filter((p) => !PINCODE_RE.test(p));
+        if (badPins.length) throw new Error(`Invalid local delivery pincode(s): ${badPins.slice(0, 5).join(', ')}. Use 6-digit pincodes.`);
+        const lat = delivery.warehouseLatitude === '' ? null : Number(delivery.warehouseLatitude);
+        const lng = delivery.warehouseLongitude === '' ? null : Number(delivery.warehouseLongitude);
+        if ((lat !== null && !(lat >= -90 && lat <= 90)) || (lng !== null && !(lng >= -180 && lng <= 180))) {
+          throw new Error('Warehouse latitude must be between -90 and 90 and longitude between -180 and 180.');
+        }
+        if ((lat === null) !== (lng === null)) throw new Error('Enter both warehouse latitude and longitude, or leave both empty.');
+        const radius = Number(delivery.maxRadiusKm) || 0;
+        const charge = Number(delivery.deliveryCharge) || 0;
+        if (radius < 0 || radius > 500 || charge < 0) throw new Error('Radius must be 0–500 km and the local delivery charge cannot be negative.');
+        deliveryPayload = {
+          warehouseLatitude: lat,
+          warehouseLongitude: lng,
+          shiprocketEnabled: delivery.shiprocketEnabled === true,
+          shiprocketAutoCreate: delivery.shiprocketAutoCreate === true,
+          selfDelivery: {
+            enabled: delivery.selfEnabled === true,
+            pincodes: pins,
+            maxRadiusKm: radius,
+            deliveryCharge: charge,
+            freeDeliveryThreshold: delivery.freeDeliveryThreshold === '' ? null : Number(delivery.freeDeliveryThreshold)
+          }
+        };
+      }
+
       const result = await updateSettings({
+        ...deliveryPayload,
         storeName: String(formData.storeName || '').trim(),
         supportEmail: helpSupport.email || String(formData.supportEmail || '').trim(),
         supportPhone: helpSupport.phone || String(formData.supportPhone || '').trim(),
@@ -144,6 +220,7 @@ export default function AdminSettings() {
         helpSupport
       });
       if (result?.settings) {
+        if (deliveryLoaded) setDelivery(deliveryFromSettings(result.settings));
         const nextHs = result.settings.helpSupport || helpSupport;
         setFormData((prev) => ({
           ...prev,
@@ -361,6 +438,159 @@ export default function AdminSettings() {
                   className={`${inputClass} w-48`}
                 />
               </div>
+            </div>
+
+            {/* Delivery Configuration: same-city self delivery + Shiprocket switches */}
+            <div className="border-t border-stone-200 pt-6 space-y-4" data-testid="delivery-config">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#0E2A1B] text-[#D4AF37] flex items-center justify-center shrink-0">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#0E2A1B]">Delivery Configuration</h3>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    Orders to your local area are delivered by you (no Shiprocket shipment); everything else keeps using Shiprocket.
+                    Warehouse city, address and pincode are the fields above.
+                  </p>
+                </div>
+              </div>
+
+              {!deliveryLoaded && (
+                <p className="text-[11px] text-stone-500 p-3 rounded-xl bg-white border border-stone-200">
+                  Loading delivery configuration… (these fields are not saved until it has loaded, so nothing is overwritten)
+                </p>
+              )}
+
+              <fieldset disabled={!deliveryLoaded} className="space-y-4 disabled:opacity-60">
+                <label className="flex items-start gap-3 p-3.5 rounded-xl border border-stone-200 bg-white cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={delivery.selfEnabled}
+                    onChange={(e) => setDeliveryField('selfEnabled', e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-[#0E2A1B]"
+                  />
+                  <span className="text-xs text-[#0E2A1B]">
+                    <span className="font-bold">Enable Self Delivery</span>
+                    <span className="block text-stone-500 mt-0.5">
+                      When on, orders to the local pincodes or within the radius below are marked “Self Delivery” and are not sent to Shiprocket.
+                    </span>
+                  </span>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="warehouseLatitude">Warehouse Latitude (optional)</label>
+                    <input
+                      id="warehouseLatitude"
+                      type="number"
+                      step="any"
+                      value={delivery.warehouseLatitude}
+                      onChange={(e) => setDeliveryField('warehouseLatitude', e.target.value)}
+                      placeholder="e.g. 22.7196"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="warehouseLongitude">Warehouse Longitude (optional)</label>
+                    <input
+                      id="warehouseLongitude"
+                      type="number"
+                      step="any"
+                      value={delivery.warehouseLongitude}
+                      onChange={(e) => setDeliveryField('warehouseLongitude', e.target.value)}
+                      placeholder="e.g. 75.8577"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-stone-500 -mt-2">If empty, the warehouse pincode is used to find the warehouse location for distance matching.</p>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="selfPincodes">Local Delivery Pincodes</label>
+                  <textarea
+                    id="selfPincodes"
+                    rows={2}
+                    value={delivery.pincodesText}
+                    onChange={(e) => setDeliveryField('pincodesText', e.target.value)}
+                    placeholder="452001, 452002, 452003, 452010"
+                    className={inputClass}
+                  />
+                  <p className="text-[11px] text-stone-500 mt-1">
+                    Separate pincodes with commas, spaces or new lines. {parsePincodes(delivery.pincodesText).length} entered.
+                    Your warehouse pincode is not added automatically.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="selfRadius">Max Local Radius (KM)</label>
+                    <input
+                      id="selfRadius"
+                      type="number"
+                      min={0}
+                      max={500}
+                      step="any"
+                      value={delivery.maxRadiusKm}
+                      onChange={(e) => setDeliveryField('maxRadiusKm', e.target.value === '' ? '' : Number(e.target.value))}
+                      className={inputClass}
+                    />
+                    <p className="text-[11px] text-stone-500 mt-1">0 = match by pincode only.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="selfCharge">Local Delivery Charge (₹)</label>
+                    <input
+                      id="selfCharge"
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={delivery.deliveryCharge}
+                      onChange={(e) => setDeliveryField('deliveryCharge', e.target.value === '' ? '' : Number(e.target.value))}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1" htmlFor="selfFree">Local Free Delivery Above (₹)</label>
+                    <input
+                      id="selfFree"
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={delivery.freeDeliveryThreshold}
+                      onChange={(e) => setDeliveryField('freeDeliveryThreshold', e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder={`Store: ${formData.freeDeliveryThreshold ?? 499}`}
+                      className={inputClass}
+                    />
+                    <p className="text-[11px] text-stone-500 mt-1">Empty = use the store free-delivery amount.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl border border-stone-200 bg-white cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={delivery.shiprocketEnabled}
+                      onChange={(e) => setDeliveryField('shiprocketEnabled', e.target.checked)}
+                      className="mt-0.5 w-4 h-4 accent-[#0E2A1B]"
+                    />
+                    <span className="text-xs text-[#0E2A1B]">
+                      <span className="font-bold">Enable Shiprocket</span>
+                      <span className="block text-stone-500 mt-0.5">Off = no Shiprocket shipments at all and flat store fees at checkout.</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl border border-stone-200 bg-white cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={delivery.shiprocketAutoCreate}
+                      onChange={(e) => setDeliveryField('shiprocketAutoCreate', e.target.checked)}
+                      className="mt-0.5 w-4 h-4 accent-[#0E2A1B]"
+                    />
+                    <span className="text-xs text-[#0E2A1B]">
+                      <span className="font-bold">Auto-create Shiprocket shipments</span>
+                      <span className="block text-stone-500 mt-0.5">Off = create them yourself from the order page.</span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
             </div>
 
             {/* Help & Support CMS */}

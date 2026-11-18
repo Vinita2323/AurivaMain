@@ -3,7 +3,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, ShoppingCart, Package, FolderTree, 
   Boxes, Users, Tag, Star, Bell, 
-  BarChart3, Settings, ExternalLink, X, ChefHat, UserCircle, CreditCard
+  BarChart3, Settings, ExternalLink, X, ChefHat, UserCircle, CreditCard, Banknote
 } from 'lucide-react';
 import Logo from '../../user/components/Logo';
 import { adminDashboardApi, adminNotificationApi } from '../../../utils/api';
@@ -101,6 +101,7 @@ export default function AdminSidebar({ isOpen, onClose, badges: badgesProp }) {
     { name: 'Categories', path: '/admin/categories', icon: FolderTree },
     { name: 'Inventory', path: '/admin/inventory', icon: Boxes },
     { name: 'Customers', path: '/admin/customers', icon: Users },
+    { name: 'COD Permission', path: '/admin/cod-permission', icon: Banknote },
     { name: 'Coupons', path: '/admin/coupons', icon: Tag, badge: formatBadge(badges.coupons) },
     { name: 'Reviews', path: '/admin/reviews', icon: Star },
     // Promotions / campaigns page disabled for now — uncomment together with the route in AdminRoutes.jsx

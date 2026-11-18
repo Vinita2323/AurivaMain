@@ -16,6 +16,11 @@ export const DEFAULT_SETTINGS = {
   warehousePincode: '131001',
   warehousePhone: '+91 76781 54795',
   hubAddress: 'House no. 1213, Sector 15, Sonipat, Haryana - 131001',
+  warehouseLatitude: null,
+  warehouseLongitude: null,
+  shiprocketEnabled: true,
+  shiprocketAutoCreate: true,
+  selfDelivery: { enabled: false, pincodes: [], maxRadiusKm: 0, deliveryCharge: 0, freeDeliveryThreshold: null },
   storeName: 'AURIVÁ Foods Private Limited',
   storeEmail: 'Supportauriva77@gmail.com',
   supportEmail: 'Supportauriva77@gmail.com',
@@ -85,6 +90,33 @@ function sanitizeHelpSupport(raw = {}, fallback = DEFAULT_SETTINGS.helpSupport) 
     writeNote: String(src.writeNote ?? fallback.writeNote).trim() || fallback.writeNote,
     fullHelpLink: String(src.fullHelpLink ?? fallback.fullHelpLink).trim() || fallback.fullHelpLink,
     faqs: faqs.length ? faqs : fallback.faqs
+  };
+}
+
+const PINCODE_RE = /^[1-9][0-9]{5}$/;
+
+/** Clean the self-delivery block: unique valid 6-digit pincodes, bounded numbers, strict booleans. */
+export function sanitizeSelfDelivery(raw = {}, current = {}) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const base = current && typeof current === 'object' ? current : {};
+  const pick = (key) => (src[key] !== undefined ? src[key] : base[key]);
+
+  const rawPins = Array.isArray(pick('pincodes')) ? pick('pincodes') : [];
+  const pincodes = [...new Set(rawPins.map((p) => String(p ?? '').replace(/\D/g, '')).filter((p) => PINCODE_RE.test(p)))].slice(0, 500);
+
+  const num = (v, fallback, min, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  };
+  const threshold = pick('freeDeliveryThreshold');
+
+  return {
+    enabled: pick('enabled') === true,
+    pincodes,
+    maxRadiusKm: num(pick('maxRadiusKm'), 0, 0, 500),
+    deliveryCharge: num(pick('deliveryCharge'), 0, 0, 100000),
+    freeDeliveryThreshold:
+      threshold === null || threshold === undefined || threshold === '' ? null : num(threshold, null, 0, 10000000)
   };
 }
 
@@ -205,6 +237,14 @@ class SettingsService {
           sanitized[key] = Number(updateData[key]);
         } else if (key === 'helpSupport') {
           sanitized.helpSupport = sanitizeHelpSupport(updateData.helpSupport);
+        } else if (key === 'selfDelivery') {
+          const current = await this.getSettings();
+          sanitized.selfDelivery = sanitizeSelfDelivery(updateData.selfDelivery, current.selfDelivery);
+        } else if (key === 'warehouseLatitude' || key === 'warehouseLongitude') {
+          const v = updateData[key];
+          sanitized[key] = v === null || v === '' ? null : Number(v);
+        } else if (key === 'shiprocketEnabled' || key === 'shiprocketAutoCreate') {
+          sanitized[key] = updateData[key] === true;
         } else if (typeof updateData[key] === 'string') {
           sanitized[key] = updateData[key].trim();
         } else {

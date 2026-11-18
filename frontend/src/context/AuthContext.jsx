@@ -164,6 +164,11 @@ export const formatOrder = (o) => {
     deliveryNotes: o.deliveryNotes || '',
     dispatchedAt: o.dispatchedAt || null,
     shiprocket: o.shiprocket || null,
+    // Orders from before self-delivery existed have no deliveryMethod: they are Shiprocket-managed
+    deliveryMethod: o.deliveryMethod === 'SELF' ? 'SELF' : 'SHIPROCKET',
+    // Admin-only details (the server never sends these to customers)
+    deliveryMethodSource: o.deliveryMethodSource || '',
+    deliveryMethodHistory: Array.isArray(o.deliveryMethodHistory) ? o.deliveryMethodHistory : [],
     estimatedDelivery: o.delivery?.estimatedDelivery || null,
     cancelReason: o.cancelReason || '',
     cancelledBy: o.cancelledBy || null,

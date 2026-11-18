@@ -76,6 +76,8 @@ export default function OrderTrackingPage() {
 
   // Delivery partner info is real data only: shown while out for delivery, never placeholders
   const isOutForDelivery = order?.status === 'Out for Delivery';
+  // Self-delivery orders are handed over by the store itself: no courier, AWB or rider details apply
+  const isSelfDelivery = order?.deliveryMethod === 'SELF';
   const rider = getRealRider(order?.rider);
 
   // Contact links for the real rider (no in-app chat exists — SMS / WhatsApp open the customer's own apps)
@@ -262,14 +264,14 @@ export default function OrderTrackingPage() {
             <div className="max-w-xl bg-[#FAF7F2] rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 border border-[#E8E2D5] flex flex-col justify-between space-y-3.5 sm:space-y-6">
               <div>
                 <span className="text-[9.5px] sm:text-[10px] font-bold uppercase tracking-widest text-[#28543B]">
-                  ASSIGNED COURIER / RIDER
+                  {isSelfDelivery ? 'LOCAL DELIVERY' : 'ASSIGNED COURIER / RIDER'}
                 </span>
                 <h3 className="font-serif text-base sm:text-lg font-bold text-[#0E2A1B] mt-0.5 sm:mt-1 mb-2.5 sm:mb-4">
-                  Delivery Partner
+                  {isSelfDelivery ? 'Delivered by our team' : 'Delivery Partner'}
                 </h3>
 
                 {/* Rider details — real data only, shown while the order is out for delivery */}
-                {isOutForDelivery && rider && (
+                {!isSelfDelivery && isOutForDelivery && rider && (
                   <div className="flex items-center gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-stone-200 shadow-2xs mb-3">
                     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#1B3B29] text-[#D4AF37] font-serif font-bold text-sm sm:text-lg flex items-center justify-center border border-[#D4AF37]/40 shrink-0">
                       {(rider.name || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
@@ -291,7 +293,12 @@ export default function OrderTrackingPage() {
                     </div>
                   </div>
                 )}
-                {isOutForDelivery && !rider && (
+                {isSelfDelivery && isOutForDelivery && (
+                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-stone-200 shadow-2xs mb-3 text-xs text-stone-600">
+                    Your order is out for delivery and will reach you shortly.
+                  </div>
+                )}
+                {!isSelfDelivery && isOutForDelivery && !rider && (
                   <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-stone-200 shadow-2xs mb-3 text-xs text-stone-600">
                     Your order is out for delivery. Rider details will appear here as soon as they are assigned.
                   </div>
@@ -307,7 +314,7 @@ export default function OrderTrackingPage() {
                 </div>
 
                 {/* Shipment tracking (from backend / Shiprocket — no direct Shiprocket calls) */}
-                {(order.awbNumber || order.courierName || order.shiprocket?.awbCode) && (
+                {!isSelfDelivery && (order.awbNumber || order.courierName || order.shiprocket?.awbCode) && (
                   <div className="space-y-1 text-xs text-stone-600 bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 mt-3">
                     <p className="font-bold text-[#0E2A1B] text-[10px] uppercase tracking-wider mb-1">Shipment Tracking</p>
                     <p>Status: <strong className="text-stone-900">{order.status}</strong>
@@ -342,7 +349,7 @@ export default function OrderTrackingPage() {
               </div>
 
               {/* Contact Actions — real rider only */}
-              {isOutForDelivery && rider?.phone && (
+              {!isSelfDelivery && isOutForDelivery && rider?.phone && (
                 <div className="grid grid-cols-3 gap-2 pt-1 sm:pt-2">
                   <a
                     href={`tel:${rider.phone}`}
