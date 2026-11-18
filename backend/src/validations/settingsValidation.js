@@ -17,6 +17,11 @@ export const ALLOWED_SETTINGS_FIELDS = [
   'warehousePincode',
   'warehousePhone',
   'hubAddress',
+  'warehouseLatitude',
+  'warehouseLongitude',
+  'shiprocketEnabled',
+  'shiprocketAutoCreate',
+  'selfDelivery',
   'storeName',
   'storeEmail',
   'supportEmail',
@@ -136,6 +141,51 @@ export const validateUpdateSettings = (req, res, next) => {
               });
             }
           });
+        }
+      }
+    }
+  }
+
+  // 5b. Delivery method configuration (self delivery / Shiprocket switches / warehouse coordinates)
+  for (const key of ['shiprocketEnabled', 'shiprocketAutoCreate']) {
+    if (body[key] !== undefined && typeof body[key] !== 'boolean') {
+      errors.push({ field: key, message: `${key} must be true or false` });
+    }
+  }
+  const coordRule = [['warehouseLatitude', -90, 90], ['warehouseLongitude', -180, 180]];
+  for (const [key, min, max] of coordRule) {
+    if (body[key] !== undefined && body[key] !== null && body[key] !== '') {
+      const n = Number(body[key]);
+      if (!Number.isFinite(n) || n < min || n > max) {
+        errors.push({ field: key, message: `${key} must be a number between ${min} and ${max}` });
+      }
+    }
+  }
+  if (body.selfDelivery !== undefined) {
+    const sd = body.selfDelivery;
+    if (!sd || typeof sd !== 'object' || Array.isArray(sd)) {
+      errors.push({ field: 'selfDelivery', message: 'selfDelivery must be an object' });
+    } else {
+      if (sd.enabled !== undefined && typeof sd.enabled !== 'boolean') {
+        errors.push({ field: 'selfDelivery.enabled', message: 'enabled must be true or false' });
+      }
+      if (sd.pincodes !== undefined) {
+        if (!Array.isArray(sd.pincodes) || sd.pincodes.length > 500) {
+          errors.push({ field: 'selfDelivery.pincodes', message: 'pincodes must be a list of at most 500 entries' });
+        } else {
+          const bad = sd.pincodes.filter((p) => !pincodeRegex.test(String(p ?? '').trim()));
+          if (bad.length) {
+            errors.push({ field: 'selfDelivery.pincodes', message: `Invalid 6-digit pincode(s): ${bad.slice(0, 5).join(', ')}` });
+          }
+        }
+      }
+      const numericRules = [['maxRadiusKm', 0, 500], ['deliveryCharge', 0, 100000], ['freeDeliveryThreshold', 0, 10000000]];
+      for (const [key, min, max] of numericRules) {
+        const v = sd[key];
+        if (v === undefined || (key === 'freeDeliveryThreshold' && (v === null || v === ''))) continue;
+        const n = Number(v);
+        if (!Number.isFinite(n) || n < min || n > max) {
+          errors.push({ field: `selfDelivery.${key}`, message: `${key} must be a number between ${min} and ${max}` });
         }
       }
     }

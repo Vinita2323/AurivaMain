@@ -15,7 +15,7 @@ import Footer from '../components/Footer';
 import { useCart } from '../../../context/CartContext';
 import { useAuth } from '../../../context/AuthContext';
 import { resolveProductImage } from '../../../utils/productImage';
-import { paymentApi, shippingApi, addressApi, cartApi } from '../../../utils/api';
+import { paymentApi, shippingApi, addressApi, cartApi, userAuthApi } from '../../../utils/api';
 import {
   calculateCheckoutTotals,
   checkoutPaymentMethodKey,
@@ -113,8 +113,13 @@ export default function CheckoutPage() {
   const shiprocketCheckoutEnabled =
     String(import.meta.env.VITE_SHIPROCKET_CHECKOUT_ENABLED ?? 'true').toLowerCase() !== 'false';
 
+  // Same-city self delivery: the SERVER decides the delivery method and the local fee. A local (SELF) quote is always
+  // honoured, even while live Shiprocket rates are hidden, so the price shown is the price charged.
+  const isLocalDelivery = shippingQuote?.deliveryMethod === 'SELF';
+  const useServerQuote = shiprocketCheckoutEnabled || isLocalDelivery;
+
   // One API call returns both prepaid + COD — pick fee locally when payment changes
-  const shiprocketDeliveryFee = !shiprocketCheckoutEnabled
+  const shiprocketDeliveryFee = !useServerQuote
     ? undefined
     : !pinReady
     ? 0
@@ -125,7 +130,7 @@ export default function CheckoutPage() {
     : shippingQuote?.prepaid?.fee;
 
   const checkoutPricing = useMemo(() => {
-    if (!shiprocketCheckoutEnabled) {
+    if (!useServerQuote) {
       return calculateCheckoutTotals({
         subtotal,
         discountAmount,
@@ -140,7 +145,7 @@ export default function CheckoutPage() {
       settings: shippingSettings || {},
       deliveryFee: shiprocketDeliveryFee ?? 0
     });
-  }, [subtotal, discountAmount, paymentMethod, shippingSettings, shiprocketDeliveryFee, shiprocketCheckoutEnabled]);
+  }, [subtotal, discountAmount, paymentMethod, shippingSettings, shiprocketDeliveryFee, useServerQuote]);
 
   const { deliveryFee, tax, total } = checkoutPricing;
 
@@ -151,6 +156,50 @@ export default function CheckoutPage() {
   const walletApplied =
     useWalletBalance && paymentMethod === 'cod' ? Math.min(walletAvailable, Number(total) || 0) : 0;
   const amountDue = Math.max(0, (Number(total) || 0) - walletApplied);
+
+  // Cash on Delivery is a per-customer permission granted by an admin (default OFF).
+  // Read fresh from the server for the signed-in customer — never from localStorage / cached auth state.
+  // The backend enforces the same rule on order placement; this only decides what to show.
+  const [codAllowed, setCodAllowed] = useState(false);
+  const [codChecked, setCodChecked] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setCodAllowed(false);
+      setCodChecked(true);
+      return undefined;
+    }
+    let cancelled = false;
+    setCodChecked(false);
+    userAuthApi
+      .getProfile()
+      .then((res) => {
+        if (cancelled) return;
+        const profile = res?.data?.user ?? res?.user ?? null;
+        setCodAllowed(profile?.codAccess?.isEnabled === true);
+      })
+      .catch(() => {
+        if (!cancelled) setCodAllowed(false);
+      })
+      .finally(() => {
+        if (!cancelled) setCodChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, token]);
+
+  // Without COD permission, the only "cod"-priced path left is paying the whole order from the wallet.
+  const walletCoversOrder = walletAvailable > 0 && walletAvailable >= (Number(total) || 0);
+  const showWalletOnlyOption =
+    codChecked && !codAllowed && walletAvailable > 0 && (walletCoversOrder || paymentMethod === 'cod');
+  const walletShort = !codAllowed && paymentMethod === 'cod' && !walletCoversOrder;
+  useEffect(() => {
+    // COD not permitted: 'cod' may only stay selected as the explicit "Pay with Wallet" choice
+    // (which turns the wallet toggle on together with it). Otherwise fall back to Online Payment.
+    if (codChecked && !codAllowed && paymentMethod === 'cod' && !useWalletBalance && ONLINE_PAYMENTS_ENABLED) {
+      setPaymentMethod('online');
+    }
+  }, [codChecked, codAllowed, paymentMethod, useWalletBalance]);
   const settingsPrepaidFee = resolveDeliveryFee({
     subtotal,
     paymentMethod: 'UPI',
@@ -163,12 +212,13 @@ export default function CheckoutPage() {
   });
   // Allow checkout when quote failed — settings fees still apply (matches backend fallback)
   const shippingReady =
-    !shiprocketCheckoutEnabled ||
+    !useServerQuote ||
     !pinReady ||
     (!shippingQuoteLoading &&
       (shippingQuote == null || !shippingQuote.error || shippingQuote.source === 'settings'));
-  const shippingLabel =
-    !shiprocketCheckoutEnabled
+  const shippingLabel = isLocalDelivery
+    ? 'Local Delivery'
+    : !shiprocketCheckoutEnabled
       ? isCodPayment
         ? 'Shipping (COD)'
         : 'Shipping (Prepaid)'
@@ -199,12 +249,8 @@ export default function CheckoutPage() {
 
   // Fetch Shiprocket rates only when enabled + pincode / weight / subtotal change (not on payment toggle)
   useEffect(() => {
-    if (!shiprocketCheckoutEnabled) {
-      setShippingQuote(null);
-      setShippingQuoteLoading(false);
-      lastShippingKeyRef.current = '';
-      return;
-    }
+    // The quote is always requested: the server classifies the address (local self delivery vs Shiprocket).
+    // While live Shiprocket rates are hidden, only a local quote changes what is displayed.
 
     if (deliveryPincode.length !== 6 || subtotal <= 0) {
       setShippingQuote(null);
@@ -399,8 +445,13 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (shiprocketCheckoutEnabled && shippingQuoteLoading) {
+    if (shippingQuoteLoading) {
       setOrderError('Please wait while shipping rates load.');
+      return;
+    }
+
+    if (paymentMethod === 'cod' && !codAllowed && (walletApplied <= 0 || amountDue > 0)) {
+      setOrderError('Cash on Delivery is not available for your account. Please select another payment method.');
       return;
     }
 
@@ -942,9 +993,9 @@ export default function CheckoutPage() {
                             <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Online Payment</span>
                             <p className="text-[9.5px] sm:text-[11px] text-stone-500">
                               UPI, Cards & Net Banking · Prepaid shipping
-                              {shiprocketCheckoutEnabled && shippingQuote?.prepaid?.fee != null
+                              {useServerQuote && shippingQuote?.prepaid?.fee != null
                                 ? ` · ₹${shippingQuote.prepaid.fee}`
-                                : !shiprocketCheckoutEnabled
+                                : !useServerQuote
                                 ? ` · ₹${settingsPrepaidFee}`
                                 : ''}
                             </p>
@@ -964,6 +1015,7 @@ export default function CheckoutPage() {
                       </div>
                     </div>
 
+                    {codAllowed && (
                     <div
                       onClick={() => setPaymentMethod('cod')}
                       className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
@@ -981,9 +1033,9 @@ export default function CheckoutPage() {
                             <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Cash on Delivery</span>
                             <p className="text-[9.5px] sm:text-[11px] text-stone-500">
                               Pay at doorstep · COD shipping
-                              {shiprocketCheckoutEnabled && shippingQuote?.cod?.fee != null
+                              {useServerQuote && shippingQuote?.cod?.fee != null
                                 ? ` · ₹${shippingQuote.cod.fee}`
-                                : !shiprocketCheckoutEnabled
+                                : !useServerQuote
                                 ? ` · ₹${settingsCodFee}`
                                 : ''}
                             </p>
@@ -1002,8 +1054,53 @@ export default function CheckoutPage() {
                         </div>
                       </div>
                     </div>
+                    )}
 
-                    {paymentMethod === 'cod' && walletAvailable > 0 && (
+                    {/* COD not enabled for this account: the wallet can still pay the whole order */}
+                    {showWalletOnlyOption && (
+                      <div
+                        onClick={() => { setPaymentMethod('cod'); setUseWalletBalance(true); }}
+                        className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
+                          paymentMethod === 'cod'
+                            ? 'border-[#0E2A1B] bg-[#FAF7F2] shadow-xs'
+                            : 'border-stone-200 hover:border-stone-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 sm:gap-3.5">
+                            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-stone-100 text-stone-700 flex items-center justify-center shrink-0">
+                              <Wallet className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
+                            </div>
+                            <div>
+                              <span className="text-xs sm:text-sm font-bold text-[#0E2A1B]">Pay with Wallet</span>
+                              <p className="text-[9.5px] sm:text-[11px] text-stone-500">
+                                ₹{walletAvailable} available · nothing to pay on delivery
+                              </p>
+                            </div>
+                          </div>
+                          <div
+                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                              paymentMethod === 'cod' ? 'border-[#0E2A1B] bg-[#0E2A1B]' : 'border-stone-300'
+                            }`}
+                          >
+                            {paymentMethod === 'cod' && <Check className="w-2.5 h-2.5 text-[#D4AF37] stroke-[3]" />}
+                          </div>
+                        </div>
+                        {walletShort && (
+                          <p className="mt-2 text-[11px] font-semibold text-rose-700">
+                            Your wallet balance does not cover this order. Choose Online Payment.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {codChecked && !codAllowed && (
+                      <p className="text-[10.5px] sm:text-[11px] text-stone-500 px-1">
+                        Cash on Delivery is not available for your account.
+                      </p>
+                    )}
+
+                    {codAllowed && paymentMethod === 'cod' && walletAvailable > 0 && (
                       <label className="flex items-start gap-3 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 border-dashed border-[#D4AF37]/60 bg-[#FFFBEF] cursor-pointer">
                         <input
                           type="checkbox"
@@ -1045,7 +1142,7 @@ export default function CheckoutPage() {
 
                     <button
                       type="button"
-                      disabled={isOrderPlacing || !shippingReady}
+                      disabled={isOrderPlacing || !shippingReady || !codChecked || walletShort}
                       onClick={handlePlaceOrder}
                       className="w-full sm:w-auto px-6 py-3 sm:px-8 sm:py-3.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#E5C358] to-[#C89038] text-[#0E2A1B] font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 min-h-[42px] sm:min-h-[44px]"
                     >

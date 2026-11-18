@@ -77,6 +77,21 @@ const settingsSchema = new mongoose.Schema(
       trim: true,
       default: 'House no. 1213, Sector 15, Sonipat, Haryana - 131001'
     },
+    // Warehouse coordinates (optional). When empty, the warehouse pincode is geocoded instead.
+    warehouseLatitude: { type: Number, default: null, min: -90, max: 90 },
+    warehouseLongitude: { type: Number, default: null, min: -180, max: 180 },
+
+    // 4b. Delivery method controls (Same-City Self Delivery). Self delivery is OFF until an admin enables it.
+    shiprocketEnabled: { type: Boolean, default: true },
+    shiprocketAutoCreate: { type: Boolean, default: true },
+    selfDelivery: {
+      enabled: { type: Boolean, default: false },
+      pincodes: { type: [String], default: [] },
+      maxRadiusKm: { type: Number, default: 0, min: 0, max: 500 },
+      deliveryCharge: { type: Number, default: 0, min: 0 },
+      // null => fall back to the store-wide freeDeliveryThreshold
+      freeDeliveryThreshold: { type: Number, default: null, min: 0 }
+    },
 
     // 5. Store Identity & Customer Support Information
     storeName: {

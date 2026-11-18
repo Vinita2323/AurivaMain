@@ -84,7 +84,12 @@ const SETTINGS_UPDATE_KEYS = [
   'currency',
   'storeAddress',
   'timezone',
-  'helpSupport'
+  'helpSupport',
+  'warehouseLatitude',
+  'warehouseLongitude',
+  'shiprocketEnabled',
+  'shiprocketAutoCreate',
+  'selfDelivery'
 ];
 
 function sanitizeSettingsPayload(raw = {}) {

@@ -639,9 +639,15 @@ export const adminOrderApi = {
     if (params.fromDate) query.append('fromDate', params.fromDate);
     if (params.toDate) query.append('toDate', params.toDate);
     if (params.sortBy) query.append('sortBy', params.sortBy);
+    if (params.deliveryMethod) query.append('deliveryMethod', params.deliveryMethod);
     const qs = query.toString();
     return apiRequest(`/admin/orders${qs ? `?${qs}` : ''}`, { method: 'GET' });
   },
+  /** Override SELF / SHIPROCKET for one order (reason required; audited on the server). */
+  changeDeliveryMethod: (id, deliveryMethod, reason) => apiRequest(`/admin/orders/${id}/delivery-method`, {
+    method: 'PATCH',
+    body: JSON.stringify({ deliveryMethod, reason })
+  }),
   getOrderById: (id) => apiRequest(`/admin/orders/${id}`, { method: 'GET' }),
   getDistance: (id) => apiRequest(`/admin/orders/${id}/distance`, { method: 'GET' }),
   updateStatus: (id, status, note = '', rider = null) => apiRequest(`/admin/orders/${id}/status`, {
@@ -810,6 +816,27 @@ export const paymentApi = {
     }),
   getOrderPayment: (orderId) =>
     apiRequest(`/payments/order/${orderId}`)
+};
+
+/** Admin: per-customer Cash on Delivery permission (admin-only endpoints; every change is audited server-side). */
+export const adminCodApi = {
+  list: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+    if (params.search) query.append('search', params.search);
+    if (params.codStatus && params.codStatus !== 'all') query.append('codStatus', params.codStatus);
+    // delivered | high_cancellation | eligible
+    if (params.filter && params.filter !== 'all') query.append('filter', params.filter);
+    const qs = query.toString();
+    return apiRequest(`/admin/cod-permissions${qs ? `?${qs}` : ''}`);
+  },
+  get: (customerId) => apiRequest(`/admin/cod-permissions/${customerId}`),
+  setPermission: (customerId, { enabled, reason }) =>
+    apiRequest(`/admin/cod-permissions/${customerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled, reason })
+    })
 };
 
 export const adminPaymentApi = {

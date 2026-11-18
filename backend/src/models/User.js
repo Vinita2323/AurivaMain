@@ -67,6 +67,16 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    // Cash on Delivery permission. OFF for everyone until an admin grants it.
+    // Only `isEnabled === true` counts, so customers created before this field existed are also OFF.
+    // Never writable from customer-facing endpoints; changes go through codPermissionService (audited).
+    codAccess: {
+      isEnabled: { type: Boolean, default: false },
+      enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null },
+      enabledAt: { type: Date, default: null },
+      disabledAt: { type: Date, default: null },
+      reason: { type: String, trim: true, default: '', maxlength: 500 }
+    },
     // Set when the customer deletes their own account (personal data is erased, order history is kept)
     deletedAt: {
       type: Date,
@@ -82,6 +92,8 @@ const userSchema = new mongoose.Schema(
     toJSON: {
       transform: (doc, ret) => {
         delete ret.__v;
+        // Customers only learn whether COD is on; the admin's internal reason / admin id stay private.
+        if (ret.codAccess) ret.codAccess = { isEnabled: ret.codAccess.isEnabled === true };
         return ret;
       }
     }

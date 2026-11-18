@@ -84,8 +84,18 @@ export async function call(method, path, { token, body, headers = {}, rawBody } 
 // ---------------------------------------------------------------- factories
 const phone = () => String(7000000000 + (++counter) * 7 + Math.floor(Math.random() * 5));
 
-export async function makeCustomer() {
-  const user = await User.create({ name: 'Test Customer', phone: phone(), role: 'USER', status: 'ACTIVE', isVerified: true });
+// COD is OFF by default in the product (admin grants it per customer). Most existing suites are about payments,
+// refunds and fulfilment and just need a customer who may place COD orders, so the helper enables it unless a
+// test asks for the real default with makeCustomer({ cod: false }).
+export async function makeCustomer({ cod = true } = {}) {
+  const user = await User.create({
+    name: 'Test Customer',
+    phone: phone(),
+    role: 'USER',
+    status: 'ACTIVE',
+    isVerified: true,
+    ...(cod ? { codAccess: { isEnabled: true, enabledAt: new Date(), reason: 'test fixture' } } : {})
+  });
   const address = await Address.create({
     user: user._id,
     fullName: 'Test Customer',

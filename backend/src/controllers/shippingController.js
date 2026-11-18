@@ -1,10 +1,10 @@
-import { getShippingQuote } from '../services/shippingQuoteService.js';
+import { getDeliveryQuote } from '../services/deliveryQuoteService.js';
 import { sendSuccess } from '../utils/response.js';
 
 export const getQuote = async (req, res, next) => {
   try {
     const { pincode, paymentMethod, subtotal, weightKg } = req.query;
-    const quote = await getShippingQuote({
+    const quote = await getDeliveryQuote({
       pincode,
       paymentMethod,
       subtotal,

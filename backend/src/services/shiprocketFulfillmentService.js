@@ -6,6 +6,7 @@ import settingsService from './settingsService.js';
 import shiprocketClient from './shiprocketClient.js';
 import env from '../config/env.js';
 import { updateOrderTimeline, ALLOWED_TRANSITIONS, assertPaymentAllowsFulfilment } from './orderService.js';
+import { assertShiprocketAllowed, getShiprocketGate } from './deliveryMethodService.js';
 
 /**
  * Parse pack label like "150g" / "300 g" / "0.5kg" into kilograms.
@@ -363,6 +364,10 @@ class ShiprocketFulfillmentService {
    * Create Shiprocket order + shipment (POST /orders/create/adhoc).
    */
   async createShipmentForOrder(orderId, options = {}) {
+    // Central delivery-method guard: self-delivery orders never get a Shiprocket shipment
+    // (covers Ready for Dispatch, Manual Dispatch, fulfillOrder and the manual admin routes).
+    await assertShiprocketAllowed(await loadOrder(orderId));
+
     if (!this.isReady()) {
       const err = new Error('Shiprocket credentials are not configured on the server.');
       err.statusCode = 503;
@@ -622,6 +627,7 @@ class ShiprocketFulfillmentService {
 
   async assignCourierAndGenerateAwb(orderId, { courierId } = {}) {
     const order = await loadOrder(orderId);
+    await assertShiprocketAllowed(order);
     const sr = ensureShiprocketSubdoc(order);
     if (!sr.shipmentId) {
       const err = new Error('No Shiprocket shipmentId on this order. Create shipment first.');
@@ -697,6 +703,7 @@ class ShiprocketFulfillmentService {
 
   async schedulePickup(orderId) {
     const order = await loadOrder(orderId);
+    await assertShiprocketAllowed(order);
     const sr = ensureShiprocketSubdoc(order);
     if (!sr.shipmentId) {
       const err = new Error('No Shiprocket shipmentId. Create shipment first.');
@@ -1023,6 +1030,18 @@ class ShiprocketFulfillmentService {
    * SHIPROCKET_AUTO_FULFILL: create | awb | full
    */
   async tryAutoCreate(orderId) {
+    // Self-delivery orders (and Shiprocket / auto-create switched off in Settings) are skipped, not failed.
+    try {
+      const gate = await getShiprocketGate(await loadOrder(orderId), { auto: true });
+      if (!gate.allowed) {
+        console.log(`[Shiprocket] Auto-create skipped for ${orderId}: ${gate.code}`);
+        return { skipped: true, code: gate.code, message: gate.message };
+      }
+    } catch (e) {
+      if (e.statusCode === 404) return { error: e.message };
+      throw e;
+    }
+
     if (!env.SHIPROCKET.AUTO_CREATE) {
       console.warn('[Shiprocket] AUTO_CREATE is disabled — skipping');
       return null;

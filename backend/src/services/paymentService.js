@@ -217,7 +217,7 @@ class PaymentService {
     const settingsService = (await import('./settingsService.js')).default;
     const couponService = (await import('./couponService.js')).default;
     const { calculateOrderTotals } = await import('../utils/pricing.js');
-    const { resolveShiprocketDeliveryFee } = await import('./shippingQuoteService.js');
+    const { resolveDeliveryQuote } = await import('./deliveryQuoteService.js');
     const cartService = (await import('./cartService.js')).default;
 
     const selectedAddress = await Address.findOne({ _id: addressId, user: userId });
@@ -288,7 +288,7 @@ class PaymentService {
     }
 
     const settings = await settingsService.getSettings();
-    const shipQuote = await resolveShiprocketDeliveryFee({
+    const shipQuote = await resolveDeliveryQuote({
       pincode: selectedAddress.postalCode,
       paymentMethod: normalizedPaymentMethod,
       subtotal,

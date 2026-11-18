@@ -26,7 +26,7 @@ export const placeOrder = async (req, res, next) => {
     return sendSuccess(
       res,
       'Order placed successfully',
-      { order },
+      { order: orderService.toCustomerOrder(order) },
       HTTP_STATUS.CREATED
     );
   } catch (error) {
@@ -40,7 +40,9 @@ export const placeOrder = async (req, res, next) => {
 export const getOrderById = async (req, res, next) => {
   try {
     const isAdmin = req.user && req.user.role === 'ADMIN';
-    const order = await orderService.getOrderById(req.user._id, req.params.id, isAdmin);
+    const found = await orderService.getOrderById(req.user._id, req.params.id, isAdmin);
+    // Customers get the order without admin-only delivery classification details
+    const order = isAdmin ? found : orderService.toCustomerOrder(found);
     return sendSuccess(res, 'Order retrieved successfully', { order });
   } catch (error) {
     if (error.statusCode) {
@@ -68,7 +70,7 @@ export const getOrderDistanceAdmin = async (req, res, next) => {
 
 export const getUserOrders = async (req, res, next) => {
   try {
-    const orders = await orderService.getUserOrders(req.user._id);
+    const orders = (await orderService.getUserOrders(req.user._id)).map(orderService.toCustomerOrder);
     return sendSuccess(res, 'User orders retrieved successfully', { orders });
   } catch (error) {
     next(error);
@@ -91,6 +93,20 @@ export const getAllOrdersAdmin = async (req, res, next) => {
   } catch (error) {
     if (error.statusCode) {
       return sendError(res, error.message, null, error.statusCode);
+    }
+    next(error);
+  }
+};
+
+/** PATCH /admin/orders/:id/delivery-method   body: { deliveryMethod: 'SELF'|'SHIPROCKET', reason } */
+export const updateDeliveryMethod = async (req, res, next) => {
+  try {
+    const { deliveryMethod, reason } = req.body || {};
+    const order = await orderService.changeDeliveryMethodAdmin(req.params.id, { deliveryMethod, reason }, req.user);
+    return sendSuccess(res, `Delivery method changed to ${order.deliveryMethod}`, { order }, HTTP_STATUS.OK);
+  } catch (error) {
+    if (error.statusCode) {
+      return sendError(res, error.message, error.code ? { code: error.code } : null, error.statusCode);
     }
     next(error);
   }
@@ -169,6 +185,7 @@ export default {
   getCheckoutSummary,
   getAllOrdersAdmin,
   updateOrderStatus,
+  updateDeliveryMethod,
   dispatchOrder,
   cancelOrderAdmin,
   cancelOrderCustomer

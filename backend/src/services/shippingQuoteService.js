@@ -84,7 +84,9 @@ export async function resolveShiprocketDeliveryFee({
   subtotal,
   weightKg,
   items = [],
-  productMap = null
+  productMap = null,
+  // Set when Shiprocket is switched off in Settings: use the store's flat fees (the existing fallback path)
+  forceSettingsFallback = false
 } = {}) {
   const settings = await settingsService.getSettings();
   const pickup = await shiprocketFulfillmentService.getPickupContext();
@@ -109,7 +111,7 @@ export async function resolveShiprocketDeliveryFee({
   }
 
   // Testing / missing credentials: fall back to store settings fees (do not block checkout)
-  const quotesEnabled = env.SHIPROCKET.CHECKOUT_QUOTES !== false;
+  const quotesEnabled = env.SHIPROCKET.CHECKOUT_QUOTES !== false && !forceSettingsFallback;
   if (!quotesEnabled || !shiprocketFulfillmentService.isReady() || !pickup.pincode) {
     const prepaidFee = resolveDeliveryFee({
       subtotal: amount,
@@ -220,10 +222,16 @@ export async function resolveShiprocketDeliveryFee({
 /** Public quote payload for checkout UI */
 export async function getShippingQuote(params = {}) {
   const quote = await resolveShiprocketDeliveryFee(params);
+  return formatQuotePayload(quote, params);
+}
+
+/** Shape a resolved quote (Shiprocket or local) into the public payload the checkout UI consumes. */
+export function formatQuotePayload(quote, params = {}) {
   const isCod = isCodPaymentMethod(params.paymentMethod);
   const selected = isCod ? quote.cod : quote.prepaid;
 
   return {
+    deliveryMethod: quote.deliveryMethod || 'SHIPROCKET',
     pincode: quote.pincode,
     pickupPincode: quote.pickupPincode,
     subtotal: Number(params.subtotal) || 0,
